@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-16
+
 - 将 ChipBar 连同完整提交历史导入 macmon Fork 的 `apps/ChipBar/`，保留上游源码与 MIT 许可证。
 - 构建、测试和发布流程适配新目录；ChipBar 在 `chipbar` 分支维护，以 `chipbar-v…` 标签独立发布。
 - Homebrew Cask 放在仓库根目录，旧仓库保留历史下载并作为兼容安装入口。本次不更改应用功能和硬件采样实现。
