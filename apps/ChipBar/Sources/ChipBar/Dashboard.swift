@@ -10,6 +10,9 @@ final class DashboardState: ObservableObject {
     @Published var showSettings = false
     @Published var showApplications = CommandLine.arguments.contains("--apps")
     @Published var applicationsExpansion = CommandLine.arguments.contains("--apps") ? 1.0 : 0.0
+    @Published var showSSDDetails = CommandLine.arguments.contains("--ssd-details")
+    @Published var ssdExpansion = CommandLine.arguments.contains("--ssd-details") ? 1.0 : 0.0
+    @Published var ssdDetailsHeight: CGFloat = 0
     @Published var settingsExpansion = 0.0
     @Published var settingsHeight: CGFloat = 0
     @Published var applicationMetric: ApplicationResource = CommandLine.arguments.contains("--apps-gpu") ? .gpu : CommandLine.arguments.contains("--apps-ane") ? .ane : .cpu
@@ -41,6 +44,7 @@ struct Dashboard: View {
             ApplicationUsageSection(monitor: monitor, state: state)
             trend
             temperatures
+            SSDSection(ssd: monitor.ssd, state: state)
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
             VStack(spacing: 0) {
@@ -179,6 +183,7 @@ struct Dashboard: View {
                     }
                     Text(monitor.executablePath.isEmpty ? "尚未找到 macmon" : monitor.executablePath)
                         .font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
+                    SSDSettings(ssd: monitor.ssd)
                     Text("缺失指标显示 —。零值只表示 macmon 返回零，不能据此确认传感器支持。新芯片请先实测。")
                         .font(.caption2).foregroundStyle(.secondary)
                 }.padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
