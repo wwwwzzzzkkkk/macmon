@@ -1,3 +1,9 @@
+# Downstream ChipBar integration
+
+This fork maintains ChipBar on the default `chipbar` branch under `apps/ChipBar/`.
+`main` remains the upstream macmon branch. The upstream Rust contribution workflow below describes changes intended for that branch.
+For ChipBar changes and releases follow `apps/ChipBar/AGENTS.md`; use `chipbar-vX.Y.Z` tags and the `ChipBar Release` workflow. The root `Casks/` belongs to ChipBar. Root Rust source, crate versions and upstream license remain intact.
+
 # macmon
 
 Rootless Apple Silicon monitor and Rust library. Shared sampling and metric types live in `src/metrics.rs`, macOS API access in `src/sources.rs`, and CLI commands in `src/app/`.

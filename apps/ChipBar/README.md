@@ -1,3 +1,5 @@
+> 本项目现位于 [wwwwzzzzkkkk/macmon 的 chipbar 分支](https://github.com/wwwwzzzzkkkk/macmon/tree/chipbar/apps/ChipBar)。历史版本与原始标签保留在 [旧仓库](https://github.com/wwwwzzzzkkkk/ChipBar/releases)。
+
 # ChipBar
 
 原生 macOS 菜单栏功率监控，基于已经安装的 [macmon](https://github.com/vladkens/macmon)。SwiftUI + 原生 NSStatusItem / NSPanel + 有界趋势绘图；无需管理员权限。
@@ -46,7 +48,7 @@ ChipBar 是围绕 macmon 继续开发的原生菜单栏客户端。硬件采样�
 在 Apple Silicon Mac 的终端中运行（需要已安装 Homebrew）：
 
 ```sh
-brew tap wwwwzzzzkkkk/chipbar https://github.com/wwwwzzzzkkkk/ChipBar.git
+brew tap --custom-remote wwwwzzzzkkkk/chipbar https://github.com/wwwwzzzzkkkk/macmon.git
 brew install --cask wwwwzzzzkkkk/chipbar/chipbar
 open -a ChipBar
 ```
@@ -90,7 +92,7 @@ brew uninstall --cask wwwwzzzzkkkk/chipbar/chipbar
 安装 Apple Command Line Tools 或 Xcode，建议 Swift 6 / Xcode 16 及更新版本。无外部 Swift 包，无需网络即可构建。
 
 ```sh
-cd /path/to/ChipBar
+cd /path/to/macmon/apps/ChipBar
 ./scripts/build.sh
 open dist/ChipBar.app
 ```
@@ -127,7 +129,7 @@ python3 scripts/integration.py
 # 加速读取内存检查：真实 StreamClient，使用夹具，无硬件采样
 python3 scripts/stream_soak.py --samples 20000 --output audit-results/stream-fixed.json
 # 对照旧版（只读 Git 源码，不切换工作区）
-python3 scripts/stream_soak.py --revision v1.0.4 --samples 20000 --output audit-results/stream-baseline.json
+python3 scripts/stream_soak.py --revision chipbar-legacy/v1.0.4 --samples 20000 --output audit-results/stream-baseline.json
 # stderr 路径和 autorelease pool 检查
 python3 scripts/stream_soak.py --samples 3000 --stderr-bytes 4096 --inspect --output audit-results/stderr-fixed.json
 
@@ -173,7 +175,7 @@ dist/ChipBar.app/Contents/MacOS/ChipBar --snapshot /absolute/path/settings.png -
 
 版本号只在根目录 `VERSION` 中维护。构建自动写入应用的版本和构建编号，设置面板显示安装版本。`CHANGELOG.md` 记录每次更新；Release 和 Homebrew 记录各版本的文件校验值。
 
-完成代码修改后先提交、上传到 `main`，在 `CHANGELOG.md` 的 `[Unreleased]` 区域写更新说明，然后执行：
+完成代码修改后先提交、上传到 `chipbar`，在 `CHANGELOG.md` 的 `[Unreleased]` 区域写更新说明，然后执行：
 
 ```sh
 # 1.0.0 → 1.0.1：修复、维护更新
@@ -186,9 +188,9 @@ dist/ChipBar.app/Contents/MacOS/ChipBar --snapshot /absolute/path/settings.png -
 ./scripts/release.sh 2.0.0
 ```
 
-脚本要求干净的 `main` 且与远程一致，拒绝旧版本或重复标签。它递增 `VERSION`、归档更新记录、提交并一次性上传版本提交和不可覆盖的 Git 标签。GitHub Actions 随后在 Apple Silicon macOS 环境中运行版本测试、解析测试、进程故障检查，构建并检查签名，发布应用 ZIP 和 `SHA256SUMS`，最后更新 `main` 上的 Homebrew Cask。无需手动填写 Cask 校验值。
+脚本要求干净的 `chipbar` 且与远程一致，拒绝旧版本或重复标签。它递增 `VERSION`、归档更新记录、提交并一次性上传版本提交和不可覆盖的 Git 标签。GitHub Actions 随后在 Apple Silicon macOS 环境中运行版本测试、解析测试、进程故障检查，构建并检查签名，发布应用 ZIP 和 `SHA256SUMS`，最后更新 `chipbar` 上的 Homebrew Cask。无需手动填写 Cask 校验值。
 
-在 GitHub 的 **Actions → Release** 查看进度。若发布中断，可选择 **Run workflow**，输入已存在的 `vX.Y.Z` 标签修复发布；已有 Release 的应用文件不会被覆盖，Homebrew 使用 GitHub 已发布文件的校验值，也不会退回更旧版本。
+在 GitHub 的 **Actions → ChipBar Release** 查看进度。若发布中断，可选择 **Run workflow**，输入已存在的 `chipbar-vX.Y.Z` 标签修复发布；已有 Release 的应用文件不会被覆盖，Homebrew 使用 GitHub 已发布文件的校验值，也不会退回更旧版本。
 
 发版完成后本机运行 `git pull --ff-only` 同步 Homebrew 配置提交。其他 Mac 使用上面的 `brew update` / `brew upgrade --cask ...` 更新。该流程沿用本地 ad-hoc 签名，不会自动取得 Developer ID 或公证。
 

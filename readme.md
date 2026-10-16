@@ -1,3 +1,35 @@
+# macmon + ChipBar
+
+此 Fork 在 macmon 的基础上收纳原生 macOS 菜单栏客户端 **ChipBar**。
+
+- [ChipBar 源码、功能与构建说明](apps/ChipBar/README.md)
+- [ChipBar 更新记录](apps/ChipBar/CHANGELOG.md) · [安装包](https://github.com/wwwwzzzzkkkk/macmon/releases)
+- [旧 ChipBar 历史安装包](https://github.com/wwwwzzzzkkkk/ChipBar/releases)
+
+`main` 保留上游 macmon；默认分支 `chipbar` 增加 `apps/ChipBar/` 和独立的发布流程。ChipBar 原提交保留原始哈希；历史标签另存为 `chipbar-legacy/v…`，新版本使用 `chipbar-v…`，与 macmon CLI 的 `v…` 标签分开。
+
+安装或将已有 Homebrew tap 转到新仓库：
+
+```sh
+brew tap --custom-remote wwwwzzzzkkkk/chipbar https://github.com/wwwwzzzzkkkk/macmon.git
+brew update
+brew install --cask wwwwzzzzkkkk/chipbar/chipbar
+# 已安装时用 brew upgrade --cask wwwwzzzzkkkk/chipbar/chipbar
+```
+
+也可以继续使用旧仓库的 tap，旧仓库会同步新安装包的版本和校验值。ChipBar 继续调用用户独立安装的 macmon；本次迁移没有更换采样程序。macmon 上游的 MIT 许可证与作者声明原样保留，ChipBar 延续原仓库的授权声明。
+
+在仓库根目录构建 ChipBar：
+
+```sh
+./apps/ChipBar/scripts/build.sh
+open apps/ChipBar/dist/ChipBar.app
+```
+
+同步上游时在 `chipbar` 分支合并 `upstream/main`，不要用 reset 或强制覆盖该分支。下面保留 macmon 上游的完整说明。
+
+---
+
 # `macmon` – Mac Monitor
 
 <div align="center">

@@ -4,3 +4,6 @@
 - 发版前完成相关验证；发布后确认工作流成功、安装包已上传，以及 Homebrew Cask 指向新版本。
 - 不覆盖已有版本标签或已发布的安装包。验证过程输出放在 `audit-results/`，需要公开留档的证据摘要放在 `validation/`。
 - 保持实现简洁，按改动范围完成必要构建、数值抽查与界面检查；没有新问题时不追加重复检查或长时间压力测试。
+
+- 本项目位于 `wwwwzzzzkkkk/macmon` 的 `chipbar` 分支下 `apps/ChipBar/`；从本目录运行构建和发版脚本。发布标签为 `chipbar-vX.Y.Z`，Cask 在仓库根目录 `Casks/`。
+- `main` 保留 macmon 上游内容；不要把 ChipBar 的分支、标签或版本号与上游 Rust 项目混用。

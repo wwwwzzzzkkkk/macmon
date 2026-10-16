@@ -1,11 +1,11 @@
-name: Release
+name: ChipBar Release
 on:
   push:
-    tags: ['v*']
+    tags: ['chipbar-v*']
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing version tag to publish or repair (e.g. v1.0.1)
+        description: Existing version tag to publish or repair (e.g. chipbar-v1.1.4)
         required: true
         type: string
 permissions:
@@ -13,6 +13,9 @@ permissions:
 concurrency:
   group: chipbar-stable-release
   cancel-in-progress: false
+defaults:
+  run:
+    working-directory: apps/ChipBar
 jobs:
   release:
     runs-on: macos-15
@@ -21,11 +24,12 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Validate manual tag input
+        working-directory: .
         if: github.event_name == 'workflow_dispatch'
         env:
           TAG: ${{ inputs.tag }}
         run: |
-          python3 -c 'import os,re; assert re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+",os.environ["TAG"]), "Expected vX.Y.Z tag"'
+          python3 -c 'import os,re; assert re.fullmatch(r"chipbar-v[0-9]+\.[0-9]+\.[0-9]+",os.environ["TAG"]), "Expected chipbar-vX.Y.Z tag"'
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.tag || github.ref }}

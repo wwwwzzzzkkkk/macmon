@@ -1,11 +1,15 @@
-name: CI
+name: ChipBar CI
 on:
   push:
-    branches: [main]
+    branches: [chipbar]
+    paths: ["apps/ChipBar/**", "Casks/**", ".github/workflows/chipbar-*.yml"]
   pull_request:
   workflow_dispatch:
 permissions:
   contents: read
+defaults:
+  run:
+    working-directory: apps/ChipBar
 jobs:
   verify:
     runs-on: macos-15
@@ -26,6 +30,6 @@ jobs:
         with:
           name: ChipBar-arm64-${{ github.sha }}
           path: |
-            dist/ChipBar-macOS-arm64.zip
-            dist/SHA256SUMS
+            apps/ChipBar/dist/ChipBar-macOS-arm64.zip
+            apps/ChipBar/dist/SHA256SUMS
           retention-days: 14
