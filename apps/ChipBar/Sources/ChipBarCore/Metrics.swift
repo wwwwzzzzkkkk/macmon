@@ -8,6 +8,11 @@ public enum PowerMetric: String, CaseIterable, Identifiable {
     }
 }
 
+public struct FanReading: Identifiable {
+    public let id: String
+    public let rpm: Double
+}
+
 /// macmon pipe emits one JSON object per line; unknown fields are deliberately ignored.
 public struct Sample: Identifiable {
     public let id = UUID()
@@ -18,6 +23,9 @@ public struct Sample: Identifiable {
     public let total: Double?
     public let cpuTemperature: Double?
     public let gpuTemperature: Double?
+    public let cpuUtilization: Double?
+    public let gpuUtilization: Double?
+    public let fans: [FanReading]
     public let chip: String?
     public let model: String?
     public var derivedTotal: Bool
@@ -49,12 +57,24 @@ public struct Sample: Identifiable {
         let temp = object["temp"] as? [String: Any] ?? [:]
         let cpuTemp = number(temp["cpu_temp_avg"], temperature: true)
         let gpuTemp = number(temp["gpu_temp_avg"], temperature: true)
+        func utilization(_ key: String) -> Double? {
+            guard let ratio = number(object[key]), ratio <= 1 else { return nil }
+            return ratio * 100
+        }
+        var fanNames = Set<String>()
+        let fans = (object["fans"] as? [[String: Any]] ?? []).compactMap { fan -> FanReading? in
+            guard let name = fan["name"] as? String, !name.isEmpty,
+                  let rpm = number(fan["rpm"]), rpm <= 30_000,
+                  fanNames.insert(name).inserted else { return nil }
+            return FanReading(id: name, rpm: rpm)
+        }
         guard cpu != nil || gpu != nil || reported != nil || ane != nil || cpuTemp != nil || gpuTemp != nil else {
             throw ParseError.notMetrics
         }
         let soc = object["soc"] as? [String: Any]
         return Sample(date: receivedAt, cpu: cpu, gpu: gpu, ane: ane,
                       total: reported ?? summed, cpuTemperature: cpuTemp, gpuTemperature: gpuTemp,
+                      cpuUtilization: utilization("cpu_active_ratio"), gpuUtilization: utilization("gpu_active_ratio"), fans: fans,
                       chip: soc?["chip_name"] as? String, model: soc?["mac_model"] as? String,
                       derivedTotal: reported == nil && summed != nil)
     }
