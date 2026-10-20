@@ -7,10 +7,22 @@ import ChipBarCore
     private var menuController: MenuController?
     func applicationDidFinishLaunching(_ notification: Notification) {
         let args = CommandLine.arguments
+        let fixtureIndex = args.firstIndex(of: "--fixture")
+        let fixture = args.contains("--menu-qa") ? fixtureIndex.flatMap { index -> Sample? in
+            guard args.count > index + 1, let data = try? Data(contentsOf: URL(fileURLWithPath: args[index + 1])) else { return nil }
+            return try? Sample.decode(data)
+        } : nil
+        if fixture != nil {
+            var options = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+            options["menuItems"] = MenuContent.allCases.map(\.rawValue)
+            UserDefaults.standard.setVolatileDomain(options, forName: UserDefaults.argumentDomain)
+        }
         let ssdQA = args.contains("--ssd") && (args.contains("--menu-qa") || args.contains("--menu-mouse-qa"))
         let qaDefaults = UserDefaults(suiteName: "local.chipbar.ssd-qa-\(UUID().uuidString)")!
-        qaDefaults.setVolatileDomain(["ssdEnabled": true, "ssdMenu": true], forName: UserDefaults.argumentDomain)
-        let monitor = Monitor(ssdDefaults: ssdQA ? qaDefaults : .standard)
+        var qaOptions = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+        qaOptions["ssdEnabled"] = true; qaOptions["ssdMenu"] = true
+        qaDefaults.setVolatileDomain(qaOptions, forName: UserDefaults.argumentDomain)
+        let monitor = Monitor(start: fixture == nil, ssdDefaults: ssdQA ? qaDefaults : .standard, initialSample: fixture)
         Self.monitor = monitor
         let controller = MenuController(monitor: monitor)
         menuController = controller

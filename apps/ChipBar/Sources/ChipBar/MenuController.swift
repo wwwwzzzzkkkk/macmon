@@ -34,22 +34,21 @@ import ChipBarCore
     private var measuredHeight: CGFloat = 0
     private var maximumHeight: CGFloat = 850
     private var lastSettingsVisible = false
+    private var pendingSettingsReveal = false
     private var menuTracking = false
     private var localEvents: Any?
     private var globalEvents: Any?
     private var observers: [NSObjectProtocol] = []
-    private var menuConfiguration: Set<MenuContent> = []
-    private var reservedMenuWidth: CGFloat = 0
+    private let compactMenu = CompactMenuView()
     private var mouseQATrace: [[String: Any]]?
 
     init(monitor: Monitor) {
         self.monitor = monitor
         super.init()
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "ChipBar")
-            button.image?.isTemplate = true
-            button.imagePosition = .imageLeading
-            button.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+            compactMenu.autoresizingMask = [.width, .height]
+            compactMenu.setAccessibilityElement(false)
+            button.addSubview(compactMenu)
             button.target = self
             button.action = #selector(togglePanel)
         }
@@ -79,7 +78,7 @@ import ChipBarCore
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .transient]
         panel.title = "ChipBar"
         panel.delegate = self
-        panel.onEscape = { [weak self] in self?.hidePanel() }
+        panel.onEscape = { [weak self] in self?.hidePanel(animated: false) }
         installDismissalHandlers()
         refresh()
         subscription = Publishers.Merge(monitor.objectWillChange.map { _ in () },
@@ -167,7 +166,7 @@ import ChipBarCore
             }
             guard let self, self.panel.isVisible else { return event }
             if event.type == .keyDown, event.keyCode == 53, !self.menuTracking {
-                self.hidePanel()
+                self.hidePanel(animated: false)
                 return nil
             }
             if event.type != .keyDown, !self.menuTracking, NSApplication.shared.modalWindow == nil,
@@ -193,21 +192,19 @@ import ChipBarCore
 
     private func refresh(forceLayout: Bool = false) {
         if let button = statusItem.button {
-            let text = monitor.menuText
-            button.image = monitor.menuItems.contains(.logo) ? NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "ChipBar") : nil
-            button.image?.isTemplate = true
-            button.title = text.isEmpty ? (button.image == nil ? "···" : "") : (button.image == nil ? "" : " ") + text
-            if menuConfiguration != monitor.menuItems {
-                menuConfiguration = monitor.menuItems
-                reservedMenuWidth = 0
-            }
-            // Reserve the widest value until preferences change; readings never jiggle nearby icons.
-            reservedMenuWidth = max(reservedMenuWidth, button.cell?.cellSize.width ?? 0)
-            statusItem.length = max(24, reservedMenuWidth)
+            button.image = nil; button.title = ""
+            statusItem.length = compactMenu.update(monitor.menuReadouts, showsLogo: monitor.menuItems.contains(.logo))
+            compactMenu.frame = button.bounds
             button.toolTip = "ChipBar · \(monitor.hardware) · \(monitor.menuText)"
             button.setAccessibilityLabel("ChipBar \(monitor.menuMetric.title) \(monitor.menuText)")
         }
         guard dashboardMounted, forceLayout || panel.isVisible else { return }
+        if dashboardState.showSettings && !lastSettingsVisible { pendingSettingsReveal = true }
+        if !dashboardState.showSettings { pendingSettingsReveal = false }
+        lastSettingsVisible = dashboardState.showSettings
+        let oldViewportHeight = scrollView.contentView.bounds.height
+        let oldY = scrollView.contentView.bounds.origin.y
+        let topOffset = hostingView.isFlipped ? oldY : max(0, hostingView.frame.height - oldViewportHeight - oldY)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
@@ -223,11 +220,15 @@ import ChipBarCore
             if frame != panel.frame { panel.setFrame(frame, display: false) }
             panelMaterial.layoutSubtreeIfNeeded()
         }
-        if dashboardState.settingsExpansion > 0 || lastSettingsVisible {
-            scrollView.contentView.scroll(to: NSPoint(x: 0, y: max(0, height - size.height)))
+        let revealSettings = pendingSettingsReveal && dashboardState.settingsExpansion >= 1 && dashboardState.settingsHeight > 0
+        if revealSettings || contentHeightChanged || oldViewportHeight != size.height || forceLayout {
+            let maximumOffset = max(0, height - size.height)
+            let offset = revealSettings ? maximumOffset : min(maximumOffset, max(0, topOffset))
+            let y = hostingView.isFlipped ? offset : maximumOffset - offset
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: y))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
         }
-        scrollView.reflectScrolledClipView(scrollView.contentView)
-        lastSettingsVisible = dashboardState.showSettings
+        if revealSettings { pendingSettingsReveal = false }
     }
 
     private func anchor() -> (NSRect, NSScreen)? {
@@ -295,6 +296,7 @@ import ChipBarCore
         let token = UUID()
         panelTransition = token
         statusItem.button?.highlight(visible)
+        compactMenu.needsDisplay = true
         let complete: () -> Void = { [weak self] in
             guard let self, self.panelTransition == token else { return }
             if visible {
@@ -313,8 +315,8 @@ import ChipBarCore
         // AppKit animates opacity on the existing window; reversing a transition
         // keeps its current opacity. Old completions cannot hide a reopened panel.
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = visible ? 0.16 : 0.12
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.duration = visible ? DashboardMotion.popoverEnter : DashboardMotion.popoverExit
+            context.timingFunction = DashboardMotion.popoverCurve
             panel.animator().alphaValue = visible ? 1 : 0
         } completionHandler: {
             Task { @MainActor in complete() }
@@ -331,6 +333,7 @@ import ChipBarCore
         dashboardMounted = false
         measuredHeight = 0
         lastSettingsVisible = false
+        pendingSettingsReveal = false
     }
 
     func windowDidResignKey(_ notification: Notification) {
@@ -493,9 +496,15 @@ import ChipBarCore
         if CommandLine.arguments.contains("--light") { panel.appearance = NSAppearance(named: .aqua) }
         if CommandLine.arguments.contains("--dark") { panel.appearance = NSAppearance(named: .darkAqua) }
         guard monitor.connected else { failVerification("UI verification needs live macmon data.") }
-        if (CommandLine.arguments.contains("--disclosure-only") || CommandLine.arguments.contains("--ssd-disclosure-only")) { menuTracking = true }
+        if (CommandLine.arguments.contains("--disclosure-only") || CommandLine.arguments.contains("--ssd-disclosure-only") || CommandLine.arguments.contains("--scroll-only")) { menuTracking = true }
         let previousApplication = NSWorkspace.shared.frontmostApplication?.processIdentifier
         statusItem.button?.performClick(nil)
+        if CommandLine.arguments.contains("--scroll-only") {
+            maximumHeight = min(maximumHeight, 400)
+            refresh(forceLayout: true)
+            Task { @MainActor in await self.verifySettingsScrolling(directory: directory) }
+            return
+        }
         if (CommandLine.arguments.contains("--disclosure-only") || CommandLine.arguments.contains("--ssd-disclosure-only")) {
             // A fixed preview viewport also works when the menu-bar host is hidden.
             maximumHeight = min(850, (panel.screen ?? NSScreen.main)?.visibleFrame.height ?? 850) - 16
@@ -534,7 +543,7 @@ import ChipBarCore
                         ]
                         let data = try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
                         try data.write(to: URL(fileURLWithPath: directory + "/layout.json"))
-                        guard statusItem.button!.title.contains("W"), panel.isVisible,
+                        guard monitor.menuText.contains("W"), panel.isVisible,
                               panel.frame.height > collapsedHeight,
                               abs(scrollView.bounds.height - min(measuredHeight, maximumHeight)) < 1 else {
                             failVerification("Menu title or panel sizing verification failed.")
@@ -544,6 +553,37 @@ import ChipBarCore
                 }
             } catch { failVerification(error.localizedDescription) }
         }
+    }
+
+    /// Regression: a periodic refresh must not scroll an open settings panel back down.
+    private func verifySettingsScrolling(directory: String) async {
+        do {
+            try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+            dashboardState.showSettings = true
+            try await Task.sleep(nanoseconds: 600_000_000)
+            refresh()
+            let maxOffset = max(0, hostingView.frame.height - scrollView.contentView.bounds.height)
+            guard maxOffset > 0, !pendingSettingsReveal else { failVerification("Settings did not finish opening in a scrollable panel.") }
+            let expectedTop: CGFloat = hostingView.isFlipped ? 0 : maxOffset
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: expectedTop))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+            let before = scrollView.contentView.bounds.origin.y
+            for _ in 0..<4 {
+                refresh()
+                try await Task.sleep(nanoseconds: 80_000_000)
+            }
+            let after = scrollView.contentView.bounds.origin.y
+            guard abs(after - before) < 1 else { failVerification("Refreshing settings moved the user's scroll position.") }
+            try capture(view: statusItem.button!, path: directory + "/compact-menu.png")
+            try capture(view: panelMaterial, path: directory + "/settings-scrolled-top.png")
+            let result: [String: Any] = ["scrollBefore": before, "scrollAfter": after, "maximumOffset": maxOffset,
+                                         "statusWidth": statusItem.length, "menuText": monitor.menuText,
+                                         "settingsOpen": dashboardState.showSettings, "refreshes": 4]
+            try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
+                .write(to: URL(fileURLWithPath: directory + "/scroll-regression.json"))
+            monitor.stop(forQuit: true)
+            NSApplication.shared.terminate(nil)
+        } catch { failVerification(error.localizedDescription) }
     }
 
     /// Short visual check for content disclosure, without running menu stress checks.

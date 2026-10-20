@@ -14,3 +14,22 @@ public enum MenuContent: String, CaseIterable, Identifiable {
         }
     }
 }
+
+/// One compact two-line column. Transfer columns use a value on both lines.
+public struct MenuReadout: Identifiable {
+    public let id: String
+    public let top: String
+    public let bottom: String
+    public let pairedValues: Bool
+    public init(_ id: String, _ top: String, _ bottom: String, pairedValues: Bool = false) {
+        self.id = id; self.top = top; self.bottom = bottom; self.pairedValues = pairedValues
+    }
+
+    public static func rate(_ bytes: Double?) -> String {
+        guard let bytes, bytes.isFinite, bytes >= 0 else { return "—" }
+        let units = ["B/s", "K/s", "M/s", "G/s", "T/s"]
+        var value = bytes, index = 0
+        while value >= 1_000, index < units.count - 1 { value /= 1_000; index += 1 }
+        return String(format: value >= 100 || index == 0 ? "%.0f%@" : "%.1f%@", value, units[index])
+    }
+}
