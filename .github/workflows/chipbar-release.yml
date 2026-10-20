@@ -1,6 +1,10 @@
 name: ChipBar Release
 on:
   push:
+    branches: [chipbar]
+    paths:
+      - apps/ChipBar/VERSION
+      - .github/workflows/chipbar-release.yml
   workflow_dispatch:
     inputs:
       tag:
@@ -17,12 +21,6 @@ defaults:
     working-directory: apps/ChipBar
 jobs:
   release:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      startsWith(github.ref, 'refs/tags/chipbar-v') ||
-      (github.ref == 'refs/heads/chipbar' &&
-       (contains(github.event.head_commit.modified, 'apps/ChipBar/VERSION') ||
-        contains(github.event.head_commit.modified, '.github/workflows/chipbar-release.yml')))
     runs-on: macos-15
     timeout-minutes: 20
     env:
@@ -40,48 +38,61 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
       - name: Create or verify version tag
+        id: release-tag
         env:
           INPUT_TAG: ${{ inputs.tag }}
           EVENT_NAME: ${{ github.event_name }}
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             TAG="$INPUT_TAG"
-          elif [[ "$REF_TYPE" == "tag" ]]; then
-            TAG="$REF_NAME"
+            PUBLISH=true
           else
             TAG="chipbar-v$(cat VERSION)"
-          fi
-          if [[ "$EVENT_NAME" == "push" && "$REF_TYPE" == "branch" ]]; then
             if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
               git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
               TAGGED_COMMIT="$(git rev-parse "$TAG^{commit}")"
-              if [[ "$TAGGED_COMMIT" != "$GITHUB_SHA" ]]; then
+              if [[ "$TAGGED_COMMIT" == "$GITHUB_SHA" ]]; then
+                PUBLISH=true
+              elif git diff --name-only "$EVENT_BEFORE" "$GITHUB_SHA" -- VERSION | grep -q .; then
                 echo "Refusing to move existing tag $TAG from $TAGGED_COMMIT." >&2
                 exit 1
+              else
+                echo "No ChipBar version change; skip publishing $TAG."
+                PUBLISH=false
               fi
             else
               gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
                 -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" >/dev/null
               git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
+              PUBLISH=true
             fi
           fi
           echo "CHIPBAR_RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
       - name: Check immutable version tag
+        if: steps.release-tag.outputs.publish == 'true'
         run: python3 scripts/version.py check-tag
       - name: Version management tests
+        if: steps.release-tag.outputs.publish == 'true'
         run: python3 -m unittest discover -s Tests/ReleaseTests -v
       - name: Parser tests
+        if: steps.release-tag.outputs.publish == 'true'
         run: ./scripts/test.sh
       - name: Build arm64 app
+        if: steps.release-tag.outputs.publish == 'true'
         run: ./scripts/build.sh
       - name: Subprocess fault checks
+        if: steps.release-tag.outputs.publish == 'true'
         run: python3 scripts/integration.py
       - name: Package and verify signature
+        if: steps.release-tag.outputs.publish == 'true'
         run: python3 scripts/version.py package
       - name: Publish Release and update Homebrew
+        if: steps.release-tag.outputs.publish == 'true'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
