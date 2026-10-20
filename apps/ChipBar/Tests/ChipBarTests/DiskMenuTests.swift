@@ -76,6 +76,6 @@ struct DiskMenuTests {
         #expect(abs((rates["disk4"]?.writeMB ?? -1) - 2) < 0.0001)
         #expect(accumulator.update([
             "disk4": DiskCounters(identity: 4, readBytes: 10_100_000, writtenBytes: 20_200_000)
-        ], time: 51.2).isEmpty)
+        ], time: 35.2).isEmpty)
     }
 }

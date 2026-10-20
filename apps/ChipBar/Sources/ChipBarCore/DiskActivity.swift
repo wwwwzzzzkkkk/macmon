@@ -22,7 +22,7 @@ public struct DiskRateAccumulator: Sendable {
     public init() {}
     public mutating func update(_ counters: [String: DiskCounters], time: Double) -> [String: DiskRates] {
         defer { previous = counters; previousTime = time }
-        guard let before = previousTime, time.isFinite, time > before, time - before <= 30 else { return [:] }
+        guard let before = previousTime, time.isFinite, time > before, time - before <= 15 else { return [:] }
         let seconds = time - before
         var result: [String: DiskRates] = [:]
         for (id, current) in counters {
