@@ -10,7 +10,8 @@ import ChipBarCore
     private let paragraph: NSParagraphStyle = {
         let style = NSMutableParagraphStyle(); style.alignment = .center; return style
     }()
-    private let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+    private let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+    private let labelFont = NSFont.systemFont(ofSize: 7.5, weight: .medium)
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -20,7 +21,7 @@ import ChipBarCore
         for item in next {
             if widths[item.id] != nil, readouts.first(where: { $0.id == item.id }) == item { continue }
             let top = (item.top as NSString).size(withAttributes: [.font: valueFont]).width
-            let bottom = (item.bottom as NSString).size(withAttributes: [.font: valueFont]).width
+            let bottom = (item.bottom as NSString).size(withAttributes: [.font: item.pairedValues ? valueFont : labelFont]).width
             // Reserve each column independently so a changing rate never shifts its neighbours.
             widths[item.id] = max(widths[item.id] ?? 0, ceil(max(22, max(top, bottom))))
         }
@@ -58,7 +59,7 @@ import ChipBarCore
             let width = widths[item.id] ?? 22
             drawText(item.top, x: x, y: rowY, width: width, font: valueFont, color: foreground)
             drawText(item.bottom, x: x, y: rowY + 11, width: width,
-                     font: valueFont,
+                     font: item.pairedValues ? valueFont : labelFont,
                      color: item.pairedValues ? foreground : secondary)
             x += width
             if index < readouts.count - 1 {
