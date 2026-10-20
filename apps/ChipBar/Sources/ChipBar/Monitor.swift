@@ -14,7 +14,8 @@ import ChipBarCore
     @Published var menuItems: Set<MenuContent> {
         didSet {
             UserDefaults.standard.set(menuItems.map(\.rawValue), forKey: "menuItems")
-            if oldValue.contains(.disk) != menuItems.contains(.disk) { restartMenuDisk() }
+            let previouslyNeededDisk = oldValue.contains(.disk) || oldValue.contains(.externalDisk)
+            if previouslyNeededDisk != needsMenuDisk { restartMenuDisk() }
             configureNetwork()
         }
     }
@@ -102,15 +103,20 @@ import ChipBarCore
             items.append(MenuReadout("disk", "R " + MenuReadout.rate(rates.read),
                                      "W " + MenuReadout.rate(rates.write), pairedValues: true))
         }
+        if let external = externalDiskReadout { items.append(external) }
         return items
     }
 
+    private var needsMenuDisk: Bool { menuItems.contains(.disk) || menuItems.contains(.externalDisk) }
+    private var menuDiskMaximumAge: TimeInterval { max(6, Double(interval) / 1000 * 3) }
+
     private var diskMenuRates: (read: Double?, write: Double?) {
-        guard let snapshot = menuDisk, Date().timeIntervalSince(snapshot.date) <= max(6, Double(interval) / 1000 * 3), !snapshot.rates.isEmpty else {
-            return (nil, nil)
-        }
-        return (snapshot.rates.values.reduce(0) { $0 + $1.readMB } * 1_000_000,
-                snapshot.rates.values.reduce(0) { $0 + $1.writeMB } * 1_000_000)
+        menuDisk?.menuRates(maximumAge: menuDiskMaximumAge) ?? (nil, nil)
+    }
+
+    private var externalDiskReadout: MenuReadout? {
+        guard menuItems.contains(.externalDisk) else { return nil }
+        return menuDisk?.externalMenuReadout(maximumAge: menuDiskMaximumAge)
     }
 
     var menuText: String {
@@ -134,6 +140,7 @@ import ChipBarCore
             let rates = diskMenuRates
             parts.append("读\(NetworkRate.text(rates.read)) 写\(NetworkRate.text(rates.write))")
         }
+        if let external = externalDiskReadout { parts.append("外置 \(external.top) \(external.bottom)") }
         let temperature = ssd.menuSuffix
         if !temperature.isEmpty { parts.append(String(temperature.dropFirst(3))) }
         return parts.joined(separator: " · ")
@@ -141,7 +148,7 @@ import ChipBarCore
 
     private func restartMenuDisk() {
         menuDisk = nil
-        menuDiskSampler = menuItems.contains(.disk) && !paused && !sleeping ? DiskActivitySampler() : nil
+        menuDiskSampler = needsMenuDisk && !paused && !sleeping ? DiskActivitySampler() : nil
     }
 
     func setDashboardVisible(_ visible: Bool) {

@@ -10,8 +10,9 @@ import ChipBarCore
     private let paragraph: NSParagraphStyle = {
         let style = NSMutableParagraphStyle(); style.alignment = .center; return style
     }()
-    private let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
-    private let labelFont = NSFont.systemFont(ofSize: 7.5, weight: .medium)
+    private let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+    private let labelFont = NSFont.systemFont(ofSize: 7, weight: .medium)
+    private let rateFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -20,8 +21,8 @@ import ChipBarCore
         if next.map(\.id) != readouts.map(\.id) || self.showsLogo != showsLogo { widths = [:] }
         for item in next {
             if widths[item.id] != nil, readouts.first(where: { $0.id == item.id }) == item { continue }
-            let top = (item.top as NSString).size(withAttributes: [.font: valueFont]).width
-            let bottom = (item.bottom as NSString).size(withAttributes: [.font: item.pairedValues ? valueFont : labelFont]).width
+            let top = (item.top as NSString).size(withAttributes: [.font: item.pairedValues ? rateFont : valueFont]).width
+            let bottom = (item.bottom as NSString).size(withAttributes: [.font: item.pairedValues ? rateFont : labelFont]).width
             // Reserve each column independently so a changing rate never shifts its neighbours.
             widths[item.id] = max(widths[item.id] ?? 0, ceil(max(22, max(top, bottom))))
         }
@@ -57,9 +58,10 @@ import ChipBarCore
         }
         for (index, item) in readouts.enumerated() {
             let width = widths[item.id] ?? 22
-            drawText(item.top, x: x, y: rowY, width: width, font: valueFont, color: foreground)
+            drawText(item.top, x: x, y: rowY, width: width,
+                     font: item.pairedValues ? rateFont : valueFont, color: foreground)
             drawText(item.bottom, x: x, y: rowY + 11, width: width,
-                     font: item.pairedValues ? valueFont : labelFont,
+                     font: item.pairedValues ? rateFont : labelFont,
                      color: item.pairedValues ? foreground : secondary)
             x += width
             if index < readouts.count - 1 {
@@ -71,7 +73,11 @@ import ChipBarCore
     }
 
     private func drawText(_ text: String, x: CGFloat, y: CGFloat, width: CGFloat, font: NSFont, color: NSColor) {
-        (text as NSString).draw(in: NSRect(x: x, y: y, width: width, height: 12),
+        // Both rows share the same column centre and fixed row centres. Centre
+        // each font line vertically so smaller labels do not drift to the top.
+        let lineHeight = ceil(font.ascender - font.descender + font.leading)
+        let frame = NSRect(x: x, y: y + (12 - lineHeight) / 2, width: width, height: lineHeight)
+        (text as NSString).draw(in: frame,
                                withAttributes: [.font: font, .foregroundColor: color, .paragraphStyle: paragraph])
     }
 }

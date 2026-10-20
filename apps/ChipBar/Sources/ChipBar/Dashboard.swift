@@ -217,9 +217,9 @@ struct Dashboard: View {
                     Toggle("SSD 综合温度", isOn: Binding(get: { monitor.ssd.showInMenu }, set: { monitor.ssd.showInMenu = $0 }))
                     Text("两排紧凑显示；风扇显示最高转速，悬停可查看全部读数。SSD 温度需启用下方监控，多盘取最高温。")
                         .font(.caption2).foregroundStyle(.secondary)
-                    Text("硬盘速度合计可读取的内置和外接物理磁盘，每 2 秒更新。全部隐藏时保留 ··· 入口。")
+                    Text("硬盘总速度合计内置和外接物理盘；外置速度单列 ER / EW，多盘取合计，未连接时隐藏，不需要开启 SMART。")
                         .font(.caption2).foregroundStyle(.secondary)
-                    Text("网速每秒刷新，合计活跃以太网 / Wi-Fi 接口，包含局域网传输。CPU / GPU 占用率为采样期间活跃时间占比。ANE 暂无整体占用率。")
+                    Text("网速与菜单栏磁盘速度按所选间隔统一刷新，网速合计活跃以太网 / Wi-Fi 接口，包含局域网传输。CPU / GPU 占用率为采样期间活跃时间占比。ANE 暂无整体占用率。")
                         .font(.caption2).foregroundStyle(.secondary)
                     HStack {
                         Button("选择 macmon…") { monitor.chooseExecutable() }
