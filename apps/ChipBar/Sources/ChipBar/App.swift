@@ -31,6 +31,25 @@ import ChipBarCore
 @main enum Launch {
     @MainActor static func main() {
         let args = CommandLine.arguments
+        if args.contains("--diagnose-io") {
+            Task.detached(priority: .utility) {
+                let sampler = DiskActivitySampler()
+                var network = NetworkActivity()
+                let before = NetworkMonitor.counters()
+                _ = network.update(before ?? [:], at: ProcessInfo.processInfo.systemUptime)
+                _ = await sampler.sampleAll()
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                let counters = NetworkMonitor.counters()
+                let rate = network.update(counters ?? [:], at: ProcessInfo.processInfo.systemUptime)
+                let disks = await sampler.sampleAll()
+                print("interfaces=\(counters?.keys.sorted().joined(separator: ",") ?? "unavailable") download=\(NetworkRate.text(rate?.download)) upload=\(NetworkRate.text(rate?.upload))")
+                for id in disks.connected.sorted() {
+                    print("\(id) read=\(disks.rates[id]?.readMB.description ?? "unavailable")MB/s write=\(disks.rates[id]?.writeMB.description ?? "unavailable")MB/s")
+                }
+                exit(counters == nil ? 1 : 0)
+            }
+            dispatchMain()
+        }
         if args.contains("--diagnose-apps") {
             Task.detached(priority: .utility) {
                 let sampler = ApplicationActivitySampler()
@@ -144,7 +163,14 @@ import ChipBarCore
         app.setActivationPolicy(.accessory)
         let qaDefaults = UserDefaults(suiteName: "local.chipbar.ssd-snapshot-\(UUID().uuidString)")!
         if CommandLine.arguments.contains("--ssd") { qaDefaults.setVolatileDomain(["ssdEnabled": true], forName: UserDefaults.argumentDomain) }
-        let monitor = Monitor(ssdDefaults: qaDefaults)
+        let fixtureIndex = CommandLine.arguments.firstIndex(of: "--fixture")
+        let fixture = fixtureIndex.flatMap { index -> Sample? in
+            guard CommandLine.arguments.count > index + 1,
+                  let data = try? Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[index + 1])) else { return nil }
+            return try? Sample.decode(data)
+        }
+        let monitor = Monitor(start: fixture == nil, ssdDefaults: qaDefaults, initialSample: fixture)
+        if fixture != nil { monitor.network.setPaused(false) }
         AppDelegate.monitor = monitor
         let content = NSHostingView(rootView: Dashboard(monitor: monitor, showSettings: settings)
             .background(Color(nsColor: .windowBackgroundColor))

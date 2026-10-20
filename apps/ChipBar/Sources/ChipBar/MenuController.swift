@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import ChipBarCore
 
 @MainActor private final class MenuPanel: NSPanel {
     var onEscape: (() -> Void)?
@@ -37,6 +38,8 @@ import Combine
     private var localEvents: Any?
     private var globalEvents: Any?
     private var observers: [NSObjectProtocol] = []
+    private var menuConfiguration: Set<MenuContent> = []
+    private var reservedMenuWidth: CGFloat = 0
     private var mouseQATrace: [[String: Any]]?
 
     init(monitor: Monitor) {
@@ -190,7 +193,17 @@ import Combine
 
     private func refresh(forceLayout: Bool = false) {
         if let button = statusItem.button {
-            button.title = " " + monitor.menuText
+            let text = monitor.menuText
+            button.image = monitor.menuItems.contains(.logo) ? NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "ChipBar") : nil
+            button.image?.isTemplate = true
+            button.title = text.isEmpty ? (button.image == nil ? "···" : "") : (button.image == nil ? "" : " ") + text
+            if menuConfiguration != monitor.menuItems {
+                menuConfiguration = monitor.menuItems
+                reservedMenuWidth = 0
+            }
+            // Reserve the widest value until preferences change; readings never jiggle nearby icons.
+            reservedMenuWidth = max(reservedMenuWidth, button.cell?.cellSize.width ?? 0)
+            statusItem.length = max(24, reservedMenuWidth)
             button.toolTip = "ChipBar · \(monitor.hardware) · \(monitor.menuText)"
             button.setAccessibilityLabel("ChipBar \(monitor.menuMetric.title) \(monitor.menuText)")
         }

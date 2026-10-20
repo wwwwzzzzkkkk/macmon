@@ -11,6 +11,14 @@ import ChipBarCore
     @Published private(set) var paused = false
     @Published private(set) var sleeping = false
     @Published private(set) var connected = false
+    @Published var menuItems: Set<MenuContent> {
+        didSet {
+            UserDefaults.standard.set(menuItems.map(\.rawValue), forKey: "menuItems")
+            if oldValue.contains(.disk) != menuItems.contains(.disk) { restartMenuDisk() }
+        }
+    }
+    @Published private(set) var menuDisk: DiskActivitySnapshot?
+    private var menuDiskTask: Task<Void, Never>?
     @Published var interval: Int {
         didSet { UserDefaults.standard.set(interval, forKey: "interval"); restart() }
     }
@@ -28,28 +36,81 @@ import ChipBarCore
     private var failureCount = 0
     private var observers: [NSObjectProtocol] = []
     let ssd: ExternalSSDMonitor
+    let network: NetworkMonitor
+    private var networkSubscription: AnyCancellable?
     private var ssdSubscription: AnyCancellable?
     let hardware: String
 
-    init(start: Bool = true, ssdDefaults: UserDefaults = .standard) {
+    init(start: Bool = true, ssdDefaults: UserDefaults = .standard, initialSample: Sample? = nil) {
         ssd = ExternalSSDMonitor(defaults: ssdDefaults, start: start)
+        network = NetworkMonitor(start: start)
+        menuItems = UserDefaults.standard.stringArray(forKey: "menuItems")
+            .map { Set($0.compactMap(MenuContent.init(rawValue:))) } ?? [.logo, .power]
         let saved = UserDefaults.standard.integer(forKey: "interval")
         interval = [1000, 2000, 5000, 10000].contains(saved) ? saved : 2000
         menuMetric = PowerMetric(rawValue: UserDefaults.standard.string(forKey: "menuMetric") ?? "") ?? .total
         customPath = UserDefaults.standard.string(forKey: "macmonPath") ?? ""
         hardware = Self.sysctlString("machdep.cpu.brand_string") ?? "未知芯片"
+        sample = initialSample
+        connected = initialSample != nil
+        history = initialSample.map { [$0] } ?? []
+        if initialSample != nil { status = "预览 · 已有真实采样" }
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.sleeping = true; self?.stop(); self?.status = "睡眠期间暂停" }
+            Task { @MainActor in self?.sleeping = true; self?.network.setPaused(true); self?.restartMenuDisk(); self?.stop(); self?.status = "睡眠期间暂停" }
         })
         observers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.sleeping = false; self?.restart() }
+            Task { @MainActor in
+                guard let self else { return }
+                self.sleeping = false; self.network.setPaused(self.paused); self.restartMenuDisk(); self.restart()
+            }
         })
         ssdSubscription = ssd.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
-        if start { restart() }
+        networkSubscription = network.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        if start { restart(); restartMenuDisk() }
     }
 
-    var menuText: String { powerMenuText + ssd.menuSuffix }
+    var menuText: String {
+        var parts: [String] = []
+        if menuItems.contains(.power) { parts.append(powerMenuText) }
+        if menuItems.contains(.utilization) {
+            func percent(_ value: Double?) -> String {
+                guard connected, let value else { return "—" }
+                return String(format: "%.0f%%", value)
+            }
+            parts.append("CPU \(percent(sample?.cpuUtilization)) GPU \(percent(sample?.gpuUtilization))")
+        }
+        if menuItems.contains(.fans) {
+            let fans = connected ? sample?.fans ?? [] : []
+            parts.append(fans.isEmpty ? "风扇 —" : fans.map { String(format: "%.0f", $0.rpm) }.joined(separator: "/") + " RPM")
+        }
+        if menuItems.contains(.network) {
+            parts.append("↓\(NetworkRate.text(network.rate?.download)) ↑\(NetworkRate.text(network.rate?.upload))")
+        }
+        if menuItems.contains(.disk) {
+            let rates = menuDisk.flatMap { Date().timeIntervalSince($0.date) <= 6 ? $0 : nil }?.rates.values
+            let read = rates.flatMap { $0.isEmpty ? nil : $0.reduce(0) { $0 + $1.readMB } * 1_000_000 }
+            let write = rates.flatMap { $0.isEmpty ? nil : $0.reduce(0) { $0 + $1.writeMB } * 1_000_000 }
+            parts.append("读\(NetworkRate.text(read)) 写\(NetworkRate.text(write))")
+        }
+        let temperature = ssd.menuSuffix
+        if !temperature.isEmpty { parts.append(String(temperature.dropFirst(3))) }
+        return parts.joined(separator: " · ")
+    }
+
+    private func restartMenuDisk() {
+        menuDiskTask?.cancel(); menuDiskTask = nil; menuDisk = nil
+        guard menuItems.contains(.disk), !paused, !sleeping else { return }
+        menuDiskTask = Task { [weak self] in
+            let sampler = DiskActivitySampler()
+            while !Task.isCancelled {
+                let next = await sampler.sampleAll()
+                guard !Task.isCancelled else { return }
+                self?.menuDisk = next
+                do { try await Task.sleep(nanoseconds: 2_000_000_000) } catch { return }
+            }
+        }
+    }
 
     private var powerMenuText: String {
         if paused || sleeping { return "暂停" }
@@ -58,7 +119,7 @@ import ChipBarCore
     }
 
     func stop(forQuit: Bool = false) {
-        if forQuit { ssd.shutdown() }
+        if forQuit { ssd.shutdown(); network.setPaused(true); menuDiskTask?.cancel(); menuDiskTask = nil; menuDisk = nil }
         generation = UUID()
         retry?.cancel(); retry = nil
         watchdog?.invalidate(); watchdog = nil
@@ -129,6 +190,8 @@ import ChipBarCore
 
     func togglePause() {
         paused.toggle()
+        network.setPaused(paused || sleeping)
+        restartMenuDisk()
         ssd.setPaused(paused)
         if paused { stop(); status = "采样已暂停"; error = nil } else { restart() }
     }
