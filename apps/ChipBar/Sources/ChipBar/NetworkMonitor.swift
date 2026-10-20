@@ -7,28 +7,23 @@ import ChipBarCore
     @Published private(set) var rate: NetworkRate?
     @Published private(set) var interfaces: [String] = []
     private var activity = NetworkActivity()
-    private var timer: Timer?
+    private var paused = true
 
     init(start: Bool = true) { if start { setPaused(false) } }
 
     func setPaused(_ paused: Bool) {
-        timer?.invalidate(); timer = nil
+        guard self.paused != paused else { return }
+        self.paused = paused
         activity = NetworkActivity(); rate = nil; interfaces = []
-        guard !paused else { return }
-        sample()
-        let next = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.sample() }
-        }
-        next.tolerance = 0.1
-        RunLoop.main.add(next, forMode: .common)
-        timer = next
     }
 
-    private func sample() {
+    func sample() {
+        guard !paused else { return }
         guard let counters = Self.counters() else {
             activity = NetworkActivity(); rate = nil; interfaces = []; return
         }
-        interfaces = counters.keys.sorted()
+        let names = counters.keys.sorted()
+        if interfaces != names { interfaces = names }
         rate = activity.update(counters, at: ProcessInfo.processInfo.systemUptime)
     }
 

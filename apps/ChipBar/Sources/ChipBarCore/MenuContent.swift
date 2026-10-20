@@ -16,7 +16,7 @@ public enum MenuContent: String, CaseIterable, Identifiable {
 }
 
 /// One compact two-line column. Transfer columns use a value on both lines.
-public struct MenuReadout: Identifiable {
+public struct MenuReadout: Identifiable, Equatable {
     public let id: String
     public let top: String
     public let bottom: String

@@ -32,10 +32,10 @@ actor DiskActivitySampler {
             defer { IOObjectRelease(parent) }
             if IOObjectConformsTo(parent, "IOBlockStorageDriver") != 0 { ids.append(id) }
         }
-        return sample(ids: ids.sorted(), externalOnly: false)
+        return sample(ids: ids.sorted(), externalOnly: false, includeVolumes: false)
     }
 
-    func sample(ids: [String], externalOnly: Bool = true) -> DiskActivitySnapshot {
+    func sample(ids: [String], externalOnly: Bool = true, includeVolumes: Bool = true) -> DiskActivitySnapshot {
         autoreleasepool {
             guard let session = DASessionCreate(kCFAllocatorDefault) else { return DiskActivitySnapshot() }
             var counters: [String: DiskCounters] = [:]
@@ -57,7 +57,7 @@ actor DiskActivitySampler {
                 }
             }
             let time = ProcessInfo.processInfo.systemUptime
-            if time - lastCapacity >= 30 || currentIdentities != identities {
+            if includeVolumes && (time - lastCapacity >= 30 || currentIdentities != identities) {
                 cachedVolumes = Self.volumeSpaces(session: session, ids: connected)
                 lastCapacity = time
             }

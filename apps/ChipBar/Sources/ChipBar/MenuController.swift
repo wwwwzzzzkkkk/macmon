@@ -29,6 +29,8 @@ import ChipBarCore
     private var mouseReleaseCleanup: Task<Void, Never>?
     private var panelMaterial: PanelMaterialView!
     private var subscription: AnyCancellable?
+    private var menuPreferences: AnyCancellable?
+    private var menuRefresh: MenuRefreshDriver!
     private var disclosureSubscription: AnyCancellable?
     private var disclosureAnimation: Task<Void, Never>?
     private var measuredHeight: CGFloat = 0
@@ -80,6 +82,21 @@ import ChipBarCore
         panel.delegate = self
         panel.onEscape = { [weak self] in self?.hidePanel(animated: false) }
         installDismissalHandlers()
+        menuRefresh = MenuRefreshDriver(read: { [weak monitor] in
+            await monitor?.sampleMenuSources()
+            return monitor?.menuSnapshot ?? MenuSnapshot()
+        }, render: { [weak self] snapshot in self?.renderMenu(snapshot) })
+        configureMenuRefresh()
+        menuPreferences = Publishers.MergeMany([
+            monitor.$menuItems.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            monitor.$menuMetric.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            monitor.$interval.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            monitor.$paused.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            monitor.$sleeping.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            monitor.ssd.$enabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            monitor.ssd.$showInMenu.dropFirst().map { _ in () }.eraseToAnyPublisher()
+        ]).debounce(for: .milliseconds(30), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in self?.configureMenuRefresh() }
         refresh()
         subscription = Publishers.Merge(monitor.objectWillChange.map { _ in () },
                                        Publishers.Merge(dashboardState.$settingsHeight.dropFirst().map { _ in () },
@@ -190,14 +207,21 @@ import ChipBarCore
         })
     }
 
+    private func configureMenuRefresh() {
+        menuRefresh.display(monitor.menuSnapshot)
+        menuRefresh.start(every: Double(monitor.interval) / 1000, active: !monitor.paused && !monitor.sleeping)
+    }
+
+    private func renderMenu(_ snapshot: MenuSnapshot) {
+        guard let button = statusItem.button else { return }
+        let width = compactMenu.update(snapshot.readouts, showsLogo: snapshot.showsLogo)
+        if statusItem.length != width { statusItem.length = width }
+        if compactMenu.frame != button.bounds { compactMenu.frame = button.bounds }
+        button.toolTip = snapshot.tooltip
+        button.setAccessibilityLabel(snapshot.accessibilityLabel)
+    }
+
     private func refresh(forceLayout: Bool = false) {
-        if let button = statusItem.button {
-            button.image = nil; button.title = ""
-            statusItem.length = compactMenu.update(monitor.menuReadouts, showsLogo: monitor.menuItems.contains(.logo))
-            compactMenu.frame = button.bounds
-            button.toolTip = "ChipBar · \(monitor.hardware) · \(monitor.menuText)"
-            button.setAccessibilityLabel("ChipBar \(monitor.menuMetric.title) \(monitor.menuText)")
-        }
         guard dashboardMounted, forceLayout || panel.isVisible else { return }
         if dashboardState.showSettings && !lastSettingsVisible { pendingSettingsReveal = true }
         if !dashboardState.showSettings { pendingSettingsReveal = false }
@@ -273,6 +297,7 @@ import ChipBarCore
             }
             dashboardMounted = true
         }
+        monitor.setDashboardVisible(true)
         refresh(forceLayout: true)
         positionPanel()
         if !panel.isVisible { panel.alphaValue = 0 }
@@ -289,6 +314,7 @@ import ChipBarCore
         mouseReleaseCleanup?.cancel(); mouseReleaseCleanup = nil
         guard panelRequestedVisible else { return }
         panelRequestedVisible = false
+        monitor.setDashboardVisible(false)
         animatePanel(visible: false, animated: animated)
     }
 

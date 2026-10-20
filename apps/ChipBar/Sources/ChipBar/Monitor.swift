@@ -15,10 +15,13 @@ import ChipBarCore
         didSet {
             UserDefaults.standard.set(menuItems.map(\.rawValue), forKey: "menuItems")
             if oldValue.contains(.disk) != menuItems.contains(.disk) { restartMenuDisk() }
+            configureNetwork()
         }
     }
     @Published private(set) var menuDisk: DiskActivitySnapshot?
-    private var menuDiskTask: Task<Void, Never>?
+    private var menuDiskSampler: DiskActivitySampler?
+    private var dashboardVisible = false
+    private let startsAutomatically: Bool
     @Published var interval: Int {
         didSet { UserDefaults.standard.set(interval, forKey: "interval"); restart() }
     }
@@ -42,8 +45,9 @@ import ChipBarCore
     let hardware: String
 
     init(start: Bool = true, ssdDefaults: UserDefaults = .standard, initialSample: Sample? = nil) {
+        startsAutomatically = start
         ssd = ExternalSSDMonitor(defaults: ssdDefaults, start: start)
-        network = NetworkMonitor(start: start)
+        network = NetworkMonitor(start: false)
         menuItems = UserDefaults.standard.stringArray(forKey: "menuItems")
             .map { Set($0.compactMap(MenuContent.init(rawValue:))) } ?? [.logo, .power]
         let saved = UserDefaults.standard.integer(forKey: "interval")
@@ -57,17 +61,17 @@ import ChipBarCore
         if initialSample != nil { status = "预览 · 已有真实采样" }
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.sleeping = true; self?.network.setPaused(true); self?.restartMenuDisk(); self?.stop(); self?.status = "睡眠期间暂停" }
+            Task { @MainActor in self?.sleeping = true; self?.configureNetwork(); self?.restartMenuDisk(); self?.stop(); self?.status = "睡眠期间暂停" }
         })
         observers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                self.sleeping = false; self.network.setPaused(self.paused); self.restartMenuDisk(); self.restart()
+                self.sleeping = false; self.configureNetwork(); self.restartMenuDisk(); self.restart()
             }
         })
         ssdSubscription = ssd.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         networkSubscription = network.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
-        if start { restart(); restartMenuDisk() }
+        if start { restart(); restartMenuDisk(); configureNetwork() }
     }
 
     var menuReadouts: [MenuReadout] {
@@ -102,7 +106,7 @@ import ChipBarCore
     }
 
     private var diskMenuRates: (read: Double?, write: Double?) {
-        guard let snapshot = menuDisk, Date().timeIntervalSince(snapshot.date) <= 6, !snapshot.rates.isEmpty else {
+        guard let snapshot = menuDisk, Date().timeIntervalSince(snapshot.date) <= max(6, Double(interval) / 1000 * 3), !snapshot.rates.isEmpty else {
             return (nil, nil)
         }
         return (snapshot.rates.values.reduce(0) { $0 + $1.readMB } * 1_000_000,
@@ -136,17 +140,37 @@ import ChipBarCore
     }
 
     private func restartMenuDisk() {
-        menuDiskTask?.cancel(); menuDiskTask = nil; menuDisk = nil
-        guard menuItems.contains(.disk), !paused, !sleeping else { return }
-        menuDiskTask = Task { [weak self] in
-            let sampler = DiskActivitySampler()
-            while !Task.isCancelled {
-                let next = await sampler.sampleAll()
-                guard !Task.isCancelled else { return }
-                self?.menuDisk = next
-                do { try await Task.sleep(nanoseconds: 2_000_000_000) } catch { return }
-            }
+        menuDisk = nil
+        menuDiskSampler = menuItems.contains(.disk) && !paused && !sleeping ? DiskActivitySampler() : nil
+    }
+
+    func setDashboardVisible(_ visible: Bool) {
+        guard dashboardVisible != visible else { return }
+        dashboardVisible = visible
+        configureNetwork()
+    }
+
+    private func configureNetwork() {
+        network.setPaused(!startsAutomatically || paused || sleeping || (!dashboardVisible && !menuItems.contains(.network)))
+    }
+
+    /// One display clock gathers fast counters, then presents the latest complete frame.
+    /// SMART readings retain their independent, slow 30-second acquisition cadence.
+    func sampleMenuSources() async {
+        guard !paused, !sleeping else { return }
+        network.sample()
+        if let sampler = menuDiskSampler {
+            let next = await sampler.sampleAll()
+            guard !Task.isCancelled, sampler === menuDiskSampler else { return }
+            menuDisk = next
         }
+    }
+
+    var menuSnapshot: MenuSnapshot {
+        let text = menuText
+        return MenuSnapshot(readouts: menuReadouts, showsLogo: menuItems.contains(.logo),
+                            tooltip: "ChipBar · \(hardware) · \(text)",
+                            accessibilityLabel: "ChipBar \(menuMetric.title) \(text)")
     }
 
     private var powerMenuText: String {
@@ -156,7 +180,7 @@ import ChipBarCore
     }
 
     func stop(forQuit: Bool = false) {
-        if forQuit { ssd.shutdown(); network.setPaused(true); menuDiskTask?.cancel(); menuDiskTask = nil; menuDisk = nil }
+        if forQuit { ssd.shutdown(); network.setPaused(true); menuDiskSampler = nil; menuDisk = nil }
         generation = UUID()
         retry?.cancel(); retry = nil
         watchdog?.invalidate(); watchdog = nil
@@ -184,10 +208,11 @@ import ChipBarCore
                 guard let self, self.generation == token else { return }
                 self.sample = sample
                 self.lastReceived = Date()
-                self.connected = true
-                self.error = nil
+                if !self.connected { self.connected = true }
+                if self.error != nil { self.error = nil }
                 self.failureCount = 0
-                self.status = "实时采样 · \(self.interval / 1000) 秒"
+                let status = "实时采样 · \(self.interval / 1000) 秒"
+                if self.status != status { self.status = status }
                 self.history.append(sample)
                 let cutoff = Date().addingTimeInterval(-600)
                 self.history.removeAll { $0.date < cutoff }
@@ -202,7 +227,7 @@ import ChipBarCore
         client = next
         do { try next.start() }
         catch { fail("无法启动 macmon：\(error.localizedDescription)"); return }
-        watchdog = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        watchdog = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.generation == token else { return }
                 if Date().timeIntervalSince(self.lastReceived ?? self.startedAt) > max(10, Double(self.interval) / 1000 * 4) {
@@ -210,6 +235,7 @@ import ChipBarCore
                 }
             }
         }
+        watchdog?.tolerance = 0.2
     }
 
     private func fail(_ message: String) {
@@ -227,7 +253,7 @@ import ChipBarCore
 
     func togglePause() {
         paused.toggle()
-        network.setPaused(paused || sleeping)
+        configureNetwork()
         restartMenuDisk()
         ssd.setPaused(paused)
         if paused { stop(); status = "采样已暂停"; error = nil } else { restart() }
