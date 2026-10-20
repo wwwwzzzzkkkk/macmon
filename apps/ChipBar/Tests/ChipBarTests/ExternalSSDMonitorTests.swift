@@ -29,6 +29,11 @@ import ChipBarCore
         defer { monitor.shutdown() }
         try await awaitRead(monitor)
         #expect(monitor.menuSuffix == " · SSD 44°C")
+        monitor.showInMenu = false
+        #expect(monitor.menuSuffix.isEmpty)
+        #expect(monitor.menuTemperature == 44)
+        monitor.showInMenu = true
+        #expect(monitor.menuSuffix == " · SSD 44°C")
         monitor.setPaused(true)
         #expect(monitor.readings.isEmpty)
         #expect(monitor.menuSuffix == " · SSD —")
@@ -79,3 +84,4 @@ import ChipBarCore
         #expect(!monitor.canUseSudo)
     }
 }
+

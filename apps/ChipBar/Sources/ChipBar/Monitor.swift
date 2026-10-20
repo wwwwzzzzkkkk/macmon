@@ -70,6 +70,45 @@ import ChipBarCore
         if start { restart(); restartMenuDisk() }
     }
 
+    var menuReadouts: [MenuReadout] {
+        var items: [MenuReadout] = []
+        if menuItems.contains(.power) {
+            items.append(MenuReadout("power-" + menuMetric.rawValue, powerMenuText.replacingOccurrences(of: " W", with: "W"),
+                                     menuMetric == .total ? "POWER" : menuMetric.rawValue.uppercased() + " W"))
+        }
+        if menuItems.contains(.utilization) {
+            for (name, value) in [("CPU", sample?.cpuUtilization), ("GPU", sample?.gpuUtilization)] {
+                let text = connected ? value.map { String(format: "%.0f%%", $0) } ?? "—" : "—"
+                items.append(MenuReadout(name, text, name))
+            }
+        }
+        if ssd.enabled, ssd.showInMenu {
+            items.append(MenuReadout("ssd", ssd.menuTemperature.map { String(format: "%.0f°C", $0) } ?? "—", "SSD"))
+        }
+        if menuItems.contains(.fans) {
+            let rpm = connected ? sample?.fans.map(\.rpm).max() : nil
+            items.append(MenuReadout("fans", rpm.map { String(format: "%.0f", $0) } ?? "—", "RPM"))
+        }
+        if menuItems.contains(.network) {
+            items.append(MenuReadout("network", "↓" + MenuReadout.rate(network.rate?.download),
+                                     "↑" + MenuReadout.rate(network.rate?.upload), pairedValues: true))
+        }
+        if menuItems.contains(.disk) {
+            let rates = diskMenuRates
+            items.append(MenuReadout("disk", "R " + MenuReadout.rate(rates.read),
+                                     "W " + MenuReadout.rate(rates.write), pairedValues: true))
+        }
+        return items
+    }
+
+    private var diskMenuRates: (read: Double?, write: Double?) {
+        guard let snapshot = menuDisk, Date().timeIntervalSince(snapshot.date) <= 6, !snapshot.rates.isEmpty else {
+            return (nil, nil)
+        }
+        return (snapshot.rates.values.reduce(0) { $0 + $1.readMB } * 1_000_000,
+                snapshot.rates.values.reduce(0) { $0 + $1.writeMB } * 1_000_000)
+    }
+
     var menuText: String {
         var parts: [String] = []
         if menuItems.contains(.power) { parts.append(powerMenuText) }
@@ -88,10 +127,8 @@ import ChipBarCore
             parts.append("↓\(NetworkRate.text(network.rate?.download)) ↑\(NetworkRate.text(network.rate?.upload))")
         }
         if menuItems.contains(.disk) {
-            let rates = menuDisk.flatMap { Date().timeIntervalSince($0.date) <= 6 ? $0 : nil }?.rates.values
-            let read = rates.flatMap { $0.isEmpty ? nil : $0.reduce(0) { $0 + $1.readMB } * 1_000_000 }
-            let write = rates.flatMap { $0.isEmpty ? nil : $0.reduce(0) { $0 + $1.writeMB } * 1_000_000 }
-            parts.append("读\(NetworkRate.text(read)) 写\(NetworkRate.text(write))")
+            let rates = diskMenuRates
+            parts.append("读\(NetworkRate.text(rates.read)) 写\(NetworkRate.text(rates.write))")
         }
         let temperature = ssd.menuSuffix
         if !temperature.isEmpty { parts.append(String(temperature.dropFirst(3))) }

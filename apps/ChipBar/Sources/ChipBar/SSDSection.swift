@@ -111,7 +111,6 @@ struct SSDSettings: View {
             Divider()
             Toggle("监控外接 NVMe SSD", isOn: $ssd.enabled)
             if ssd.enabled {
-                Toggle("菜单栏附加 SSD 综合温度", isOn: $ssd.showInMenu)
                 Text("多盘显示最高综合温度；各盘详情见面板。每轮结束后等待 30 秒，不保存历史。")
                     .font(.caption2).foregroundStyle(.secondary)
                 Picker("设备类型", selection: $ssd.deviceType) {

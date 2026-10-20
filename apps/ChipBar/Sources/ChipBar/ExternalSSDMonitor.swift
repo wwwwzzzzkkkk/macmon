@@ -49,10 +49,13 @@ import ChipBarCore
         if start { restart() }
     }
 
+    var menuTemperature: Double? {
+        readings.compactMap { $0.temperature }.filter { $0.isFresh() }.compactMap(\.composite).max()
+    }
+
     var menuSuffix: String {
         guard enabled, showInMenu else { return "" }
-        let hottest = readings.compactMap { $0.temperature }.filter { $0.isFresh() }.compactMap(\.composite).max()
-        return hottest.map { String(format: " · SSD %.0f°C", $0) } ?? " · SSD —"
+        return menuTemperature.map { String(format: " · SSD %.0f°C", $0) } ?? " · SSD —"
     }
 
     func setPaused(_ paused: Bool) { self.paused = paused; restart() }
