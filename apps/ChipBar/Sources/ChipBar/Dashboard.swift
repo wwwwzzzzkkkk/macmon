@@ -44,6 +44,7 @@ struct Dashboard: View {
             ApplicationUsageSection(monitor: monitor, state: state)
             trend
             temperatures
+            connectivity
             SSDSection(ssd: monitor.ssd, state: state)
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
@@ -109,9 +110,9 @@ struct Dashboard: View {
 
     @ViewBuilder private var powerCards: some View {
             HStack(spacing: 10) {
-                powerCard("CPU", monitor.sample?.cpu, "cpu")
-                powerCard("GPU", monitor.sample?.gpu, "square.stack.3d.up")
-                powerCard("ANE", monitor.sample?.ane, "sparkles")
+                powerCard("CPU", monitor.sample?.cpu, "cpu", monitor.sample?.cpuUtilization)
+                powerCard("GPU", monitor.sample?.gpu, "square.stack.3d.up", monitor.sample?.gpuUtilization)
+                powerCard("ANE", monitor.sample?.ane, "sparkles", nil)
             }
 
     }
@@ -165,6 +166,31 @@ struct Dashboard: View {
 
     }
 
+    private var connectivity: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("实时网速", systemImage: "network")
+                Spacer()
+                Text(monitor.network.interfaces.joined(separator: " + "))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            HStack {
+                Text("↓ \(NetworkRate.text(monitor.network.rate?.download))")
+                Spacer()
+                Text("↑ \(NetworkRate.text(monitor.network.rate?.upload))")
+            }.monospacedDigit()
+            Divider()
+            HStack {
+                Label("风扇", systemImage: "fanblades")
+                Spacer()
+                let fans = monitor.connected ? monitor.sample?.fans ?? [] : []
+                Text(fans.isEmpty ? "不可用" : fans.map { String(format: "%.0f", $0.rpm) }.joined(separator: " / ") + " RPM")
+                    .monospacedDigit()
+            }
+        }.font(.subheadline).padding(12)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+    }
+
     @ViewBuilder private var settingsPanel: some View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("ChipBar \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版本")")
@@ -173,9 +199,21 @@ struct Dashboard: View {
                         Text("1 秒").tag(1000); Text("2 秒").tag(2000)
                         Text("5 秒").tag(5000); Text("10 秒").tag(10000)
                     }.pickerStyle(.segmented)
-                    Picker("菜单栏显示", selection: $monitor.menuMetric) {
+                    Text("菜单栏显示").font(.subheadline.weight(.medium))
+                    Picker("功率指标", selection: $monitor.menuMetric) {
                         ForEach(PowerMetric.allCases) { Text($0.title).tag($0) }
+                    }.disabled(!monitor.menuItems.contains(.power))
+                    ForEach(MenuContent.allCases) { item in
+                        Toggle(item.title, isOn: Binding(
+                            get: { monitor.menuItems.contains(item) },
+                            set: { enabled in
+                                if enabled { monitor.menuItems.insert(item) } else { monitor.menuItems.remove(item) }
+                            }))
                     }
+                    Text("硬盘速度合计可读取的内置和外接物理磁盘，每 2 秒更新。全部隐藏时保留 ··· 入口。")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    Text("网速每秒刷新，合计活跃以太网 / Wi-Fi 接口，包含局域网传输。CPU / GPU 占用率为采样期间活跃时间占比。ANE 暂无整体占用率。")
+                        .font(.caption2).foregroundStyle(.secondary)
                     HStack {
                         Button("选择 macmon…") { monitor.chooseExecutable() }
                         Spacer()
@@ -202,11 +240,13 @@ struct Dashboard: View {
             }
     }
 
-    private func powerCard(_ title: String, _ power: Double?, _ icon: String) -> some View {
+    private func powerCard(_ title: String, _ power: Double?, _ icon: String, _ utilization: Double?) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(title, systemImage: icon).font(.caption).foregroundStyle(.secondary)
             Text("\(value(monitor.connected ? power : nil)) W")
                 .font(.system(.body, design: .rounded).weight(.semibold)).monospacedDigit()
+            Text(title == "ANE" ? "占用率不可用" : "占用 \(monitor.connected ? utilization.map { String(format: "%.1f%%", $0) } ?? "—" : "—")")
+                .font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
         }.frame(maxWidth: .infinity, alignment: .leading).padding(10)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
     }

@@ -18,7 +18,24 @@ actor DiskActivitySampler {
     private var lastCapacity: Double = -.infinity
     private var identities: [String: UInt64] = [:]
 
-    func sample(ids: [String]) -> DiskActivitySnapshot {
+    func sampleAll() -> DiskActivitySnapshot {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOMedia"), &iterator) == KERN_SUCCESS else { return DiskActivitySnapshot() }
+        defer { IOObjectRelease(iterator) }
+        var ids: [String] = []
+        while case let media = IOIteratorNext(iterator), media != 0 {
+            defer { IOObjectRelease(media) }
+            guard IORegistryEntryCreateCFProperty(media, "Whole" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? Bool == true,
+                  let id = IORegistryEntryCreateCFProperty(media, "BSD Name" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? String else { continue }
+            var parent: io_registry_entry_t = 0
+            guard IORegistryEntryGetParentEntry(media, kIOServicePlane, &parent) == KERN_SUCCESS else { continue }
+            defer { IOObjectRelease(parent) }
+            if IOObjectConformsTo(parent, "IOBlockStorageDriver") != 0 { ids.append(id) }
+        }
+        return sample(ids: ids.sorted(), externalOnly: false)
+    }
+
+    func sample(ids: [String], externalOnly: Bool = true) -> DiskActivitySnapshot {
         autoreleasepool {
             guard let session = DASessionCreate(kCFAllocatorDefault) else { return DiskActivitySnapshot() }
             var counters: [String: DiskCounters] = [:]
@@ -27,7 +44,7 @@ actor DiskActivitySampler {
             for id in ids.prefix(8) where ExternalDisk.validIdentifier(id) {
                 guard let disk = DADiskCreateFromBSDName(kCFAllocatorDefault, session, "/dev/" + id),
                       let desc = DADiskCopyDescription(disk) as? [String: Any],
-                      desc[kDADiskDescriptionDeviceInternalKey as String] as? Bool == false,
+                      !externalOnly || desc[kDADiskDescriptionDeviceInternalKey as String] as? Bool == false,
                       desc[kDADiskDescriptionMediaWholeKey as String] as? Bool == true else { continue }
                 let media = DADiskCopyIOMedia(disk)
                 guard media != 0 else { continue }
