@@ -8,7 +8,24 @@ struct DiskActivitySnapshot: Sendable {
     var rates: [String: DiskRates] = [:]
     var volumes: [String: [DiskVolumeSpace]] = [:]
     var connected: Set<String> = []
+    var external: Set<String> = []
     var date = Date()
+
+    func menuRates(externalOnly: Bool = false, at now: Date = Date(),
+                   maximumAge: TimeInterval = 6) -> (read: Double?, write: Double?) {
+        guard now.timeIntervalSince(date) <= maximumAge else { return (nil, nil) }
+        let selected = rates.filter { connected.contains($0.key) && (!externalOnly || external.contains($0.key)) }
+        guard !selected.isEmpty else { return (nil, nil) }
+        return (selected.values.reduce(0) { $0 + $1.readMB } * 1_000_000,
+                selected.values.reduce(0) { $0 + $1.writeMB } * 1_000_000)
+    }
+
+    func externalMenuReadout(at now: Date = Date(), maximumAge: TimeInterval = 6) -> MenuReadout? {
+        guard !external.intersection(connected).isEmpty else { return nil }
+        let rates = menuRates(externalOnly: true, at: now, maximumAge: maximumAge)
+        return MenuReadout("externalDisk", "ER " + MenuReadout.rate(rates.read),
+                           "EW " + MenuReadout.rate(rates.write), pairedValues: true)
+    }
 }
 
 /// Native registry counters, without subprocesses or SMART polling at the fast interval.
@@ -40,6 +57,7 @@ actor DiskActivitySampler {
             guard let session = DASessionCreate(kCFAllocatorDefault) else { return DiskActivitySnapshot() }
             var counters: [String: DiskCounters] = [:]
             var connected: Set<String> = []
+            var external: Set<String> = []
             var currentIdentities: [String: UInt64] = [:]
             for id in ids.prefix(8) where ExternalDisk.validIdentifier(id) {
                 guard let disk = DADiskCreateFromBSDName(kCFAllocatorDefault, session, "/dev/" + id),
@@ -52,6 +70,7 @@ actor DiskActivitySampler {
                 var identity: UInt64 = 0
                 guard IORegistryEntryGetRegistryEntryID(media, &identity) == KERN_SUCCESS else { continue }
                 connected.insert(id); currentIdentities[id] = identity
+                if desc[kDADiskDescriptionDeviceInternalKey as String] as? Bool == false { external.insert(id) }
                 if let statistics = Self.driverStatistics(media) {
                     counters[id] = DiskCounters(identity: identity, readBytes: statistics.0, writtenBytes: statistics.1)
                 }
@@ -63,7 +82,7 @@ actor DiskActivitySampler {
             }
             identities = currentIdentities
             cachedVolumes = cachedVolumes.filter { connected.contains($0.key) }
-            return DiskActivitySnapshot(rates: accumulator.update(counters, time: time), volumes: cachedVolumes, connected: connected)
+            return DiskActivitySnapshot(rates: accumulator.update(counters, time: time), volumes: cachedVolumes, connected: connected, external: external)
         }
     }
 

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum MenuContent: String, CaseIterable, Identifiable {
-    case logo, power, utilization, fans, network, disk
+    case logo, power, utilization, fans, network, disk, externalDisk
     public var id: String { rawValue }
     public var title: String {
         switch self {
@@ -10,7 +10,8 @@ public enum MenuContent: String, CaseIterable, Identifiable {
         case .utilization: return "CPU / GPU 占用率"
         case .fans: return "风扇转速"
         case .network: return "实时上传 / 下载速度"
-        case .disk: return "硬盘读取 / 写入速度"
+        case .disk: return "硬盘总读取 / 写入速度"
+        case .externalDisk: return "外置硬盘读取 / 写入速度"
         }
     }
 }
