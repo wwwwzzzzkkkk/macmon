@@ -124,9 +124,14 @@ private final class WeakMemoryPressureSource {
     }
 
     static func memoryPressureLevel(forSystemValue value: Int32) -> MemoryPressureLevel? {
+        // The live sysctl value is exposed as the DISPATCH_MEMORYPRESSURE_*
+        // bit values on supported macOS systems: NORMAL=1, WARN=2, CRITICAL=4.
+        // XNU also documents ordinal levels 0...4; accept the non-conflicting
+        // aliases 0 and 3. In particular, 1 must stay green: treating it as
+        // ordinal Warning caused Activity Monitor and ChipBar to disagree.
         switch value {
-        case 0: return .normal
-        case 1, 2: return .warning
+        case 0, 1: return .normal
+        case 2: return .warning
         case 3, 4: return .critical
         default: return nil
         }

@@ -16,8 +16,10 @@ import Testing
     }
 
     @Test func mapsKernelPressureLevelsAndRejectsUnknownValues() {
+        // Sysctl values use dispatch pressure flags: 1=normal, 2=warning, 4=critical.
+        // Keep XNU's non-conflicting 0/3 ordinal aliases.
         #expect(Monitor.memoryPressureLevel(forSystemValue: 0) == .normal)
-        #expect(Monitor.memoryPressureLevel(forSystemValue: 1) == .warning)
+        #expect(Monitor.memoryPressureLevel(forSystemValue: 1) == .normal)
         #expect(Monitor.memoryPressureLevel(forSystemValue: 2) == .warning)
         #expect(Monitor.memoryPressureLevel(forSystemValue: 3) == .critical)
         #expect(Monitor.memoryPressureLevel(forSystemValue: 4) == .critical)
