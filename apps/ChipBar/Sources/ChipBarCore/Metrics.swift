@@ -13,6 +13,15 @@ public struct FanReading: Identifiable {
     public let rpm: Double
 }
 
+public struct MemoryReading: Equatable {
+    public let usedBytes: UInt64
+    public let totalBytes: UInt64
+
+    public var usedGiB: Double { Double(usedBytes) / 1_073_741_824 }
+    public var totalGiB: Double { Double(totalBytes) / 1_073_741_824 }
+    public var usedPercent: Double { Double(usedBytes) / Double(totalBytes) * 100 }
+}
+
 /// macmon pipe emits one JSON object per line; unknown fields are deliberately ignored.
 public struct Sample: Identifiable {
     public let id = UUID()
@@ -26,6 +35,7 @@ public struct Sample: Identifiable {
     public let cpuUtilization: Double?
     public let gpuUtilization: Double?
     public let fans: [FanReading]
+    public let memory: MemoryReading?
     public let chip: String?
     public let model: String?
     public var derivedTotal: Bool
@@ -68,13 +78,27 @@ public struct Sample: Identifiable {
                   fanNames.insert(name).inserted else { return nil }
             return FanReading(id: name, rpm: rpm)
         }
-        guard cpu != nil || gpu != nil || reported != nil || ane != nil || cpuTemp != nil || gpuTemp != nil else {
+        let memoryObject = object["memory"] as? [String: Any] ?? [:]
+        func byteCount(_ value: Any?) -> UInt64? {
+            guard let n = value as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(),
+                  n.doubleValue.isFinite, n.doubleValue >= 0, n.doubleValue <= Double(UInt64.max) else { return nil }
+            return n.uint64Value
+        }
+        let ramTotal = byteCount(memoryObject["ram_total"])
+        let ramUsed = byteCount(memoryObject["ram_usage"])
+        let memory: MemoryReading?
+        if let ramTotal, ramTotal > 0, let ramUsed, ramUsed <= ramTotal {
+            memory = MemoryReading(usedBytes: ramUsed, totalBytes: ramTotal)
+        } else {
+            memory = nil
+        }
+        guard cpu != nil || gpu != nil || reported != nil || ane != nil || cpuTemp != nil || gpuTemp != nil || memory != nil else {
             throw ParseError.notMetrics
         }
         let soc = object["soc"] as? [String: Any]
         return Sample(date: receivedAt, cpu: cpu, gpu: gpu, ane: ane,
                       total: reported ?? summed, cpuTemperature: cpuTemp, gpuTemperature: gpuTemp,
-                      cpuUtilization: utilization("cpu_active_ratio"), gpuUtilization: utilization("gpu_active_ratio"), fans: fans,
+                      cpuUtilization: utilization("cpu_active_ratio"), gpuUtilization: utilization("gpu_active_ratio"), fans: fans, memory: memory,
                       chip: soc?["chip_name"] as? String, model: soc?["mac_model"] as? String,
                       derivedTotal: reported == nil && summed != nil)
     }

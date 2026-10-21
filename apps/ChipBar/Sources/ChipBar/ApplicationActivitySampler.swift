@@ -5,6 +5,7 @@ import IOKit
 import ChipBarCore
 
 struct ActivitySnapshot: Sendable {
+    let sampledAt: TimeInterval
     let rows: [ApplicationActivityRow]
     let processCount: Int
     let readableCPUCount: Int
@@ -74,8 +75,9 @@ actor ApplicationActivitySampler {
             let activePaths = Set(nextMetadata.values.compactMap(\.path))
             bundles = bundles.filter { activePaths.contains($0.key) }
             let clients = readGPUClients()
-            let rows = accumulator.update(processes: processes, clients: clients, time: ProcessInfo.processInfo.systemUptime)
-            return ActivitySnapshot(rows: rows, processCount: processes.count, readableCPUCount: readable,
+            let sampledAt = ProcessInfo.processInfo.systemUptime
+            let rows = accumulator.update(processes: processes, clients: clients, time: sampledAt)
+            return ActivitySnapshot(sampledAt: sampledAt, rows: rows, processCount: processes.count, readableCPUCount: readable,
                 gpuClientCount: clients.count, neuralSupported: neuralSupported)
         }
     }
@@ -142,18 +144,35 @@ actor ApplicationActivitySampler {
 }
 
 @MainActor final class ApplicationActivityModel: ObservableObject {
+    static let shared = ApplicationActivityModel()
+
     @Published private(set) var snapshot: ActivitySnapshot?
     private let sampler = ApplicationActivitySampler()
+    private var inFlightSample: Task<ActivitySnapshot, Never>?
 
     func watch(interval: Int) async {
-        snapshot = nil
+        var sampleNext = snapshot.map {
+            !ApplicationActivityCachePolicy.isFresh(sampledAt: $0.sampledAt, now: ProcessInfo.processInfo.systemUptime)
+        } ?? true
         while !Task.isCancelled {
-            let sampler = self.sampler
-            let result = await Task.detached(priority: .utility) { await sampler.sample() }.value
-            guard !Task.isCancelled else { return }
-            snapshot = result
+            if sampleNext {
+                let result = await sampleOnce()
+                snapshot = result
+                guard !Task.isCancelled else { return }
+            }
+            sampleNext = true
             do { try await Task.sleep(nanoseconds: UInt64(max(2000, interval)) * 1_000_000) }
             catch { return }
         }
+    }
+
+    private func sampleOnce() async -> ActivitySnapshot {
+        if let inFlightSample { return await inFlightSample.value }
+        let sampler = self.sampler
+        let task = Task.detached(priority: .utility) { await sampler.sample() }
+        inFlightSample = task
+        let result = await task.value
+        inFlightSample = nil
+        return result
     }
 }

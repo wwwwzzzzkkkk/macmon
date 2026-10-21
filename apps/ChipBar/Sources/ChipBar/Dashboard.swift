@@ -4,9 +4,9 @@ import ChipBarCore
 
 enum DashboardMotion {
     static let duration = 0.20
-    static let popoverEnter = 0.16
-    static let popoverExit = 0.10
-    static let popoverCurve = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+    static let popoverEnter = 0.18
+    static let popoverExit = 0.14
+    static let popoverCurve = CAMediaTimingFunction(name: .easeInEaseOut)
 }
 
 final class DashboardState: ObservableObject {
@@ -48,6 +48,7 @@ struct Dashboard: View {
             ApplicationUsageSection(monitor: monitor, state: state)
             trend
             temperatures
+            systemMemory
             connectivity
             SSDSection(ssd: monitor.ssd, state: state)
             errorPanel
@@ -156,6 +157,20 @@ struct Dashboard: View {
                 Text("GPU \(temperature(monitor.sample?.gpuTemperature))")
             }.font(.subheadline).monospacedDigit()
 
+    }
+
+    @ViewBuilder private var systemMemory: some View {
+        HStack {
+            Label("内存", systemImage: "memorychip")
+            Spacer()
+            if let memory = monitor.connected ? monitor.sample?.memory : nil {
+                Text(String(format: "%.1f / %.1f GB · %.0f%%", memory.usedGiB, memory.totalGiB, memory.usedPercent))
+            } else {
+                Text("不可用").foregroundStyle(.secondary)
+            }
+        }
+        .font(.subheadline).monospacedDigit()
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder private var errorPanel: some View {

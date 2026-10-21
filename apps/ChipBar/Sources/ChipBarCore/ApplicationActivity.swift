@@ -1,5 +1,13 @@
 import Foundation
 
+public enum ApplicationActivityCachePolicy {
+    public static let lifetime: TimeInterval = 10
+
+    public static func isFresh(sampledAt: TimeInterval, now: TimeInterval) -> Bool {
+        now >= sampledAt && now - sampledAt <= lifetime
+    }
+}
+
 public struct ActivityProcess: Sendable {
     public let pid: Int32
     public let birth: UInt64

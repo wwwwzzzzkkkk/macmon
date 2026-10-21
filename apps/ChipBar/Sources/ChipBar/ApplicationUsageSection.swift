@@ -9,7 +9,7 @@ enum ApplicationResource: String, CaseIterable, Identifiable {
 struct ApplicationUsageSection: View {
     @ObservedObject var monitor: Monitor
     @ObservedObject var state: DashboardState
-    @StateObject private var activity = ApplicationActivityModel()
+    @StateObject private var activity = ApplicationActivityModel.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
