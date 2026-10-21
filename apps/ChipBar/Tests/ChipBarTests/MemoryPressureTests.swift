@@ -15,10 +15,12 @@ import Testing
         #expect(Monitor.memoryPressureLevel(for: [.normal, .critical]) == .critical)
     }
 
-    @Test func mapsInitialSystemLevelAndRejectsUnknownKernelValues() {
-        #expect(Monitor.memoryPressureLevel(forSystemValue: 1) == .normal)
+    @Test func mapsKernelPressureLevelsAndRejectsUnknownValues() {
+        #expect(Monitor.memoryPressureLevel(forSystemValue: 0) == .normal)
+        #expect(Monitor.memoryPressureLevel(forSystemValue: 1) == .warning)
         #expect(Monitor.memoryPressureLevel(forSystemValue: 2) == .warning)
+        #expect(Monitor.memoryPressureLevel(forSystemValue: 3) == .critical)
         #expect(Monitor.memoryPressureLevel(forSystemValue: 4) == .critical)
-        #expect(Monitor.memoryPressureLevel(forSystemValue: 0) == nil)
+        #expect(Monitor.memoryPressureLevel(forSystemValue: 5) == nil)
     }
 }

@@ -106,7 +106,10 @@ private final class WeakMemoryPressureSource {
             let events = sourceReference.value?.data ?? []
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.memoryPressure = Self.currentSystemMemoryPressure() ?? Self.memoryPressureLevel(for: events)
+                // Dispatch source data represents the transition that just happened. Prefer it to the kernel query, which can briefly lag behind a transition and leave the badge on the old color.
+                self.memoryPressure = events.isEmpty
+                    ? (Self.currentSystemMemoryPressure() ?? .unknown)
+                    : Self.memoryPressureLevel(for: events)
             }
         }
         memoryPressureSource = source
@@ -122,9 +125,9 @@ private final class WeakMemoryPressureSource {
 
     static func memoryPressureLevel(forSystemValue value: Int32) -> MemoryPressureLevel? {
         switch value {
-        case 1: return .normal
-        case 2: return .warning
-        case 4: return .critical
+        case 0: return .normal
+        case 1, 2: return .warning
+        case 3, 4: return .critical
         default: return nil
         }
     }
