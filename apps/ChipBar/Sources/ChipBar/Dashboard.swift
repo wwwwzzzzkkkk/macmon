@@ -162,12 +162,14 @@ struct Dashboard: View {
     @ViewBuilder private var systemMemory: some View {
         HStack {
             Label("内存", systemImage: "memorychip")
-            Spacer()
+            Spacer(minLength: 8)
             if let memory = monitor.connected ? monitor.sample?.memory : nil {
                 Text(String(format: "%.1f / %.1f GB · %.0f%%", memory.usedGiB, memory.totalGiB, memory.usedPercent))
+                    .lineLimit(1).minimumScaleFactor(0.85)
             } else {
                 Text("不可用").foregroundStyle(.secondary)
             }
+            MemoryPressureBadge(level: monitor.memoryPressure)
         }
         .font(.subheadline).monospacedDigit()
         .accessibilityElement(children: .combine)
@@ -310,5 +312,35 @@ struct Dashboard: View {
     private func temperature(_ number: Double?) -> String {
         guard monitor.connected, let number else { return "不可用" }
         return String(format: "%.1f °C", number)
+    }
+}
+
+private struct MemoryPressureBadge: View {
+    let level: MemoryPressureLevel
+
+    private let colors: [Color] = [.green, .yellow, .red]
+    private var activeIndex: Int? {
+        switch level {
+        case .normal: return 0
+        case .warning: return 1
+        case .critical: return 2
+        case .unknown: return nil
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            HStack(spacing: 2) {
+                ForEach(colors.indices, id: \.self) { index in
+                    Capsule().fill(index == activeIndex ? colors[index] : colors[index].opacity(0.22))
+                        .frame(width: 7, height: 4)
+                }
+            }
+            Text(level.title).font(.caption2.weight(.medium)).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 7).padding(.vertical, 5)
+        .background(.quaternary, in: Capsule())
+        .accessibilityLabel("系统内存压力：\(level.title)")
+        .help("系统内存压力：\(level.title)")
     }
 }

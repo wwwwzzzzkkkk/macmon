@@ -1,7 +1,27 @@
 import AppKit
+import Darwin
 import SwiftUI
 import Combine
+import Dispatch
 import ChipBarCore
+
+enum MemoryPressureLevel: Equatable {
+    case unknown, normal, warning, critical
+
+    var title: String {
+        switch self {
+        case .unknown: return "读取中"
+        case .normal: return "正常"
+        case .warning: return "偏高"
+        case .critical: return "紧张"
+        }
+    }
+}
+
+private final class WeakMemoryPressureSource {
+    weak var value: (any DispatchSourceMemoryPressure)?
+    init(_ value: any DispatchSourceMemoryPressure) { self.value = value }
+}
 
 @MainActor final class Monitor: ObservableObject {
     @Published private(set) var sample: Sample?
@@ -11,6 +31,7 @@ import ChipBarCore
     @Published private(set) var paused = false
     @Published private(set) var sleeping = false
     @Published private(set) var connected = false
+    @Published private(set) var memoryPressure: MemoryPressureLevel = .unknown
     @Published var menuItems: Set<MenuContent> {
         didSet {
             UserDefaults.standard.set(menuItems.map(\.rawValue), forKey: "menuItems")
@@ -39,6 +60,7 @@ import ChipBarCore
     private var lastReceived: Date?
     private var failureCount = 0
     private var observers: [NSObjectProtocol] = []
+    private var memoryPressureSource: (any DispatchSourceMemoryPressure)?
     let ssd: ExternalSSDMonitor
     let network: NetworkMonitor
     private var networkSubscription: AnyCancellable?
@@ -60,6 +82,7 @@ import ChipBarCore
         connected = initialSample != nil
         history = initialSample.map { [$0] } ?? []
         if initialSample != nil { status = "预览 · 已有真实采样" }
+        memoryPressure = Self.currentSystemMemoryPressure() ?? .unknown
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.sleeping = true; self?.configureNetwork(); self?.restartMenuDisk(); self?.stop(); self?.status = "睡眠期间暂停" }
@@ -72,7 +95,49 @@ import ChipBarCore
         })
         ssdSubscription = ssd.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         networkSubscription = network.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        startMemoryPressureMonitoring()
         if start { restart(); restartMenuDisk(); configureNetwork() }
+    }
+
+    private func startMemoryPressureMonitoring() {
+        let source = DispatchSource.makeMemoryPressureSource(eventMask: .all, queue: .main)
+        let sourceReference = WeakMemoryPressureSource(source)
+        source.setEventHandler { [weak self, sourceReference] in
+            let events = sourceReference.value?.data ?? []
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.memoryPressure = Self.currentSystemMemoryPressure() ?? Self.memoryPressureLevel(for: events)
+            }
+        }
+        memoryPressureSource = source
+        source.activate()
+    }
+
+    static func memoryPressureLevel(for events: DispatchSource.MemoryPressureEvent) -> MemoryPressureLevel {
+        if events.contains(.critical) { return .critical }
+        if events.contains(.warning) { return .warning }
+        if events.contains(.normal) { return .normal }
+        return .unknown
+    }
+
+    static func memoryPressureLevel(forSystemValue value: Int32) -> MemoryPressureLevel? {
+        switch value {
+        case 1: return .normal
+        case 2: return .warning
+        case 4: return .critical
+        default: return nil
+        }
+    }
+
+    private static func currentSystemMemoryPressure() -> MemoryPressureLevel? {
+        // This kernel status key gives the initial level synchronously where
+        // available. The public dispatch source below keeps it updated; if the
+        // key is unavailable, the UI stays honest until its first event.
+        var value: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        guard sysctlbyname("kern.memorystatus_vm_pressure_level", &value, &size, nil, 0) == 0,
+              size == MemoryLayout<Int32>.size else { return nil }
+        return memoryPressureLevel(forSystemValue: value)
     }
 
     var menuReadouts: [MenuReadout] {
