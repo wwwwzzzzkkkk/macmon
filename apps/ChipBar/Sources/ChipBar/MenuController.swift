@@ -138,7 +138,15 @@ import ChipBarCore
         let heightDelta = CGFloat(target.applications - start.applications) * 104
             + CGFloat(target.settings - start.settings) * (dashboardState.settingsHeight + 12)
             + CGFloat(target.ssd - start.ssd) * dashboardState.ssdDetailsHeight
-        let targetHeight = min(maximumHeight, max(250, panel.frame.height + heightDelta))
+        // Calculate from the full document height rather than the clipped window.
+        // When the expanded panel has reached the screen cap, subtracting the
+        // disclosure height from the window frame underestimates its collapsed
+        // size; refresh() then snaps it back to the cap when the animation ends.
+        let targetHeight = DisclosurePanelSizing.targetHeight(
+            documentHeight: measuredHeight,
+            contentHeightDelta: heightDelta,
+            maximumHeight: maximumHeight
+        )
         withAnimation(.timingCurve(0.42, 0, 0.58, 1, duration: DashboardMotion.duration)) {
             dashboardState.applicationsExpansion = target.applications
             dashboardState.settingsExpansion = target.settings
