@@ -32,7 +32,13 @@ import ChipBarCore
     private var menuPreferences: AnyCancellable?
     private var menuRefresh: MenuRefreshDriver!
     private var disclosureSubscription: AnyCancellable?
-    private var disclosureAnimation: Task<Void, Never>?
+    private struct DisclosureTransition {
+        let start: (applications: Double, settings: Double, ssd: Double)
+        let target: (applications: Double, settings: Double, ssd: Double)
+        let began: TimeInterval
+        let token: UUID
+    }
+    private var disclosureTransition: DisclosureTransition?
     private var measuredHeight: CGFloat = 0
     private var maximumHeight: CGFloat = 850
     private var lastSettingsVisible = false
@@ -109,44 +115,65 @@ import ChipBarCore
     }
 
     private func animateDisclosure() {
-        disclosureAnimation?.cancel()
-        disclosureAnimation = nil
-        let applications = dashboardState.showApplications ? 1.0 : 0.0
-        let settings = dashboardState.showSettings ? 1.0 : 0.0
-        let ssd = dashboardState.showSSDDetails ? 1.0 : 0.0
+        let target = (applications: dashboardState.showApplications ? 1.0 : 0.0,
+                      settings: dashboardState.showSettings ? 1.0 : 0.0,
+                      ssd: dashboardState.showSSDDetails ? 1.0 : 0.0)
+        let start = currentDisclosureValues()
+        if target.settings > 0, !lastSettingsVisible { pendingSettingsReveal = true }
+        if target.settings == 0 { pendingSettingsReveal = false }
+        lastSettingsVisible = target.settings > 0
         guard dashboardMounted, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
-            dashboardState.applicationsExpansion = applications
-            dashboardState.settingsExpansion = settings
-            dashboardState.ssdExpansion = ssd
+            disclosureTransition = nil
+            dashboardState.applicationsExpansion = target.applications
+            dashboardState.settingsExpansion = target.settings
+            dashboardState.ssdExpansion = target.ssd
             hostingView.needsLayout = true
             refresh()
             panel.invalidateShadow()
             return
         }
-        let startApplications = dashboardState.applicationsExpansion
-        let startSettings = dashboardState.settingsExpansion
-        let startSSD = dashboardState.ssdExpansion
-        let began = ProcessInfo.processInfo.systemUptime
-        disclosureAnimation = Task { @MainActor [weak self] in
-            guard let self else { return }
-            while !Task.isCancelled {
-                let t = min(1, (ProcessInfo.processInfo.systemUptime - began) / DashboardMotion.duration)
-                let eased = t * t * (3 - 2 * t)
-                dashboardState.applicationsExpansion = startApplications + (applications - startApplications) * eased
-                dashboardState.settingsExpansion = startSettings + (settings - startSettings) * eased
-                dashboardState.ssdExpansion = startSSD + (ssd - startSSD) * eased
-                // One clock drives the SwiftUI reveal, document height and window.
-                // There is no independent window animation chasing a final layout.
-                hostingView.needsLayout = true
-                refresh()
-                if t == 1 {
-                    panel.invalidateShadow()
-                    disclosureAnimation = nil
-                    return
-                }
-                do { try await Task.sleep(nanoseconds: 16_000_000) } catch { return }
-            }
+        let token = UUID()
+        disclosureTransition = DisclosureTransition(start: start, target: target,
+            began: ProcessInfo.processInfo.systemUptime, token: token)
+        let heightDelta = CGFloat(target.applications - start.applications) * 104
+            + CGFloat(target.settings - start.settings) * (dashboardState.settingsHeight + 12)
+            + CGFloat(target.ssd - start.ssd) * dashboardState.ssdDetailsHeight
+        let targetHeight = min(maximumHeight, max(250, panel.frame.height + heightDelta))
+        withAnimation(.timingCurve(0.42, 0, 0.58, 1, duration: DashboardMotion.duration)) {
+            dashboardState.applicationsExpansion = target.applications
+            dashboardState.settingsExpansion = target.settings
+            dashboardState.ssdExpansion = target.ssd
         }
+        if let frame = panelFrame(size: NSSize(width: panel.frame.width, height: targetHeight)) {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = DashboardMotion.duration
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(frame, display: true)
+            } completionHandler: { [weak self] in
+                Task { @MainActor in
+                    guard let self, self.disclosureTransition?.token == token else { return }
+                    self.disclosureTransition = nil
+                    self.refresh()
+                    self.panel.invalidateShadow()
+                }
+            }
+        } else {
+            disclosureTransition = nil
+            refresh()
+        }
+    }
+
+    private func currentDisclosureValues() -> (applications: Double, settings: Double, ssd: Double) {
+        guard let transition = disclosureTransition else {
+            return (dashboardState.applicationsExpansion, dashboardState.settingsExpansion, dashboardState.ssdExpansion)
+        }
+        let t = min(1, max(0, (ProcessInfo.processInfo.systemUptime - transition.began) / DashboardMotion.duration))
+        let eased = t * t * (3 - 2 * t)
+        return (
+            transition.start.applications + (transition.target.applications - transition.start.applications) * eased,
+            transition.start.settings + (transition.target.settings - transition.start.settings) * eased,
+            transition.start.ssd + (transition.target.ssd - transition.start.ssd) * eased
+        )
     }
 
     private func installDismissalHandlers() {
@@ -223,6 +250,7 @@ import ChipBarCore
 
     private func refresh(forceLayout: Bool = false) {
         guard dashboardMounted, forceLayout || panel.isVisible else { return }
+        guard forceLayout || disclosureTransition == nil else { return }
         if dashboardState.showSettings && !lastSettingsVisible { pendingSettingsReveal = true }
         if !dashboardState.showSettings { pendingSettingsReveal = false }
         lastSettingsVisible = dashboardState.showSettings
@@ -244,7 +272,7 @@ import ChipBarCore
             if frame != panel.frame { panel.setFrame(frame, display: false) }
             panelMaterial.layoutSubtreeIfNeeded()
         }
-        let revealSettings = pendingSettingsReveal && dashboardState.settingsExpansion >= 1 && dashboardState.settingsHeight > 0
+        let revealSettings = pendingSettingsReveal && disclosureTransition == nil && dashboardState.settingsExpansion >= 1 && dashboardState.settingsHeight > 0
         if revealSettings || contentHeightChanged || oldViewportHeight != size.height || forceLayout {
             let maximumOffset = max(0, height - size.height)
             let offset = revealSettings ? maximumOffset : min(maximumOffset, max(0, topOffset))
@@ -351,8 +379,7 @@ import ChipBarCore
 
     private func removeDashboard() {
         guard dashboardMounted else { return }
-        disclosureAnimation?.cancel()
-        disclosureAnimation = nil
+        disclosureTransition = nil
         // Hidden NSPanel content still observes Monitor. Remove the dashboard so
         // it cannot keep updating offscreen; settings live separately.
         hostingView.rootView = AnyView(EmptyView())

@@ -2,6 +2,12 @@ import Testing
 @testable import ChipBarCore
 
 struct ApplicationActivityTests {
+    @Test func applicationSnapshotsStayFreshForTenSeconds() {
+        #expect(ApplicationActivityCachePolicy.isFresh(sampledAt: 100, now: 110))
+        #expect(!ApplicationActivityCachePolicy.isFresh(sampledAt: 100, now: 110.001))
+        #expect(!ApplicationActivityCachePolicy.isFresh(sampledAt: 100, now: 99.9))
+    }
+
     private func process(_ pid: Int32 = 1, birth: UInt64 = 10, cpu: Double? = 0, group: String = "App", neural: UInt64? = nil) -> ActivityProcess {
         ActivityProcess(pid: pid, birth: birth, group: group, name: group, cpuSeconds: cpu, neuralBytes: neural)
     }

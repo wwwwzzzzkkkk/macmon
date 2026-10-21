@@ -87,6 +87,14 @@ import ChipBarCore
                 items.append(MenuReadout(name, text, name))
             }
         }
+        if menuItems.contains(.memory) {
+            let value = connected ? sample?.memory?.usedPercent : nil
+            items.append(MenuReadout("memory", value.map { String(format: "%.0f%%", $0) } ?? "—", "RAM"))
+        }
+        if menuItems.contains(.cpuTemperature) {
+            let value = connected ? sample?.cpuTemperature : nil
+            items.append(MenuReadout("cpu-temperature", value.map { String(format: "%.0f°C", $0) } ?? "—", "CPU TEMP"))
+        }
         if ssd.enabled, ssd.showInMenu {
             items.append(MenuReadout("ssd", ssd.menuTemperature.map { String(format: "%.0f°C", $0) } ?? "—", "SSD"))
         }
@@ -128,6 +136,12 @@ import ChipBarCore
                 return String(format: "%.0f%%", value)
             }
             parts.append("CPU \(percent(sample?.cpuUtilization)) GPU \(percent(sample?.gpuUtilization))")
+        }
+        if menuItems.contains(.memory) {
+            parts.append("内存 \(connected ? sample?.memory.map { String(format: "%.0f%%", $0.usedPercent) } ?? "—" : "—")")
+        }
+        if menuItems.contains(.cpuTemperature) {
+            parts.append("CPU \(connected ? sample?.cpuTemperature.map { String(format: "%.0f°C", $0) } ?? "—" : "—")")
         }
         if menuItems.contains(.fans) {
             let fans = connected ? sample?.fans ?? [] : []

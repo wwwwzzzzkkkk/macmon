@@ -13,6 +13,19 @@ struct MetricsTests {
         #expect(sample.fans.map(\.id) == ["fan0", "fan1"])
     }
 
+    @Test func memoryMetricsDecodeAndRejectInvalidValues() throws {
+        let sample = try decode(#"{"cpu_power":1,"memory":{"ram_total":17179869184,"ram_usage":8589934592}}"#)
+        let memory = try #require(sample.memory)
+        #expect(memory.totalGiB == 16)
+        #expect(memory.usedGiB == 8)
+        #expect(memory.usedPercent == 50)
+
+        let invalid = try decode(#"{"cpu_power":1,"memory":{"ram_total":100,"ram_usage":101}}"#)
+        #expect(invalid.memory == nil)
+        let boolean = try decode(#"{"cpu_power":1,"memory":{"ram_total":100,"ram_usage":true}}"#)
+        #expect(boolean.memory == nil)
+    }
+
     @Test func missingOrInvalidSensorsStayUnavailable() throws {
         let sample = try decode(#"{"cpu_power":1,"cpu_active_ratio":true,"gpu_active_ratio":1.5,"fans":[{"name":"fan0","rpm":-1},{"name":"fan1","rpm":true},{"name":"fan2","rpm":99999}]}"#)
         #expect(sample.cpuUtilization == nil)
