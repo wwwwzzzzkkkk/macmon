@@ -2,6 +2,10 @@ import SwiftUI
 import QuartzCore
 import ChipBarCore
 
+enum DashboardLayout {
+    static let width: CGFloat = 370
+}
+
 enum DashboardMotion {
     static let duration = 0.20
     static let popoverEnter = 0.18
@@ -45,6 +49,7 @@ struct Dashboard: View {
             header
             hero
             powerCards
+            utilizationOverview
             ApplicationUsageSection(monitor: monitor, state: state)
             trend
             temperatures
@@ -69,7 +74,7 @@ struct Dashboard: View {
                 footer
             }
         }
-        .padding(16).frame(width: 390)
+        .padding(14).frame(width: DashboardLayout.width)
         .fixedSize(horizontal: false, vertical: true)
         // Keep the document at the top while AppKit animates the window height.
         .frame(maxHeight: .infinity, alignment: .topLeading)
@@ -107,19 +112,34 @@ struct Dashboard: View {
                     Spacer()
                     Image(systemName: "bolt.fill").font(.title).foregroundStyle(accent.opacity(0.6))
                 }
-                Text("CPU + GPU + ANE · 非插座输入功率")
+                Text("CPU + GPU + ANE · 非整机插座输入功率")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
     }
 
     @ViewBuilder private var powerCards: some View {
-            HStack(spacing: 10) {
-                powerCard("CPU", monitor.sample?.cpu, "cpu", monitor.sample?.cpuUtilization)
-                powerCard("GPU", monitor.sample?.gpu, "square.stack.3d.up", monitor.sample?.gpuUtilization)
-                powerCard("ANE", monitor.sample?.ane, "sparkles", nil)
-            }
+        HStack(spacing: 8) {
+            powerCard("CPU", monitor.sample?.cpu, "cpu")
+            powerCard("GPU", monitor.sample?.gpu, "square.stack.3d.up")
+            powerCard("ANE", monitor.sample?.ane, "sparkles")
+        }
+    }
 
+    /// Percentage-based rings, unlike power values which have no universal
+    /// 100% wattage. One restrained accent family preserves Liquid Glass contrast.
+    private var utilizationOverview: some View {
+        HStack(spacing: 8) {
+            MetricRing(title: "CPU 占用", percentage: monitor.connected ? monitor.sample?.cpuUtilization : nil,
+                       tint: accent)
+            MetricRing(title: "GPU 占用", percentage: monitor.connected ? monitor.sample?.gpuUtilization : nil,
+                       tint: accent.opacity(0.78))
+            MetricRing(title: "内存", percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
+                       tint: accent.opacity(0.60))
+        }
+        .padding(.vertical, 11)
+        .padding(.horizontal, 7)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
     }
 
     @ViewBuilder private var trend: some View {
@@ -264,15 +284,21 @@ struct Dashboard: View {
             }
     }
 
-    private func powerCard(_ title: String, _ power: Double?, _ icon: String, _ utilization: Double?) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: icon).font(.caption).foregroundStyle(.secondary)
-            Text("\(value(monitor.connected ? power : nil)) W")
-                .font(.system(.body, design: .rounded).weight(.semibold)).monospacedDigit()
-            Text(title == "ANE" ? "占用率不可用" : "占用 \(monitor.connected ? utilization.map { String(format: "%.1f%%", $0) } ?? "—" : "—")")
-                .font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(10)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+    private func powerCard(_ title: String, _ power: Double?, _ icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: icon)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value(monitor.connected ? power : nil))
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                Text("W").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(9)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
     }
 
     private var trendAxisDates: [Date] {
