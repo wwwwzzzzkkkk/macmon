@@ -34,6 +34,9 @@ import ChipBarCore
     private var disclosureSubscription: AnyCancellable?
     private var settingsNavigationSubscription: AnyCancellable?
     private var navigationViewportHeight: CGFloat?
+    private var navigationResizeInFlight = false
+    private var navigationTask: Task<Void, Never>?
+    private var navigationToken = UUID()
     private var resetScrollForPage = false
     private struct DisclosureTransition {
         let start: (applications: Double, ssd: Double)
@@ -119,14 +122,58 @@ import ChipBarCore
 
     private func navigateSettings() {
         guard dashboardMounted, panelRequestedVisible else { return }
-        // Switching pages never changes the NSPanel frame or alpha.
-        // No conflicting SwiftUI + AppKit height animations.
-        if navigationViewportHeight == nil, panel.frame.height > 0 {
-            navigationViewportHeight = panel.frame.height
-        }
+        // Keep the glass window stable while SwiftUI animates the outgoing and
+        // incoming pages. Measurements taken during that transition can reflect
+        // two overlapping pages and must not become permanent window sizes.
+        navigationTask?.cancel()
+        let token = UUID()
+        navigationToken = token
+        navigationResizeInFlight = false
+        navigationViewportHeight = panel.frame.height
         resetScrollForPage = true
         refresh(forceLayout: true)
-        panel.invalidateShadow()
+        navigationTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: 290_000_000) } catch { return }
+            guard let self, self.navigationToken == token,
+                  self.dashboardMounted, self.panelRequestedVisible else { return }
+
+            self.hostingView.layoutSubtreeIfNeeded()
+            let naturalHeight = ceil(self.hostingView.fittingSize.height)
+            guard naturalHeight.isFinite, naturalHeight > 0 else { return }
+            let targetHeight = min(naturalHeight, self.maximumHeight)
+            self.resetScrollForPage = true
+            guard let targetFrame = self.panelFrame(size: NSSize(
+                width: DashboardLayout.width, height: targetHeight)) else {
+                self.navigationViewportHeight = nil
+                self.refresh(forceLayout: true)
+                return
+            }
+
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ||
+               abs(self.panel.frame.height - targetHeight) < 1 {
+                self.navigationViewportHeight = nil
+                self.refresh(forceLayout: true)
+                return
+            }
+
+            // Resize only AFTER the page slide finishes. The previous
+            // implementation could leave the settings height cached on return.
+            self.navigationResizeInFlight = true
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.16
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                self.panel.animator().setFrame(targetFrame, display: true)
+            } completionHandler: { [weak self] in
+                Task { @MainActor in
+                    guard let self, self.navigationToken == token else { return }
+                    self.navigationResizeInFlight = false
+                    self.navigationViewportHeight = nil
+                    self.resetScrollForPage = true
+                    self.refresh(forceLayout: true)
+                    self.panel.invalidateShadow()
+                }
+            }
+        }
     }
 
     private func animateDisclosure() {
@@ -279,15 +326,18 @@ import ChipBarCore
         guard height.isFinite, height > 0 else { return }
         let contentHeightChanged = height != measuredHeight
         measuredHeight = height
-        let documentSize = NSSize(width: DashboardLayout.width, height: height)
-        if hostingView.frame.size != documentSize { hostingView.setFrameSize(documentSize) }
         let size = NSSize(width: DashboardLayout.width, height: min(navigationViewportHeight ?? height, maximumHeight))
-        if let frame = panelFrame(size: size), contentHeightChanged || forceLayout {
+        // A short destination page still needs a full viewport-sized document,
+        // otherwise NSClipView can retain an invalid origin on the next return.
+        let documentHeight = max(height, size.height)
+        let documentSize = NSSize(width: DashboardLayout.width, height: documentHeight)
+        if hostingView.frame.size != documentSize { hostingView.setFrameSize(documentSize) }
+        if !navigationResizeInFlight, let frame = panelFrame(size: size), contentHeightChanged || forceLayout {
             if frame != panel.frame { panel.setFrame(frame, display: false) }
             panelMaterial.layoutSubtreeIfNeeded()
         }
         if switchingPage || contentHeightChanged || oldViewportHeight != size.height || forceLayout {
-            let maximumOffset = max(0, height - size.height)
+            let maximumOffset = max(0, documentHeight - size.height)
             let offset = switchingPage ? 0 : min(maximumOffset, max(0, topOffset))
             let y = hostingView.isFlipped ? offset : maximumOffset - offset
             scrollView.contentView.scroll(to: NSPoint(x: 0, y: y))
@@ -397,6 +447,10 @@ import ChipBarCore
         hostingView.rootView = AnyView(EmptyView())
         dashboardMounted = false
         measuredHeight = 0
+        navigationTask?.cancel()
+        navigationTask = nil
+        navigationToken = UUID()
+        navigationResizeInFlight = false
         navigationViewportHeight = nil
         resetScrollForPage = false
     }
