@@ -691,11 +691,20 @@ import ChipBarCore
             try await Task.sleep(nanoseconds: 260_000_000)
             try record("collapsed-again")
             if !ssdOnly {
+                let initialHeight = panel.frame.height
                 dashboardState.toggleSettings()
                 try await Task.sleep(nanoseconds: 350_000_000)
+                guard dashboardState.showSettings, panel.alphaValue == 1,
+                      abs(panel.frame.height - initialHeight) < 1 else {
+                    failVerification("Settings navigation resized or faded the glass panel.")
+                }
                 try record("settings")
                 dashboardState.toggleSettings()
                 try await Task.sleep(nanoseconds: 350_000_000)
+                guard !dashboardState.showSettings, panel.alphaValue == 1,
+                      abs(panel.frame.height - initialHeight) < 1 else {
+                    failVerification("Returning from settings resized or faded the glass panel.")
+                }
                 try record("settings-closed")
             }
             captureScreenWindow(path: directory + "/rounded-window-shadow.png", includeShadow: true)
