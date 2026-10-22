@@ -60,6 +60,5 @@ private struct AnimatedPercentage: View, Animatable {
 
     var body: some View {
         Text(String(format: "%.0f%%", value))
-            .contentTransition(.identity)
     }
 }
