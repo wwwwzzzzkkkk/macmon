@@ -21,12 +21,9 @@ final class DashboardState: ObservableObject {
     @Published var showSSDDetails = CommandLine.arguments.contains("--ssd-details")
     @Published var ssdExpansion = CommandLine.arguments.contains("--ssd-details") ? 1.0 : 0.0
     @Published var ssdDetailsHeight: CGFloat = 0
-    @Published var settingsExpansion = 0.0
-    @Published var settingsHeight: CGFloat = 0
     @Published var applicationMetric: ApplicationResource = CommandLine.arguments.contains("--apps-gpu") ? .gpu : CommandLine.arguments.contains("--apps-ane") ? .ane : .cpu
     init(showSettings: Bool = false) {
         self.showSettings = showSettings
-        settingsExpansion = showSettings ? 1 : 0
     }
     func toggleApplications() { showApplications.toggle() }
     func toggleSettings() { showSettings.toggle() }
@@ -46,38 +43,53 @@ struct Dashboard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            header
-            hero
-            powerCards
-            utilizationOverview
-            ApplicationUsageSection(monitor: monitor, state: state)
-            trend
-            temperatures
-            systemMemory
-            connectivity
-            SSDSection(ssd: monitor.ssd, state: state)
-            errorPanel
-            Text(monitor.status).font(.caption).foregroundStyle(.secondary)
-            VStack(spacing: 0) {
+            if state.showSettings {
+                settingsNavigation
                 settingsPanel
-                    .fixedSize(horizontal: false, vertical: true)
-                    .background(GeometryReader { geometry in
-                        Color.clear
-                            .onAppear { state.settingsHeight = geometry.size.height }
-                            .onChange(of: geometry.size.height) { state.settingsHeight = $0 }
-                    })
-                    .padding(.bottom, 12)
-                    .frame(height: (state.settingsHeight + 12) * state.settingsExpansion, alignment: .top)
-                    .opacity(state.settingsExpansion).clipped()
-                    .accessibilityHidden(!state.showSettings)
-                    .disabled(!state.showSettings)
+            } else {
+                header
+                hero
+                powerCards
+                utilizationOverview
+                ApplicationUsageSection(monitor: monitor, state: state)
+                trend
+                temperatures
+                systemMemory
+                fanOverview
+                SSDSection(ssd: monitor.ssd, state: state)
+                errorPanel
+                Text(monitor.status).font(.caption).foregroundStyle(.secondary)
                 footer
             }
         }
-        .padding(14).frame(width: DashboardLayout.width)
+        .padding(14)
+        .frame(width: DashboardLayout.width)
         .fixedSize(horizontal: false, vertical: true)
-        // Keep the document at the top while AppKit animates the window height.
         .frame(maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var settingsNavigation: some View {
+        HStack(spacing: 10) {
+            Button {
+                state.showSettings = false
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.left").font(.caption.weight(.semibold))
+                    Text("返回").font(.subheadline)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("返回监控面板")
+
+            Spacer()
+            Text("设置").font(.headline)
+            Spacer()
+            Image(systemName: "gearshape")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+        }
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder private var header: some View {
@@ -207,29 +219,17 @@ struct Dashboard: View {
 
     }
 
-    private var connectivity: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("实时网速", systemImage: "network")
-                Spacer()
-                Text(monitor.network.interfaces.joined(separator: " + "))
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            }
-            HStack {
-                Text("↓ \(NetworkRate.text(monitor.network.rate?.download))")
-                Spacer()
-                Text("↑ \(NetworkRate.text(monitor.network.rate?.upload))")
-            }.monospacedDigit()
-            Divider()
-            HStack {
-                Label("风扇", systemImage: "fanblades")
-                Spacer()
-                let fans = monitor.connected ? monitor.sample?.fans ?? [] : []
-                Text(fans.isEmpty ? "不可用" : fans.map { String(format: "%.0f", $0.rpm) }.joined(separator: " / ") + " RPM")
-                    .monospacedDigit()
-            }
-        }.font(.subheadline).padding(12)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+    private var fanOverview: some View {
+        HStack(spacing: 9) {
+            Label("风扇", systemImage: "fanblades")
+            Spacer()
+            let fans = monitor.connected ? monitor.sample?.fans ?? [] : []
+            Text(fans.isEmpty ? "不可用" : fans.map { String(format: "%.0f", $0.rpm) }.joined(separator: " / ") + " RPM")
+                .monospacedDigit()
+        }
+        .font(.subheadline)
+        .padding(11)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
     }
 
     private var settingsPanel: some View {
@@ -353,7 +353,13 @@ struct Dashboard: View {
             VStack {
             Divider()
             HStack {
-                Button { state.toggleSettings() } label: { Label("设置", systemImage: "slider.horizontal.3") }
+                Button { state.showSettings = true } label: {
+                    HStack(spacing: 6) {
+                        Label("设置", systemImage: "slider.horizontal.3")
+                        Image(systemName: "chevron.right").font(.caption2)
+                    }
+                }
+                .accessibilityLabel("打开设置页面")
                 Spacer()
                 Button(monitor.paused ? "继续" : "暂停") { monitor.togglePause() }
                 Button("退出") { monitor.stop(forQuit: true); NSApplication.shared.terminate(nil) }
