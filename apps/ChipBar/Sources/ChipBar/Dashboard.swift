@@ -8,6 +8,7 @@ enum DashboardLayout {
 
 enum DashboardMotion {
     static let duration = 0.20
+    static let navigation = 0.24
     static let popoverEnter = 0.18
     static let popoverExit = 0.14
     static let popoverCurve = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -32,6 +33,7 @@ final class DashboardState: ObservableObject {
 struct Dashboard: View {
     @ObservedObject var monitor: Monitor
     @StateObject private var state: DashboardState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
     private let appIcon = Bundle.main.url(forResource: "AppIcon", withExtension: "icns")
         .flatMap { NSImage(contentsOf: $0) }
@@ -42,30 +44,58 @@ struct Dashboard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        ZStack(alignment: .topLeading) {
             if state.showSettings {
-                settingsNavigation
-                settingsPanel
+                settingsScreen
+                    .transition(reduceMotion ? .opacity :
+                        .asymmetric(
+                            insertion: .offset(x: 18).combined(with: .opacity),
+                            removal: .offset(x: 18).combined(with: .opacity)))
             } else {
-                header
-                hero
-                powerCards
-                utilizationOverview
-                ApplicationUsageSection(monitor: monitor, state: state)
-                trend
-                temperatures
-                systemMemory
-                fanOverview
-                SSDSection(ssd: monitor.ssd, state: state)
-                errorPanel
-                Text(monitor.status).font(.caption).foregroundStyle(.secondary)
-                footer
+                monitoringScreen
+                    .transition(reduceMotion ? .opacity :
+                        .asymmetric(
+                            insertion: .offset(x: -18).combined(with: .opacity),
+                            removal: .offset(x: -18).combined(with: .opacity)))
             }
         }
-        .padding(14)
-        .frame(width: DashboardLayout.width)
+        // Constrain the *content* rather than only its padded outer frame.
+        // Otherwise intrinsic widths (e.g. segmented picker) can run under
+        // the scroller and clip the right-hand side of the glass popover.
+        .frame(width: DashboardLayout.width - 30, alignment: .topLeading)
+        .padding(.horizontal, 15)
+        .padding(.vertical, 14)
+        .frame(width: DashboardLayout.width, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxHeight: .infinity, alignment: .topLeading)
+        .animation(reduceMotion ? nil : .easeInOut(duration: DashboardMotion.navigation), value: state.showSettings)
+    }
+
+    private var monitoringScreen: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            header
+            hero
+            powerCards
+            utilizationOverview
+            ApplicationUsageSection(monitor: monitor, state: state)
+            trend
+            temperatures
+            systemMemory
+            fanOverview
+            SSDSection(ssd: monitor.ssd, state: state)
+            errorPanel
+            Text(monitor.status).font(.caption).foregroundStyle(.secondary)
+            footer
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var settingsScreen: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            settingsNavigation
+            settingsPanel
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var settingsNavigation: some View {
@@ -105,11 +135,13 @@ struct Dashboard: View {
                     Text("ChipBar").font(.headline)
                     Text(monitor.sample?.chip ?? monitor.hardware)
                         .font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.tail)
                 }
                 Spacer()
                 Circle().fill(monitor.connected ? Color.green : Color.orange).frame(width: 6, height: 6)
                 Text(monitor.paused ? "已暂停" : monitor.connected ? "实时" : "等待数据")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
 
     }
