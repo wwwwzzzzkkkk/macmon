@@ -273,9 +273,9 @@ import ChipBarCore
         guard height.isFinite, height > 0 else { return }
         let contentHeightChanged = height != measuredHeight
         measuredHeight = height
-        let documentSize = NSSize(width: 390, height: height)
+        let documentSize = NSSize(width: DashboardLayout.width, height: height)
         if hostingView.frame.size != documentSize { hostingView.setFrameSize(documentSize) }
-        let size = NSSize(width: 390, height: min(height, maximumHeight))
+        let size = NSSize(width: DashboardLayout.width, height: min(height, maximumHeight))
         if let frame = panelFrame(size: size), contentHeightChanged || forceLayout {
             if frame != panel.frame { panel.setFrame(frame, display: false) }
             panelMaterial.layoutSubtreeIfNeeded()
@@ -357,12 +357,12 @@ import ChipBarCore
     private func animatePanel(visible: Bool, animated: Bool = true) {
         let token = UUID()
         panelTransition = token
-        statusItem.button?.highlight(visible)
+        statusItem.button?.highlight(false)
         compactMenu.needsDisplay = true
         let complete: () -> Void = { [weak self] in
             guard let self, self.panelTransition == token else { return }
             if visible {
-                self.statusItem.button?.highlight(true)
+                self.statusItem.button?.highlight(false)
                 self.panel.invalidateShadow()
             } else {
                 self.panel.orderOut(nil)
