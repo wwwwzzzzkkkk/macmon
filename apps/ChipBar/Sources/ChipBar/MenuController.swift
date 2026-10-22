@@ -32,17 +32,18 @@ import ChipBarCore
     private var menuPreferences: AnyCancellable?
     private var menuRefresh: MenuRefreshDriver!
     private var disclosureSubscription: AnyCancellable?
+    private var settingsNavigationSubscription: AnyCancellable?
+    private var navigationViewportHeight: CGFloat?
+    private var resetScrollForPage = false
     private struct DisclosureTransition {
-        let start: (applications: Double, settings: Double, ssd: Double)
-        let target: (applications: Double, settings: Double, ssd: Double)
+        let start: (applications: Double, ssd: Double)
+        let target: (applications: Double, ssd: Double)
         let began: TimeInterval
         let token: UUID
     }
     private var disclosureTransition: DisclosureTransition?
     private var measuredHeight: CGFloat = 0
     private var maximumHeight: CGFloat = 850
-    private var lastSettingsVisible = false
-    private var pendingSettingsReveal = false
     private var menuTracking = false
     private var localEvents: Any?
     private var globalEvents: Any?
@@ -105,43 +106,52 @@ import ChipBarCore
             .sink { [weak self] _ in self?.configureMenuRefresh() }
         refresh()
         subscription = Publishers.Merge(monitor.objectWillChange.map { _ in () },
-                                       Publishers.Merge(dashboardState.$settingsHeight.dropFirst().map { _ in () },
-                                                        dashboardState.$ssdDetailsHeight.dropFirst().map { _ in () }))
+                                        dashboardState.$ssdDetailsHeight.dropFirst().map { _ in () })
             .debounce(for: .milliseconds(30), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.refresh() }
-        disclosureSubscription = dashboardState.$showApplications.combineLatest(dashboardState.$showSettings, dashboardState.$showSSDDetails)
+        disclosureSubscription = dashboardState.$showApplications.combineLatest(dashboardState.$showSSDDetails)
             .dropFirst().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.animateDisclosure() }
+        settingsNavigationSubscription = dashboardState.$showSettings
+            .dropFirst().receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.navigateSettings() }
+    }
+
+    private func navigateSettings() {
+        guard dashboardMounted, panelRequestedVisible else { return }
+        // Switching pages never changes the NSPanel frame or alpha.
+        // No conflicting SwiftUI + AppKit height animations.
+        if navigationViewportHeight == nil, panel.frame.height > 0 {
+            navigationViewportHeight = panel.frame.height
+        }
+        resetScrollForPage = true
+        refresh(forceLayout: true)
+        panel.invalidateShadow()
     }
 
     private func animateDisclosure() {
         let target = (applications: dashboardState.showApplications ? 1.0 : 0.0,
-                      settings: dashboardState.showSettings ? 1.0 : 0.0,
                       ssd: dashboardState.showSSDDetails ? 1.0 : 0.0)
         let start = currentDisclosureValues()
-        if target.settings > 0, !lastSettingsVisible { pendingSettingsReveal = true }
-        if target.settings == 0 { pendingSettingsReveal = false }
-        lastSettingsVisible = target.settings > 0
-        guard dashboardMounted, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+        guard dashboardMounted, !dashboardState.showSettings,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
             disclosureTransition = nil
             dashboardState.applicationsExpansion = target.applications
-            dashboardState.settingsExpansion = target.settings
             dashboardState.ssdExpansion = target.ssd
-            hostingView.needsLayout = true
-            refresh()
-            panel.invalidateShadow()
+            navigationViewportHeight = nil
+            if dashboardMounted {
+                hostingView.needsLayout = true
+                refresh()
+                panel.invalidateShadow()
+            }
             return
         }
+        navigationViewportHeight = nil
         let token = UUID()
         disclosureTransition = DisclosureTransition(start: start, target: target,
             began: ProcessInfo.processInfo.systemUptime, token: token)
         let heightDelta = CGFloat(target.applications - start.applications) * 104
-            + CGFloat(target.settings - start.settings) * (dashboardState.settingsHeight + 12)
             + CGFloat(target.ssd - start.ssd) * dashboardState.ssdDetailsHeight
-        // Calculate from the full document height rather than the clipped window.
-        // When the expanded panel has reached the screen cap, subtracting the
-        // disclosure height from the window frame underestimates its collapsed
-        // size; refresh() then snaps it back to the cap when the animation ends.
         let targetHeight = DisclosurePanelSizing.targetHeight(
             documentHeight: measuredHeight,
             contentHeightDelta: heightDelta,
@@ -149,7 +159,6 @@ import ChipBarCore
         )
         withAnimation(.timingCurve(0.42, 0, 0.58, 1, duration: DashboardMotion.duration)) {
             dashboardState.applicationsExpansion = target.applications
-            dashboardState.settingsExpansion = target.settings
             dashboardState.ssdExpansion = target.ssd
         }
         if let frame = panelFrame(size: NSSize(width: panel.frame.width, height: targetHeight)) {
@@ -171,15 +180,14 @@ import ChipBarCore
         }
     }
 
-    private func currentDisclosureValues() -> (applications: Double, settings: Double, ssd: Double) {
+    private func currentDisclosureValues() -> (applications: Double, ssd: Double) {
         guard let transition = disclosureTransition else {
-            return (dashboardState.applicationsExpansion, dashboardState.settingsExpansion, dashboardState.ssdExpansion)
+            return (dashboardState.applicationsExpansion, dashboardState.ssdExpansion)
         }
         let t = min(1, max(0, (ProcessInfo.processInfo.systemUptime - transition.began) / DashboardMotion.duration))
         let eased = t * t * (3 - 2 * t)
         return (
             transition.start.applications + (transition.target.applications - transition.start.applications) * eased,
-            transition.start.settings + (transition.target.settings - transition.start.settings) * eased,
             transition.start.ssd + (transition.target.ssd - transition.start.ssd) * eased
         )
     }
@@ -259,9 +267,7 @@ import ChipBarCore
     private func refresh(forceLayout: Bool = false) {
         guard dashboardMounted, forceLayout || panel.isVisible else { return }
         guard forceLayout || disclosureTransition == nil else { return }
-        if dashboardState.showSettings && !lastSettingsVisible { pendingSettingsReveal = true }
-        if !dashboardState.showSettings { pendingSettingsReveal = false }
-        lastSettingsVisible = dashboardState.showSettings
+        let switchingPage = resetScrollForPage
         let oldViewportHeight = scrollView.contentView.bounds.height
         let oldY = scrollView.contentView.bounds.origin.y
         let topOffset = hostingView.isFlipped ? oldY : max(0, hostingView.frame.height - oldViewportHeight - oldY)
@@ -275,20 +281,19 @@ import ChipBarCore
         measuredHeight = height
         let documentSize = NSSize(width: DashboardLayout.width, height: height)
         if hostingView.frame.size != documentSize { hostingView.setFrameSize(documentSize) }
-        let size = NSSize(width: DashboardLayout.width, height: min(height, maximumHeight))
+        let size = NSSize(width: DashboardLayout.width, height: min(navigationViewportHeight ?? height, maximumHeight))
         if let frame = panelFrame(size: size), contentHeightChanged || forceLayout {
             if frame != panel.frame { panel.setFrame(frame, display: false) }
             panelMaterial.layoutSubtreeIfNeeded()
         }
-        let revealSettings = pendingSettingsReveal && disclosureTransition == nil && dashboardState.settingsExpansion >= 1 && dashboardState.settingsHeight > 0
-        if revealSettings || contentHeightChanged || oldViewportHeight != size.height || forceLayout {
+        if switchingPage || contentHeightChanged || oldViewportHeight != size.height || forceLayout {
             let maximumOffset = max(0, height - size.height)
-            let offset = revealSettings ? maximumOffset : min(maximumOffset, max(0, topOffset))
+            let offset = switchingPage ? 0 : min(maximumOffset, max(0, topOffset))
             let y = hostingView.isFlipped ? offset : maximumOffset - offset
             scrollView.contentView.scroll(to: NSPoint(x: 0, y: y))
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
-        if revealSettings { pendingSettingsReveal = false }
+        if switchingPage { resetScrollForPage = false }
     }
 
     private func anchor() -> (NSRect, NSScreen)? {
@@ -324,7 +329,6 @@ import ChipBarCore
         if !dashboardMounted {
             dashboardState.applicationsExpansion = dashboardState.showApplications ? 1 : 0
             dashboardState.ssdExpansion = dashboardState.showSSDDetails ? 1 : 0
-            dashboardState.settingsExpansion = dashboardState.showSettings ? 1 : 0
             hostingView.rootView = AnyView(Dashboard(monitor: monitor, state: dashboardState))
             if CommandLine.arguments.contains("--light") {
                 hostingView.rootView = AnyView(hostingView.rootView.environment(\.colorScheme, .light))
@@ -393,8 +397,8 @@ import ChipBarCore
         hostingView.rootView = AnyView(EmptyView())
         dashboardMounted = false
         measuredHeight = 0
-        lastSettingsVisible = false
-        pendingSettingsReveal = false
+        navigationViewportHeight = nil
+        resetScrollForPage = false
     }
 
     func windowDidResignKey(_ notification: Notification) {
@@ -605,8 +609,9 @@ import ChipBarCore
                         let data = try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
                         try data.write(to: URL(fileURLWithPath: directory + "/layout.json"))
                         guard monitor.menuText.contains("W"), panel.isVisible,
-                              panel.frame.height > collapsedHeight,
-                              abs(scrollView.bounds.height - min(measuredHeight, maximumHeight)) < 1 else {
+                              dashboardState.showSettings,
+                              abs(panel.frame.height - collapsedHeight) < 1,
+                              abs(scrollView.bounds.height - panel.frame.height) < 1 else {
                             failVerification("Menu title or panel sizing verification failed.")
                         }
                         Task { @MainActor in await self.verifyPanelTransitions(directory: directory) }
@@ -624,7 +629,7 @@ import ChipBarCore
             try await Task.sleep(nanoseconds: 600_000_000)
             refresh()
             let maxOffset = max(0, hostingView.frame.height - scrollView.contentView.bounds.height)
-            guard maxOffset > 0, !pendingSettingsReveal else { failVerification("Settings did not finish opening in a scrollable panel.") }
+            guard maxOffset > 0, dashboardState.showSettings else { failVerification("Settings did not finish opening in a scrollable panel.") }
             let expectedTop: CGFloat = hostingView.isFlipped ? 0 : maxOffset
             scrollView.contentView.scroll(to: NSPoint(x: 0, y: expectedTop))
             scrollView.reflectScrolledClipView(scrollView.contentView)
@@ -667,10 +672,9 @@ import ChipBarCore
                                "hostingY": hostingView.frame.origin.y, "hostingHeight": hostingView.frame.height,
                                "clipY": scrollView.contentView.bounds.origin.y, "flipped": hostingView.isFlipped,
                                "applicationsExpansion": dashboardState.applicationsExpansion,
-                               "settingsExpansion": dashboardState.settingsExpansion,
+                               "settingsScreen": dashboardState.showSettings,
                                "ssdExpansion": dashboardState.ssdExpansion,
                                "ssdDetailsHeight": dashboardState.ssdDetailsHeight,
-                               "settingsHeight": dashboardState.settingsHeight,
                                "scrollBorder": scrollView.borderType.rawValue,
                                "cornerClipped": panelMaterial.layer?.masksToBounds ?? false])
                 try capture(view: panelMaterial, path: directory + "/\(name).png")
