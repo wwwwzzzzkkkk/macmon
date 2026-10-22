@@ -2,8 +2,13 @@ import SwiftUI
 import QuartzCore
 import ChipBarCore
 
+enum DashboardLayout {
+    static let width: CGFloat = 370
+}
+
 enum DashboardMotion {
     static let duration = 0.20
+    static let navigation = 0.24
     static let popoverEnter = 0.18
     static let popoverExit = 0.14
     static let popoverCurve = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -17,12 +22,9 @@ final class DashboardState: ObservableObject {
     @Published var showSSDDetails = CommandLine.arguments.contains("--ssd-details")
     @Published var ssdExpansion = CommandLine.arguments.contains("--ssd-details") ? 1.0 : 0.0
     @Published var ssdDetailsHeight: CGFloat = 0
-    @Published var settingsExpansion = 0.0
-    @Published var settingsHeight: CGFloat = 0
     @Published var applicationMetric: ApplicationResource = CommandLine.arguments.contains("--apps-gpu") ? .gpu : CommandLine.arguments.contains("--apps-ane") ? .ane : .cpu
     init(showSettings: Bool = false) {
         self.showSettings = showSettings
-        settingsExpansion = showSettings ? 1 : 0
     }
     func toggleApplications() { showApplications.toggle() }
     func toggleSettings() { showSettings.toggle() }
@@ -31,6 +33,7 @@ final class DashboardState: ObservableObject {
 struct Dashboard: View {
     @ObservedObject var monitor: Monitor
     @StateObject private var state: DashboardState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
     private let appIcon = Bundle.main.url(forResource: "AppIcon", withExtension: "icns")
         .flatMap { NSImage(contentsOf: $0) }
@@ -41,38 +44,82 @@ struct Dashboard: View {
     }
 
     var body: some View {
+        ZStack(alignment: .topLeading) {
+            if state.showSettings {
+                settingsScreen
+                    .transition(reduceMotion ? .opacity :
+                        .asymmetric(
+                            insertion: .offset(x: 18).combined(with: .opacity),
+                            removal: .offset(x: 18).combined(with: .opacity)))
+            } else {
+                monitoringScreen
+                    .transition(reduceMotion ? .opacity :
+                        .asymmetric(
+                            insertion: .offset(x: -18).combined(with: .opacity),
+                            removal: .offset(x: -18).combined(with: .opacity)))
+            }
+        }
+        // Constrain the *content* rather than only its padded outer frame.
+        // Otherwise intrinsic widths (e.g. segmented picker) can run under
+        // the scroller and clip the right-hand side of the glass popover.
+        .frame(width: DashboardLayout.width - 30, alignment: .topLeading)
+        .padding(.horizontal, 15)
+        .padding(.vertical, 14)
+        .frame(width: DashboardLayout.width, alignment: .topLeading)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .animation(reduceMotion ? nil : .easeInOut(duration: DashboardMotion.navigation), value: state.showSettings)
+    }
+
+    private var monitoringScreen: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
             hero
             powerCards
+            utilizationOverview
             ApplicationUsageSection(monitor: monitor, state: state)
             trend
             temperatures
             systemMemory
-            connectivity
+            fanOverview
             SSDSection(ssd: monitor.ssd, state: state)
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
-            VStack(spacing: 0) {
-                settingsPanel
-                    .fixedSize(horizontal: false, vertical: true)
-                    .background(GeometryReader { geometry in
-                        Color.clear
-                            .onAppear { state.settingsHeight = geometry.size.height }
-                            .onChange(of: geometry.size.height) { state.settingsHeight = $0 }
-                    })
-                    .padding(.bottom, 12)
-                    .frame(height: (state.settingsHeight + 12) * state.settingsExpansion, alignment: .top)
-                    .opacity(state.settingsExpansion).clipped()
-                    .accessibilityHidden(!state.showSettings)
-                    .disabled(!state.showSettings)
-                footer
-            }
+            footer
         }
-        .padding(16).frame(width: 390)
-        .fixedSize(horizontal: false, vertical: true)
-        // Keep the document at the top while AppKit animates the window height.
-        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var settingsScreen: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            settingsNavigation
+            settingsPanel
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var settingsNavigation: some View {
+        HStack(spacing: 10) {
+            Button {
+                state.showSettings = false
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.left").font(.caption.weight(.semibold))
+                    Text("返回").font(.subheadline)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("返回监控面板")
+
+            Spacer()
+            Text("设置").font(.headline)
+            Spacer()
+            Image(systemName: "gearshape")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+        }
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder private var header: some View {
@@ -88,11 +135,13 @@ struct Dashboard: View {
                     Text("ChipBar").font(.headline)
                     Text(monitor.sample?.chip ?? monitor.hardware)
                         .font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.tail)
                 }
                 Spacer()
                 Circle().fill(monitor.connected ? Color.green : Color.orange).frame(width: 6, height: 6)
                 Text(monitor.paused ? "已暂停" : monitor.connected ? "实时" : "等待数据")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
 
     }
@@ -107,19 +156,34 @@ struct Dashboard: View {
                     Spacer()
                     Image(systemName: "bolt.fill").font(.title).foregroundStyle(accent.opacity(0.6))
                 }
-                Text("CPU + GPU + ANE · 非插座输入功率")
+                Text("CPU + GPU + ANE · 非整机插座输入功率")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
     }
 
     @ViewBuilder private var powerCards: some View {
-            HStack(spacing: 10) {
-                powerCard("CPU", monitor.sample?.cpu, "cpu", monitor.sample?.cpuUtilization)
-                powerCard("GPU", monitor.sample?.gpu, "square.stack.3d.up", monitor.sample?.gpuUtilization)
-                powerCard("ANE", monitor.sample?.ane, "sparkles", nil)
-            }
+        HStack(spacing: 8) {
+            powerCard("CPU", monitor.sample?.cpu, "cpu")
+            powerCard("GPU", monitor.sample?.gpu, "square.stack.3d.up")
+            powerCard("ANE", monitor.sample?.ane, "sparkles")
+        }
+    }
 
+    /// Percentage-based rings, unlike power values which have no universal
+    /// 100% wattage. One restrained accent family preserves Liquid Glass contrast.
+    private var utilizationOverview: some View {
+        HStack(spacing: 8) {
+            MetricRing(title: "CPU 占用", percentage: monitor.connected ? monitor.sample?.cpuUtilization : nil,
+                       tint: accent)
+            MetricRing(title: "GPU 占用", percentage: monitor.connected ? monitor.sample?.gpuUtilization : nil,
+                       tint: accent.opacity(0.78))
+            MetricRing(title: "内存", percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
+                       tint: accent.opacity(0.60))
+        }
+        .padding(.vertical, 11)
+        .padding(.horizontal, 7)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
     }
 
     @ViewBuilder private var trend: some View {
@@ -187,76 +251,147 @@ struct Dashboard: View {
 
     }
 
-    private var connectivity: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private var fanOverview: some View {
+        HStack(spacing: 9) {
+            Label("风扇", systemImage: "fanblades")
+            Spacer()
+            let fans = monitor.connected ? monitor.sample?.fans ?? [] : []
+            Text(fans.isEmpty ? "不可用" : fans.map { String(format: "%.0f", $0.rpm) }.joined(separator: " / ") + " RPM")
+                .monospacedDigit()
+        }
+        .font(.subheadline)
+        .padding(11)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
+    }
+
+    private var settingsPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("实时网速", systemImage: "network")
+                Label("偏好设置", systemImage: "slider.horizontal.3")
+                    .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(monitor.network.interfaces.joined(separator: " + "))
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版本")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
-            HStack {
-                Text("↓ \(NetworkRate.text(monitor.network.rate?.download))")
-                Spacer()
-                Text("↑ \(NetworkRate.text(monitor.network.rate?.upload))")
-            }.monospacedDigit()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("刷新频率").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                Picker("刷新频率", selection: $monitor.interval) {
+                    Text("1 秒").tag(1000)
+                    Text("2 秒").tag(2000)
+                    Text("5 秒").tag(5000)
+                    Text("10 秒").tag(10000)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+
             Divider()
-            HStack {
-                Label("风扇", systemImage: "fanblades")
-                Spacer()
-                let fans = monitor.connected ? monitor.sample?.fans ?? [] : []
-                Text(fans.isEmpty ? "不可用" : fans.map { String(format: "%.0f", $0.rpm) }.joined(separator: " / ") + " RPM")
-                    .monospacedDigit()
-            }
-        }.font(.subheadline).padding(12)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
-    }
 
-    @ViewBuilder private var settingsPanel: some View {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("ChipBar \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版本")")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Picker("刷新间隔", selection: $monitor.interval) {
-                        Text("1 秒").tag(1000); Text("2 秒").tag(2000)
-                        Text("5 秒").tag(5000); Text("10 秒").tag(10000)
-                    }.pickerStyle(.segmented)
-                    Text("菜单栏显示").font(.subheadline.weight(.medium))
-                    Picker("功率指标", selection: $monitor.menuMetric) {
-                        ForEach(PowerMetric.allCases) { Text($0.title).tag($0) }
-                    }.disabled(!monitor.menuItems.contains(.power))
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("菜单栏项目").font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text("选择显示内容").font(.caption2).foregroundStyle(.secondary)
+                }
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
                     ForEach(MenuContent.allCases) { item in
-                        Toggle(item.title, isOn: Binding(
-                            get: { monitor.menuItems.contains(item) },
-                            set: { enabled in
-                                if enabled { monitor.menuItems.insert(item) } else { monitor.menuItems.remove(item) }
-                            }))
+                        let enabled = monitor.menuItems.contains(item)
+                        Button {
+                            if enabled { monitor.menuItems.remove(item) }
+                            else { monitor.menuItems.insert(item) }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: menuIcon(item))
+                                    .font(.caption).frame(width: 14)
+                                Text(menuTitle(item)).font(.caption2.weight(.medium)).lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                Spacer(minLength: 0)
+                                if enabled {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.caption2)
+                                }
+                            }
+                            .foregroundStyle(enabled ? Color.primary : Color.secondary)
+                            .padding(.horizontal, 9).frame(height: 37)
+                            .background(enabled ? accent.opacity(0.14) : Color.primary.opacity(0.04),
+                                        in: RoundedRectangle(cornerRadius: 9))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 9)
+                                    .strokeBorder(enabled ? accent.opacity(0.38) : Color.primary.opacity(0.07))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(item.title)，\(enabled ? "已显示" : "未显示")")
                     }
-                    Toggle("SSD 综合温度", isOn: Binding(get: { monitor.ssd.showInMenu }, set: { monitor.ssd.showInMenu = $0 }))
-                    Text("两排紧凑显示；风扇显示最高转速，悬停可查看全部读数。SSD 温度需启用下方监控，多盘取最高温。")
-                        .font(.caption2).foregroundStyle(.secondary)
-                    Text("硬盘总速度合计内置和外接物理盘；外置速度单列 ER / EW，多盘取合计，未连接时隐藏，不需要开启 SMART。")
-                        .font(.caption2).foregroundStyle(.secondary)
-                    Text("网速与菜单栏磁盘速度按所选间隔统一刷新，网速合计活跃以太网 / Wi-Fi 接口，包含局域网传输。CPU / GPU 占用率为采样期间活跃时间占比。ANE 暂无整体占用率。")
-                        .font(.caption2).foregroundStyle(.secondary)
-                    HStack {
-                        Button("选择 macmon…") { monitor.chooseExecutable() }
-                        Spacer()
-                        Button("自动查找") { monitor.useDefaultPath() }
-                    }
-                    Text(monitor.executablePath.isEmpty ? "尚未找到 macmon" : monitor.executablePath)
-                        .font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
-                    SSDSettings(ssd: monitor.ssd)
-                    Text("缺失指标显示 —。零值只表示 macmon 返回零，不能据此确认传感器支持。新芯片请先实测。")
-                        .font(.caption2).foregroundStyle(.secondary)
-                }.padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                }
+                if monitor.menuItems.contains(.power) {
+                    Picker("菜单栏功率", selection: $monitor.menuMetric) {
+                        ForEach(PowerMetric.allCases) { Text($0.title).tag($0) }
+                    }.font(.caption)
+                }
+                if monitor.ssd.enabled {
+                    Toggle("显示 SSD 温度", isOn: Binding(
+                        get: { monitor.ssd.showInMenu },
+                        set: { monitor.ssd.showInMenu = $0 }))
+                        .font(.caption)
+                }
+            }
+
+            Divider()
+            SSDSettings(ssd: monitor.ssd)
+
+            Text("默认自动发现 macmon 与 smartctl；已保存的兼容配置继续生效。功率为芯片读数，不代表整机插座输入功率。")
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !monitor.connected {
+                Text("macmon 未连接，请检查安装后重试。")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
     }
 
+    private func menuTitle(_ item: MenuContent) -> String {
+        switch item {
+        case .logo: return "Logo"
+        case .power: return "功率"
+        case .utilization: return "CPU / GPU"
+        case .memory: return "内存"
+        case .cpuTemperature: return "CPU 温度"
+        case .fans: return "风扇"
+        case .network: return "网络速率"
+        case .disk: return "磁盘速率"
+        case .externalDisk: return "外置磁盘"
+        }
+    }
+
+    private func menuIcon(_ item: MenuContent) -> String {
+        switch item {
+        case .logo: return "bolt.fill"
+        case .power: return "bolt"
+        case .utilization: return "cpu"
+        case .memory: return "memorychip"
+        case .cpuTemperature: return "thermometer"
+        case .fans: return "fanblades"
+        case .network: return "arrow.up.arrow.down"
+        case .disk: return "internaldrive"
+        case .externalDisk: return "externaldrive"
+        }
+    }
 
     @ViewBuilder private var footer: some View {
             VStack {
             Divider()
             HStack {
-                Button { state.toggleSettings() } label: { Label("设置", systemImage: "slider.horizontal.3") }
+                Button { state.showSettings = true } label: {
+                    HStack(spacing: 6) {
+                        Label("设置", systemImage: "slider.horizontal.3")
+                        Image(systemName: "chevron.right").font(.caption2)
+                    }
+                }
+                .accessibilityLabel("打开设置页面")
                 Spacer()
                 Button(monitor.paused ? "继续" : "暂停") { monitor.togglePause() }
                 Button("退出") { monitor.stop(forQuit: true); NSApplication.shared.terminate(nil) }
@@ -264,15 +399,21 @@ struct Dashboard: View {
             }
     }
 
-    private func powerCard(_ title: String, _ power: Double?, _ icon: String, _ utilization: Double?) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: icon).font(.caption).foregroundStyle(.secondary)
-            Text("\(value(monitor.connected ? power : nil)) W")
-                .font(.system(.body, design: .rounded).weight(.semibold)).monospacedDigit()
-            Text(title == "ANE" ? "占用率不可用" : "占用 \(monitor.connected ? utilization.map { String(format: "%.1f%%", $0) } ?? "—" : "—")")
-                .font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(10)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+    private func powerCard(_ title: String, _ power: Double?, _ icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: icon)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value(monitor.connected ? power : nil))
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                Text("W").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(9)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
     }
 
     private var trendAxisDates: [Date] {
