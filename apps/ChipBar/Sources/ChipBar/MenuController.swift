@@ -34,7 +34,6 @@ import ChipBarCore
     private var disclosureSubscription: AnyCancellable?
     private var settingsNavigationSubscription: AnyCancellable?
     private var navigationViewportHeight: CGFloat?
-    private var navigationResizeInFlight = false
     private var navigationTask: Task<Void, Never>?
     private var navigationToken = UUID()
     private var resetScrollForPage = false
@@ -122,13 +121,11 @@ import ChipBarCore
 
     private func navigateSettings() {
         guard dashboardMounted, panelRequestedVisible else { return }
-        // Keep the glass window stable while SwiftUI animates the outgoing and
-        // incoming pages. Measurements taken during that transition can reflect
-        // two overlapping pages and must not become permanent window sizes.
+        // Freeze the viewport only for the crossfade/slide. SwiftUI can report
+        // an intermediate ZStack height while both pages are transitioning.
         navigationTask?.cancel()
         let token = UUID()
         navigationToken = token
-        navigationResizeInFlight = false
         navigationViewportHeight = panel.frame.height
         resetScrollForPage = true
         refresh(forceLayout: true)
@@ -136,43 +133,14 @@ import ChipBarCore
             do { try await Task.sleep(nanoseconds: 290_000_000) } catch { return }
             guard let self, self.navigationToken == token,
                   self.dashboardMounted, self.panelRequestedVisible else { return }
-
-            self.hostingView.layoutSubtreeIfNeeded()
-            let naturalHeight = ceil(self.hostingView.fittingSize.height)
-            guard naturalHeight.isFinite, naturalHeight > 0 else { return }
-            let targetHeight = min(naturalHeight, self.maximumHeight)
+            // A new measurement after the transition is essential. Retaining
+            // the old settings viewport caused an occasionally truncated page.
+            self.navigationViewportHeight = nil
             self.resetScrollForPage = true
-            guard let targetFrame = self.panelFrame(size: NSSize(
-                width: DashboardLayout.width, height: targetHeight)) else {
-                self.navigationViewportHeight = nil
-                self.refresh(forceLayout: true)
-                return
-            }
-
-            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ||
-               abs(self.panel.frame.height - targetHeight) < 1 {
-                self.navigationViewportHeight = nil
-                self.refresh(forceLayout: true)
-                return
-            }
-
-            // Resize only AFTER the page slide finishes. The previous
-            // implementation could leave the settings height cached on return.
-            self.navigationResizeInFlight = true
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.16
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                self.panel.animator().setFrame(targetFrame, display: true)
-            } completionHandler: { [weak self] in
-                Task { @MainActor in
-                    guard let self, self.navigationToken == token else { return }
-                    self.navigationResizeInFlight = false
-                    self.navigationViewportHeight = nil
-                    self.resetScrollForPage = true
-                    self.refresh(forceLayout: true)
-                    self.panel.invalidateShadow()
-                }
-            }
+            self.hostingView.layoutSubtreeIfNeeded()
+            self.refresh(forceLayout: true)
+            self.panel.invalidateShadow()
+            self.navigationTask = nil
         }
     }
 
@@ -332,7 +300,7 @@ import ChipBarCore
         let documentHeight = max(height, size.height)
         let documentSize = NSSize(width: DashboardLayout.width, height: documentHeight)
         if hostingView.frame.size != documentSize { hostingView.setFrameSize(documentSize) }
-        if !navigationResizeInFlight, let frame = panelFrame(size: size), contentHeightChanged || forceLayout {
+        if let frame = panelFrame(size: size), contentHeightChanged || forceLayout {
             if frame != panel.frame { panel.setFrame(frame, display: false) }
             panelMaterial.layoutSubtreeIfNeeded()
         }
@@ -450,7 +418,6 @@ import ChipBarCore
         navigationTask?.cancel()
         navigationTask = nil
         navigationToken = UUID()
-        navigationResizeInFlight = false
         navigationViewportHeight = nil
         resetScrollForPage = false
     }
