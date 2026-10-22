@@ -113,20 +113,14 @@ struct SSDSettings: View {
             if ssd.enabled {
                 Text("多盘显示最高综合温度；各盘详情见面板。每轮结束后等待 30 秒，不保存历史。")
                     .font(.caption2).foregroundStyle(.secondary)
-                Picker("设备类型", selection: $ssd.deviceType) {
-                    ForEach(SMARTDeviceType.allCases) { Text($0 == .auto ? "自动识别（推荐）" : $0.rawValue).tag($0) }
+                // Keep previously configured paths and permissions internally.
+                // Device selection uses auto detection by default and never
+                // silently grants sudo access when the control is hidden.
+                if ssd.executablePath.isEmpty {
+                    Text("未找到 smartctl，温度监控暂不可用；可通过 Homebrew 安装 smartmontools。")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
-                HStack {
-                    Button("选择 smartctl…") { ssd.chooseExecutable() }
-                    Spacer()
-                    Button("自动查找") { ssd.useDefaultPath() }
-                }
-                Text(ssd.executablePath.isEmpty ? "请先安装：brew install smartmontools" : ssd.executablePath)
-                    .font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
-                Toggle("使用已配置的非交互 sudo", isOn: $ssd.useSudo).disabled(!ssd.canUseSudo)
-                Text("默认以普通用户读取。需要权限时，可按文档为固定只读命令配置授权，再开启此项；不会弹出密码框。自选程序仅以普通用户运行。")
-                    .font(.caption2).foregroundStyle(.secondary)
-                Link("安装、权限与硬盘盒兼容说明", destination: URL(string: "https://github.com/wwwwzzzzkkkk/ChipBar/blob/main/docs/EXTERNAL_SSD.md")!)
+                Link("安装、权限与硬盘盒兼容说明", destination: URL(string: "https://github.com/wwwwzzzzkkkk/macmon/blob/chipbar/apps/ChipBar/docs/EXTERNAL_SSD.md")!)
                     .font(.caption)
                 Button("重新检测 SSD") { ssd.restart() }
                 Text("传感器编号由 SSD 提供，不能据此确定主控或闪存位置。")
