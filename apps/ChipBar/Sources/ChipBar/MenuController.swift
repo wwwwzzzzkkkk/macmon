@@ -631,8 +631,9 @@ import ChipBarCore
                         try data.write(to: URL(fileURLWithPath: directory + "/layout.json"))
                         guard monitor.menuText.contains("W"), panel.isVisible,
                               dashboardState.showSettings,
-                              abs(panel.frame.height - collapsedHeight) < 1,
-                              abs(scrollView.bounds.height - panel.frame.height) < 1 else {
+                              abs(panel.frame.height - min(measuredHeight, maximumHeight)) < 2,
+                              hostingView.frame.height >= panel.frame.height - 2,
+                              abs(scrollView.bounds.height - panel.frame.height) < 2 else {
                             failVerification("Menu title or panel sizing verification failed.")
                         }
                         Task { @MainActor in await self.verifyPanelTransitions(directory: directory) }
@@ -650,7 +651,9 @@ import ChipBarCore
             try await Task.sleep(nanoseconds: 600_000_000)
             refresh()
             let maxOffset = max(0, hostingView.frame.height - scrollView.contentView.bounds.height)
-            guard maxOffset > 0, dashboardState.showSettings else { failVerification("Settings did not finish opening in a scrollable panel.") }
+            guard dashboardState.showSettings, navigationViewportHeight == nil else {
+                failVerification("Settings navigation did not settle.")
+            }
             let expectedTop: CGFloat = hostingView.isFlipped ? 0 : maxOffset
             scrollView.contentView.scroll(to: NSPoint(x: 0, y: expectedTop))
             scrollView.reflectScrolledClipView(scrollView.contentView)
@@ -712,21 +715,38 @@ import ChipBarCore
             try await Task.sleep(nanoseconds: 260_000_000)
             try record("collapsed-again")
             if !ssdOnly {
-                let initialHeight = panel.frame.height
-                dashboardState.toggleSettings()
-                try await Task.sleep(nanoseconds: 350_000_000)
-                guard dashboardState.showSettings, panel.alphaValue == 1,
-                      abs(panel.frame.height - initialHeight) < 1 else {
-                    failVerification("Settings navigation resized or faded the glass panel.")
+                func verifyPage(_ settings: Bool) {
+                    hostingView.layoutSubtreeIfNeeded()
+                    let content = ceil(hostingView.fittingSize.height)
+                    let expected = min(content, maximumHeight)
+                    let scrollHeight = scrollView.contentView.bounds.height
+                    guard dashboardState.showSettings == settings,
+                          navigationViewportHeight == nil, navigationTask == nil,
+                          panel.isVisible, panel.alphaValue == 1,
+                          abs(panel.frame.height - expected) < 2,
+                          abs(scrollHeight - panel.frame.height) < 2,
+                          hostingView.frame.height >= scrollHeight - 2,
+                          abs(panel.frame.width - DashboardLayout.width) < 1 else {
+                        failVerification("Page transition left a stale viewport or truncated document.")
+                    }
                 }
+                dashboardState.toggleSettings()
+                try await Task.sleep(nanoseconds: 480_000_000)
+                verifyPage(true)
                 try record("settings")
                 dashboardState.toggleSettings()
-                try await Task.sleep(nanoseconds: 350_000_000)
-                guard !dashboardState.showSettings, panel.alphaValue == 1,
-                      abs(panel.frame.height - initialHeight) < 1 else {
-                    failVerification("Returning from settings resized or faded the glass panel.")
-                }
+                try await Task.sleep(nanoseconds: 480_000_000)
+                verifyPage(false)
                 try record("settings-closed")
+                // Reversing before the previous slide completes must still
+                // settle on the final page and restore the correct full height.
+                for _ in 0..<6 {
+                    dashboardState.toggleSettings()
+                    try await Task.sleep(nanoseconds: 55_000_000)
+                }
+                try await Task.sleep(nanoseconds: 480_000_000)
+                verifyPage(false)
+                try record("settings-fast-reversals")
             }
             captureScreenWindow(path: directory + "/rounded-window-shadow.png", includeShadow: true)
             let data = try JSONSerialization.data(withJSONObject: frames, options: [.prettyPrinted, .sortedKeys])
