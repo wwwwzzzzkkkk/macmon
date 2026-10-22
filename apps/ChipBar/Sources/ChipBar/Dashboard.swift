@@ -232,45 +232,122 @@ struct Dashboard: View {
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
     }
 
-    @ViewBuilder private var settingsPanel: some View {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("ChipBar \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版本")")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Picker("刷新间隔", selection: $monitor.interval) {
-                        Text("1 秒").tag(1000); Text("2 秒").tag(2000)
-                        Text("5 秒").tag(5000); Text("10 秒").tag(10000)
-                    }.pickerStyle(.segmented)
-                    Text("菜单栏显示").font(.subheadline.weight(.medium))
-                    Picker("功率指标", selection: $monitor.menuMetric) {
-                        ForEach(PowerMetric.allCases) { Text($0.title).tag($0) }
-                    }.disabled(!monitor.menuItems.contains(.power))
+    private var settingsPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("偏好设置", systemImage: "slider.horizontal.3")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版本")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("刷新频率").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                Picker("刷新频率", selection: $monitor.interval) {
+                    Text("1 秒").tag(1000)
+                    Text("2 秒").tag(2000)
+                    Text("5 秒").tag(5000)
+                    Text("10 秒").tag(10000)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("菜单栏项目").font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text("选择显示内容").font(.caption2).foregroundStyle(.secondary)
+                }
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
                     ForEach(MenuContent.allCases) { item in
-                        Toggle(item.title, isOn: Binding(
-                            get: { monitor.menuItems.contains(item) },
-                            set: { enabled in
-                                if enabled { monitor.menuItems.insert(item) } else { monitor.menuItems.remove(item) }
-                            }))
+                        let enabled = monitor.menuItems.contains(item)
+                        Button {
+                            if enabled { monitor.menuItems.remove(item) }
+                            else { monitor.menuItems.insert(item) }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: menuIcon(item))
+                                    .font(.caption).frame(width: 14)
+                                Text(menuTitle(item)).font(.caption2.weight(.medium)).lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                Spacer(minLength: 0)
+                                if enabled {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.caption2)
+                                }
+                            }
+                            .foregroundStyle(enabled ? Color.primary : Color.secondary)
+                            .padding(.horizontal, 9).frame(height: 37)
+                            .background(enabled ? accent.opacity(0.14) : Color.primary.opacity(0.04),
+                                        in: RoundedRectangle(cornerRadius: 9))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 9)
+                                    .strokeBorder(enabled ? accent.opacity(0.38) : Color.primary.opacity(0.07))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(item.title)，\(enabled ? "已显示" : "未显示")")
                     }
-                    Toggle("SSD 综合温度", isOn: Binding(get: { monitor.ssd.showInMenu }, set: { monitor.ssd.showInMenu = $0 }))
-                    Text("两排紧凑显示；风扇显示最高转速，悬停可查看全部读数。SSD 温度需启用下方监控，多盘取最高温。")
-                        .font(.caption2).foregroundStyle(.secondary)
-                    Text("硬盘总速度合计内置和外接物理盘；外置速度单列 ER / EW，多盘取合计，未连接时隐藏，不需要开启 SMART。")
-                        .font(.caption2).foregroundStyle(.secondary)
-                    Text("网速与菜单栏磁盘速度按所选间隔统一刷新，网速合计活跃以太网 / Wi-Fi 接口，包含局域网传输。CPU / GPU 占用率为采样期间活跃时间占比。ANE 暂无整体占用率。")
-                        .font(.caption2).foregroundStyle(.secondary)
-                    HStack {
-                        Button("选择 macmon…") { monitor.chooseExecutable() }
-                        Spacer()
-                        Button("自动查找") { monitor.useDefaultPath() }
-                    }
-                    Text(monitor.executablePath.isEmpty ? "尚未找到 macmon" : monitor.executablePath)
-                        .font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
-                    SSDSettings(ssd: monitor.ssd)
-                    Text("缺失指标显示 —。零值只表示 macmon 返回零，不能据此确认传感器支持。新芯片请先实测。")
-                        .font(.caption2).foregroundStyle(.secondary)
-                }.padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                }
+                if monitor.menuItems.contains(.power) {
+                    Picker("菜单栏功率", selection: $monitor.menuMetric) {
+                        ForEach(PowerMetric.allCases) { Text($0.title).tag($0) }
+                    }.font(.caption)
+                }
+                if monitor.ssd.enabled {
+                    Toggle("显示 SSD 温度", isOn: Binding(
+                        get: { monitor.ssd.showInMenu },
+                        set: { monitor.ssd.showInMenu = $0 }))
+                        .font(.caption)
+                }
+            }
+
+            Divider()
+            SSDSettings(ssd: monitor.ssd)
+
+            Text("默认自动发现 macmon 与 smartctl；已保存的兼容配置继续生效。功率为芯片读数，不代表整机插座输入功率。")
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !monitor.connected {
+                Text("macmon 未连接，请检查安装后重试。")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
     }
 
+    private func menuTitle(_ item: MenuContent) -> String {
+        switch item {
+        case .logo: return "Logo"
+        case .power: return "功率"
+        case .utilization: return "CPU / GPU"
+        case .memory: return "内存"
+        case .cpuTemperature: return "CPU 温度"
+        case .fans: return "风扇"
+        case .network: return "网络速率"
+        case .disk: return "磁盘速率"
+        case .externalDisk: return "外置磁盘"
+        }
+    }
+
+    private func menuIcon(_ item: MenuContent) -> String {
+        switch item {
+        case .logo: return "bolt.fill"
+        case .power: return "bolt"
+        case .utilization: return "cpu"
+        case .memory: return "memorychip"
+        case .cpuTemperature: return "thermometer"
+        case .fans: return "fanblades"
+        case .network: return "arrow.up.arrow.down"
+        case .disk: return "internaldrive"
+        case .externalDisk: return "externaldrive"
+        }
+    }
 
     @ViewBuilder private var footer: some View {
             VStack {
