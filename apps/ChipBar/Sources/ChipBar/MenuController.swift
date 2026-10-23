@@ -34,6 +34,7 @@ import ChipBarCore
     private var disclosureSubscription: AnyCancellable?
     private var settingsNavigationSubscription: AnyCancellable?
     private var navigationViewportHeight: CGFloat?
+    private var navigationResizeInFlight = false
     private var navigationTask: Task<Void, Never>?
     private var navigationToken = UUID()
     private var resetScrollForPage = false
@@ -121,26 +122,68 @@ import ChipBarCore
 
     private func navigateSettings() {
         guard dashboardMounted, panelRequestedVisible else { return }
-        // Freeze the viewport only for the crossfade/slide. SwiftUI can report
-        // an intermediate ZStack height while both pages are transitioning.
+        // Let SwiftUI finish its 0.24s slide before measuring the destination:
+        // the temporary ZStack contains both pages and reports the wrong height.
         navigationTask?.cancel()
         let token = UUID()
         navigationToken = token
+        navigationResizeInFlight = false
         navigationViewportHeight = panel.frame.height
         resetScrollForPage = true
         refresh(forceLayout: true)
         navigationTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(nanoseconds: 290_000_000) } catch { return }
+            do { try await Task.sleep(nanoseconds: 270_000_000) } catch { return }
             guard let self, self.navigationToken == token,
                   self.dashboardMounted, self.panelRequestedVisible else { return }
-            // A new measurement after the transition is essential. Retaining
-            // the old settings viewport caused an occasionally truncated page.
-            self.navigationViewportHeight = nil
-            self.resetScrollForPage = true
+
             self.hostingView.layoutSubtreeIfNeeded()
-            self.refresh(forceLayout: true)
-            self.panel.invalidateShadow()
-            self.navigationTask = nil
+            let naturalHeight = ceil(self.hostingView.fittingSize.height)
+            guard naturalHeight.isFinite, naturalHeight > 0 else {
+                self.navigationViewportHeight = nil
+                self.navigationTask = nil
+                self.refresh(forceLayout: true)
+                return
+            }
+            let targetHeight = min(self.maximumHeight, naturalHeight)
+            guard let destination = self.panelFrame(size: NSSize(
+                width: DashboardLayout.width, height: targetHeight)) else {
+                self.navigationViewportHeight = nil
+                self.navigationTask = nil
+                self.refresh(forceLayout: true)
+                return
+            }
+
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ||
+               abs(self.panel.frame.height - targetHeight) < 1 {
+                self.navigationViewportHeight = nil
+                self.resetScrollForPage = true
+                self.navigationTask = nil
+                self.refresh(forceLayout: true)
+                self.panel.invalidateShadow()
+                return
+            }
+
+            // Animate the actual transparent NSPanel, anchored to the menu bar.
+            // A soft spring-like timing curve makes both shrinking and expanding
+            // continuous rather than snapping after the content transition.
+            // While AppKit owns the resize, sampling updates must not reset its
+            // frame; the document is measured again once the motion completes.
+            self.navigationResizeInFlight = true
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = DashboardMotion.navigationResize
+                context.timingFunction = DashboardMotion.navigationSpringCurve
+                self.panel.animator().setFrame(destination, display: true)
+            } completionHandler: { [weak self] in
+                Task { @MainActor in
+                    guard let self, self.navigationToken == token else { return }
+                    self.navigationResizeInFlight = false
+                    self.navigationViewportHeight = nil
+                    self.resetScrollForPage = true
+                    self.navigationTask = nil
+                    self.refresh(forceLayout: true)
+                    self.panel.invalidateShadow()
+                }
+            }
         }
     }
 
@@ -282,6 +325,7 @@ import ChipBarCore
     private func refresh(forceLayout: Bool = false) {
         guard dashboardMounted, forceLayout || panel.isVisible else { return }
         guard forceLayout || disclosureTransition == nil else { return }
+        guard !navigationResizeInFlight else { return }
         let switchingPage = resetScrollForPage
         let oldViewportHeight = scrollView.contentView.bounds.height
         let oldY = scrollView.contentView.bounds.origin.y
@@ -418,6 +462,7 @@ import ChipBarCore
         navigationTask?.cancel()
         navigationTask = nil
         navigationToken = UUID()
+        navigationResizeInFlight = false
         navigationViewportHeight = nil
         resetScrollForPage = false
     }
@@ -648,7 +693,7 @@ import ChipBarCore
         do {
             try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
             dashboardState.showSettings = true
-            try await Task.sleep(nanoseconds: 600_000_000)
+            try await Task.sleep(nanoseconds: 800_000_000)
             refresh()
             let maxOffset = max(0, hostingView.frame.height - scrollView.contentView.bounds.height)
             guard dashboardState.showSettings, navigationViewportHeight == nil else {
@@ -722,6 +767,7 @@ import ChipBarCore
                     let scrollHeight = scrollView.contentView.bounds.height
                     guard dashboardState.showSettings == settings,
                           navigationViewportHeight == nil, navigationTask == nil,
+                          !navigationResizeInFlight,
                           panel.isVisible, panel.alphaValue == 1,
                           abs(panel.frame.height - expected) < 2,
                           abs(scrollHeight - panel.frame.height) < 2,
@@ -731,11 +777,23 @@ import ChipBarCore
                     }
                 }
                 dashboardState.toggleSettings()
-                try await Task.sleep(nanoseconds: 480_000_000)
+                try await Task.sleep(nanoseconds: 350_000_000)
+                if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                    guard navigationResizeInFlight || navigationTask == nil else {
+                        failVerification("Settings resize did not start after the page slide.")
+                    }
+                }
+                try await Task.sleep(nanoseconds: 410_000_000)
                 verifyPage(true)
                 try record("settings")
                 dashboardState.toggleSettings()
-                try await Task.sleep(nanoseconds: 480_000_000)
+                try await Task.sleep(nanoseconds: 350_000_000)
+                if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                    guard navigationResizeInFlight || navigationTask == nil else {
+                        failVerification("Dashboard resize did not start after the page slide.")
+                    }
+                }
+                try await Task.sleep(nanoseconds: 410_000_000)
                 verifyPage(false)
                 try record("settings-closed")
                 // Reversing before the previous slide completes must still
@@ -744,7 +802,7 @@ import ChipBarCore
                     dashboardState.toggleSettings()
                     try await Task.sleep(nanoseconds: 55_000_000)
                 }
-                try await Task.sleep(nanoseconds: 480_000_000)
+                try await Task.sleep(nanoseconds: 760_000_000)
                 verifyPage(false)
                 try record("settings-fast-reversals")
             }
