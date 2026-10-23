@@ -122,7 +122,7 @@ struct ApplicationUsageSection: View {
     }
 
     private func samplingSummary(_ snapshot: ActivitySnapshot) -> String {
-        let detail: String
+        var detail: String
         switch state.applicationMetric {
         case .cpu: detail = "CPU 可读取 \(snapshot.readableCPUCount)/\(snapshot.processCount) 个进程"
         case .gpu: detail = "GPU 读取 \(snapshot.gpuClientCount) 个驱动客户端"
