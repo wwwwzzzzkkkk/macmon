@@ -99,7 +99,7 @@ struct ApplicationUsageSection: View {
         switch state.applicationMetric {
         case .cpu: return row.cpuPercent
         case .gpu: return row.gpuPercent
-        case .memory: return row.physicalBytes.map(Double.init)
+        case .memory: return ApplicationMemoryDisplay.validatedBytes(row.physicalBytes).map(Double.init)
         case .ane: return row.neuralBytes.map(Double.init)
         }
     }
@@ -108,16 +108,13 @@ struct ApplicationUsageSection: View {
         guard let number = value(row) else { return "—" }
         switch state.applicationMetric {
         case .cpu, .gpu: return String(format: "%.1f%%", number)
-        case .memory, .ane:
-            let size: String
-            if number >= 1_000_000_000 {
-                size = String(format: "%.2f GB", number / 1_000_000_000)
-            } else if number >= 1_000_000 {
-                size = String(format: "%.1f MB", number / 1_000_000)
-            } else {
-                size = String(format: "%.1f KB", number / 1_000)
-            }
-            return state.applicationMetric == .memory && row.memoryIsRSSApproximation ? "≈" + size : size
+        case .memory:
+            return ApplicationMemoryDisplay.text(bytes: row.physicalBytes,
+                                                  approximate: row.memoryIsRSSApproximation)
+        case .ane:
+            if number >= 1_000_000_000 { return String(format: "%.2f GB", number / 1_000_000_000) }
+            if number >= 1_000_000 { return String(format: "%.1f MB", number / 1_000_000) }
+            return String(format: "%.1f KB", number / 1_000)
         }
     }
 

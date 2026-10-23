@@ -50,6 +50,32 @@ public struct ApplicationActivityRow: Identifiable, Sendable {
     public var processCount: Int
 }
 
+/// Single source of truth for the Memory tab and CLI diagnostic output.
+/// Discard readings that are too small to represent a valid resident process
+/// rather than rendering misleading "0.0 KB" on a machine with visible apps.
+public enum ApplicationMemoryDisplay {
+    public static let minimumDisplayBytes: UInt64 = 64 * 1024
+
+    public static func validatedBytes(_ bytes: UInt64?) -> UInt64? {
+        guard let bytes, bytes >= minimumDisplayBytes else { return nil }
+        return bytes
+    }
+
+    public static func text(bytes: UInt64?, approximate: Bool) -> String {
+        guard let bytes = validatedBytes(bytes) else { return "—" }
+        let number = Double(bytes)
+        let value: String
+        if bytes >= 1_000_000_000 {
+            value = String(format: "%.2f GB", number / 1_000_000_000)
+        } else if bytes >= 1_000_000 {
+            value = String(format: "%.1f MB", number / 1_000_000)
+        } else {
+            value = String(format: "%.1f KB", number / 1_000)
+        }
+        return approximate ? "≈" + value : value
+    }
+}
+
 /// Only current process/client baselines are retained. Missing data stays nil.
 public struct ActivityAccumulator: Sendable {
     private struct CPU: Sendable { let birth: UInt64; let seconds: Double; let time: Double }

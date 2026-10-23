@@ -73,12 +73,38 @@ import ChipBarCore
                         .sorted { ($0[keyPath: key] ?? 0) > ($1[keyPath: key] ?? 0) }.prefix(5)
                         .map { ["name": $0.name, "percent": $0[keyPath: key]!, "processCount": $0.processCount] }
                 }
-                let report: [String: Any] = ["processCount": result.processCount, "readableCPUCount": result.readableCPUCount,
-                    "gpuClientCount": result.gpuClientCount, "neuralMemorySupported": result.neuralSupported,
-                    "cpu": rows(\.cpuPercent), "gpu": rows(\.gpuPercent),
+                let memory = result.rows
+                    .filter { ApplicationMemoryDisplay.validatedBytes($0.physicalBytes) != nil }
+                    .sorted { ($0.physicalBytes ?? 0) > ($1.physicalBytes ?? 0) }
+                    .prefix(10)
+                    .map { row -> [String: Any] in
+                        [
+                            "name": row.name,
+                            "rawBytes": row.physicalBytes ?? 0,
+                            "display": ApplicationMemoryDisplay.text(
+                                bytes: row.physicalBytes,
+                                approximate: row.memoryIsRSSApproximation),
+                            "source": row.memoryIsRSSApproximation ? "RSS approximation" : "physical footprint",
+                            "processCount": row.processCount
+                        ]
+                    }
+                let positive = result.rows.compactMap(\.physicalBytes).filter { $0 > 0 }
+                let report: [String: Any] = [
+                    "processCount": result.processCount,
+                    "readableCPUCount": result.readableCPUCount,
+                    "readableMemoryCount": result.readableMemoryCount,
+                    "approximateMemoryCount": result.approximateMemoryCount,
+                    "minRawGroupedMemoryBytes": positive.min() ?? 0,
+                    "maxRawGroupedMemoryBytes": positive.max() ?? 0,
+                    "memory": memory,
+                    "gpuClientCount": result.gpuClientCount,
+                    "neuralMemorySupported": result.neuralSupported,
+                    "cpu": rows(\.cpuPercent),
+                    "gpu": rows(\.gpuPercent),
                     "aneMemory": result.rows.filter { ($0.neuralBytes ?? 0) > 0 }
                         .sorted { ($0.neuralBytes ?? 0) > ($1.neuralBytes ?? 0) }.prefix(5)
-                        .map { ["name": $0.name, "bytes": $0.neuralBytes!, "processCount": $0.processCount] }]
+                        .map { ["name": $0.name, "bytes": $0.neuralBytes!, "processCount": $0.processCount] }
+                ]
                 do {
                     let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
                     print(String(decoding: data, as: UTF8.self))
