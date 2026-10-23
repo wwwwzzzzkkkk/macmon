@@ -28,11 +28,7 @@ struct ApplicationUsageSection: View {
                     Text(explanation).opacity(state.applicationsExpansion)
                 }
                 .frame(height: 14 + 28 * state.applicationsExpansion, alignment: .topLeading).clipped()
-                Text(activity.snapshot.map {
-                    let count = state.applicationMetric == .memory ? $0.readableMemoryCount : $0.readableCPUCount
-                    let kind = state.applicationMetric == .memory ? "内存" : "CPU"
-                    return "\(kind) 可读取 \(count)/\($0.processCount) 个进程 · 每 \(max(2, monitor.interval / 1000)) 秒更新"
-                } ?? "正在读取进程计数…")
+                Text(activity.snapshot.map(samplingSummary) ?? "正在读取进程计数…")
                     .lineLimit(1).padding(.top, 8)
                     .opacity(state.applicationsExpansion)
                     .frame(height: 20 * state.applicationsExpansion, alignment: .topLeading).clipped()
@@ -117,6 +113,17 @@ struct ApplicationUsageSection: View {
                 ? String(format: "%.2f GB", number / 1_000_000_000)
                 : String(format: "%.1f MB", number / 1_000_000)
         }
+    }
+
+    private func samplingSummary(_ snapshot: ActivitySnapshot) -> String {
+        let detail: String
+        switch state.applicationMetric {
+        case .cpu: detail = "CPU 可读取 \(snapshot.readableCPUCount)/\(snapshot.processCount) 个进程"
+        case .gpu: detail = "GPU 读取 \(snapshot.gpuClientCount) 个驱动客户端"
+        case .memory: detail = "内存可读取 \(snapshot.readableMemoryCount)/\(snapshot.processCount) 个进程"
+        case .ane: detail = snapshot.neuralSupported ? "ANE 内存计数可用" : "当前未提供 ANE 内存计数"
+        }
+        return "\(detail) · 每 \(max(2, monitor.interval / 1000)) 秒更新"
     }
 
     private func emptyMessage(_ snapshot: ActivitySnapshot) -> String {
