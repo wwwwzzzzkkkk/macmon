@@ -10,8 +10,38 @@ struct ActivitySnapshot: Sendable {
     let processCount: Int
     let readableCPUCount: Int
     let readableMemoryCount: Int
+    let approximateMemoryCount: Int
     let gpuClientCount: Int
     let neuralSupported: Bool
+}
+
+/// Memory footprint is preferred (Activity Monitor-compatible), but on some
+/// macOS versions libproc reports a successful query with a zero footprint.
+/// A second V4 query, then a resident-size fallback, prevents false 0.0 MB.
+///
+/// RSS includes shared resident pages and is NOT identical to physical footprint.
+/// The fallback source propagates to the UI so it can be labelled as approximate.
+enum ProcessMemoryReader {
+    static func read(pid: Int32, initialFootprint: UInt64?) -> (bytes: UInt64?, approximate: Bool) {
+        if let bytes = initialFootprint, bytes > 0 { return (bytes, false) }
+
+        var legacy = rusage_info_v4()
+        let legacyResult = withUnsafeMutablePointer(to: &legacy) {
+            proc_pid_rusage(pid, RUSAGE_INFO_V4,
+                UnsafeMutableRawPointer($0).assumingMemoryBound(to: rusage_info_t?.self))
+        }
+        if legacyResult == 0, legacy.ri_phys_footprint > 0 {
+            return (legacy.ri_phys_footprint, false)
+        }
+
+        var task = proc_taskinfo()
+        let taskSize = Int32(MemoryLayout<proc_taskinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &task, taskSize) == taskSize,
+              task.pti_resident_size > 0 else {
+            return (nil, false)
+        }
+        return (task.pti_resident_size, true)
+    }
 }
 
 /// Serial actor state. No process arguments, command output or history.
@@ -36,6 +66,7 @@ actor ApplicationActivitySampler {
             var nextMetadata: [Int32: (birth: UInt64, group: String, name: String, path: String?)] = [:]
             var readable = 0
             var readableMemory = 0
+            var approximateMemory = 0
             var neuralSupported = false
             for pid in pids.prefix(max(0, min(Int(count), capacity))) where pid > 0 {
                 var bsd = proc_bsdinfo()
@@ -61,23 +92,29 @@ actor ApplicationActivitySampler {
                         neuralSupported = true
                     }
                 }
+                // Preserve the original CPU fallback, but do not confuse a
+                // successful query with a valid nonzero memory observation.
                 if cpu == nil {
                     var usage = rusage_info_v4()
                     let result = withUnsafeMutablePointer(to: &usage) {
-                        proc_pid_rusage(pid, RUSAGE_INFO_V4, UnsafeMutableRawPointer($0).assumingMemoryBound(to: rusage_info_t?.self))
+                        proc_pid_rusage(pid, RUSAGE_INFO_V4,
+                            UnsafeMutableRawPointer($0).assumingMemoryBound(to: rusage_info_t?.self))
                     }
                     if result == 0 {
                         cpu = (Double(usage.ri_user_time) + Double(usage.ri_system_time)) * secondsPerTick
                         physical = usage.ri_phys_footprint
                     }
                 }
+                let memory = ProcessMemoryReader.read(pid: pid, initialFootprint: physical)
                 var verified = proc_bsdinfo()
                 guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &verified, Int32(MemoryLayout.size(ofValue: verified))) == MemoryLayout.size(ofValue: verified),
                       verified.pbi_start_tvsec == bsd.pbi_start_tvsec, verified.pbi_start_tvusec == bsd.pbi_start_tvusec else { continue }
                 if cpu != nil { readable += 1 }
-                if physical != nil { readableMemory += 1 }
+                if memory.bytes != nil { readableMemory += 1 }
+                if memory.approximate { approximateMemory += 1 }
                 processes.append(ActivityProcess(pid: pid, birth: birth, group: info.group, name: info.name,
-                    appPath: info.path, cpuSeconds: cpu, neuralBytes: neural, physicalBytes: physical))
+                    appPath: info.path, cpuSeconds: cpu, neuralBytes: neural, physicalBytes: memory.bytes,
+                    memoryIsRSSApproximation: memory.approximate))
             }
             metadata = nextMetadata
             let activePaths = Set(nextMetadata.values.compactMap(\.path))
@@ -86,7 +123,8 @@ actor ApplicationActivitySampler {
             let sampledAt = ProcessInfo.processInfo.systemUptime
             let rows = accumulator.update(processes: processes, clients: clients, time: sampledAt)
             return ActivitySnapshot(sampledAt: sampledAt, rows: rows, processCount: processes.count, readableCPUCount: readable,
-                readableMemoryCount: readableMemory, gpuClientCount: clients.count, neuralSupported: neuralSupported)
+                readableMemoryCount: readableMemory, approximateMemoryCount: approximateMemory,
+                gpuClientCount: clients.count, neuralSupported: neuralSupported)
         }
     }
 
