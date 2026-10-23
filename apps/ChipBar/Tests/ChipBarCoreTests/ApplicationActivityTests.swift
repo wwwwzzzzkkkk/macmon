@@ -107,6 +107,29 @@ struct ApplicationActivityTests {
         #expect(rows[0].memoryIsRSSApproximation)
     }
 
+    @Test func memoryFormattingRejectsFakeZeroAndPreservesByteScale() {
+        #expect(ApplicationMemoryDisplay.text(bytes: nil, approximate: false) == "—")
+        #expect(ApplicationMemoryDisplay.text(bytes: 0, approximate: false) == "—")
+        #expect(ApplicationMemoryDisplay.text(bytes: 12, approximate: false) == "—")
+        #expect(ApplicationMemoryDisplay.text(bytes: 32_768, approximate: false) == "—")
+        #expect(ApplicationMemoryDisplay.text(bytes: 65_536, approximate: false) == "65.5 KB")
+        #expect(ApplicationMemoryDisplay.text(bytes: 374_700_000, approximate: false) == "374.7 MB")
+        #expect(ApplicationMemoryDisplay.text(bytes: 1_100_000_000, approximate: true) == "≈1.10 GB")
+    }
+
+    @Test func memoryAggregationAndFormattingUseIdenticalBytes() {
+        var model = ActivityAccumulator()
+        let rows = model.update(processes: [
+            process(1, group: "Chrome", physical: 455_500_000),
+            process(2, group: "Chrome", physical: 1_100_000_000),
+            process(3, group: "ChatGPT", physical: 374_700_000)
+        ], clients: [], time: 1)
+        let chrome = rows.first { $0.id == "Chrome" }
+        #expect(chrome?.physicalBytes == 1_555_500_000)
+        #expect(ApplicationMemoryDisplay.text(bytes: chrome?.physicalBytes,
+            approximate: chrome?.memoryIsRSSApproximation ?? false) == "1.56 GB")
+    }
+
     @Test func longGapsAndReusedPidDoNotInheritGPUWork() {
         var model = ActivityAccumulator()
         let c = ActivityGPUClient(id: 1, pid: 1, nanoseconds: [1_000_000_000])
