@@ -9,6 +9,7 @@ struct ActivitySnapshot: Sendable {
     let rows: [ApplicationActivityRow]
     let processCount: Int
     let readableCPUCount: Int
+    let readableMemoryCount: Int
     let gpuClientCount: Int
     let neuralSupported: Bool
 }
@@ -34,6 +35,7 @@ actor ApplicationActivitySampler {
             var processes: [ActivityProcess] = []
             var nextMetadata: [Int32: (birth: UInt64, group: String, name: String, path: String?)] = [:]
             var readable = 0
+            var readableMemory = 0
             var neuralSupported = false
             for pid in pids.prefix(max(0, min(Int(count), capacity))) where pid > 0 {
                 var bsd = proc_bsdinfo()
@@ -46,6 +48,7 @@ actor ApplicationActivitySampler {
                 nextMetadata[pid] = info
                 var cpu: Double?
                 var neural: UInt64?
+                var physical: UInt64?
                 if #available(macOS 15.0, *) {
                     var usage = rusage_info_v6()
                     let result = withUnsafeMutablePointer(to: &usage) {
@@ -54,6 +57,7 @@ actor ApplicationActivitySampler {
                     if result == 0 {
                         cpu = (Double(usage.ri_user_time) + Double(usage.ri_system_time)) * secondsPerTick
                         neural = usage.ri_neural_footprint
+                        physical = usage.ri_phys_footprint
                         neuralSupported = true
                     }
                 }
@@ -62,14 +66,18 @@ actor ApplicationActivitySampler {
                     let result = withUnsafeMutablePointer(to: &usage) {
                         proc_pid_rusage(pid, RUSAGE_INFO_V4, UnsafeMutableRawPointer($0).assumingMemoryBound(to: rusage_info_t?.self))
                     }
-                    if result == 0 { cpu = (Double(usage.ri_user_time) + Double(usage.ri_system_time)) * secondsPerTick }
+                    if result == 0 {
+                        cpu = (Double(usage.ri_user_time) + Double(usage.ri_system_time)) * secondsPerTick
+                        physical = usage.ri_phys_footprint
+                    }
                 }
                 var verified = proc_bsdinfo()
                 guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &verified, Int32(MemoryLayout.size(ofValue: verified))) == MemoryLayout.size(ofValue: verified),
                       verified.pbi_start_tvsec == bsd.pbi_start_tvsec, verified.pbi_start_tvusec == bsd.pbi_start_tvusec else { continue }
                 if cpu != nil { readable += 1 }
+                if physical != nil { readableMemory += 1 }
                 processes.append(ActivityProcess(pid: pid, birth: birth, group: info.group, name: info.name,
-                    appPath: info.path, cpuSeconds: cpu, neuralBytes: neural))
+                    appPath: info.path, cpuSeconds: cpu, neuralBytes: neural, physicalBytes: physical))
             }
             metadata = nextMetadata
             let activePaths = Set(nextMetadata.values.compactMap(\.path))
@@ -78,7 +86,7 @@ actor ApplicationActivitySampler {
             let sampledAt = ProcessInfo.processInfo.systemUptime
             let rows = accumulator.update(processes: processes, clients: clients, time: sampledAt)
             return ActivitySnapshot(sampledAt: sampledAt, rows: rows, processCount: processes.count, readableCPUCount: readable,
-                gpuClientCount: clients.count, neuralSupported: neuralSupported)
+                readableMemoryCount: readableMemory, gpuClientCount: clients.count, neuralSupported: neuralSupported)
         }
     }
 
