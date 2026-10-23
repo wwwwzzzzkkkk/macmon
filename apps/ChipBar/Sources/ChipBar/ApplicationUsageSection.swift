@@ -109,18 +109,28 @@ struct ApplicationUsageSection: View {
         switch state.applicationMetric {
         case .cpu, .gpu: return String(format: "%.1f%%", number)
         case .memory, .ane:
-            return number >= 1_000_000_000
-                ? String(format: "%.2f GB", number / 1_000_000_000)
-                : String(format: "%.1f MB", number / 1_000_000)
+            let size: String
+            if number >= 1_000_000_000 {
+                size = String(format: "%.2f GB", number / 1_000_000_000)
+            } else if number >= 1_000_000 {
+                size = String(format: "%.1f MB", number / 1_000_000)
+            } else {
+                size = String(format: "%.1f KB", number / 1_000)
+            }
+            return state.applicationMetric == .memory && row.memoryIsRSSApproximation ? "≈" + size : size
         }
     }
 
     private func samplingSummary(_ snapshot: ActivitySnapshot) -> String {
-        let detail: String
+        var detail: String
         switch state.applicationMetric {
         case .cpu: detail = "CPU 可读取 \(snapshot.readableCPUCount)/\(snapshot.processCount) 个进程"
         case .gpu: detail = "GPU 读取 \(snapshot.gpuClientCount) 个驱动客户端"
-        case .memory: detail = "内存可读取 \(snapshot.readableMemoryCount)/\(snapshot.processCount) 个进程"
+        case .memory:
+            detail = "内存可读取 \(snapshot.readableMemoryCount)/\(snapshot.processCount) 个进程"
+            if snapshot.approximateMemoryCount > 0 {
+                detail += " · 其中 \(snapshot.approximateMemoryCount) 个为 RSS 近似值"
+            }
         case .ane: detail = snapshot.neuralSupported ? "ANE 内存计数可用" : "当前未提供 ANE 内存计数"
         }
         return "\(detail) · 每 \(max(2, monitor.interval / 1000)) 秒更新"
@@ -139,7 +149,7 @@ struct ApplicationUsageSection: View {
         switch state.applicationMetric {
         case .cpu: return "100% 表示占满一个逻辑核心，多核应用可超过100%。同一应用内的辅助进程合并统计。"
         case .gpu: return "驱动 GPU 时间 / 采样间隔，可超过100%；不等同于整机 GPU 利用率的分摊。共享服务单独显示。"
-        case .memory: return "内存为各进程当前物理占用（Physical Footprint）合计，含可读取的应用辅助进程；与系统总内存占用不直接相加。"
+        case .memory: return "优先统计进程物理足迹（Physical Footprint）；系统无法提供时使用 RSS 驻留内存近似值（≈），并合并可读取的应用辅助进程。RSS 与活动监视器的内存不完全一致。"
         case .ane: return "此处为 ANE 记账内存，不是计算利用率。系统未提供逐应用 ANE 计算百分比；没有记账不代表未使用 ANE。"
         }
     }
@@ -148,7 +158,8 @@ struct ApplicationUsageSection: View {
         switch state.applicationMetric {
         case .cpu: return "前三名 · 100% = 一个逻辑核心"
         case .gpu: return "前三名 · GPU 时间占比，可超过100%"
-        case .memory: return "前三名 · 物理内存占用（MB / GB）"
+        case .memory: return (activity.snapshot?.approximateMemoryCount ?? 0) > 0
+            ? "前三名 · ≈ 表示 RSS 近似值" : "前三名 · 内存占用（MB / GB）"
         case .ane: return "前三名 · ANE 记账内存，非计算利用率"
         }
     }

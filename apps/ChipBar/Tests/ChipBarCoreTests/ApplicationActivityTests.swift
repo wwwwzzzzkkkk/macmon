@@ -9,9 +9,11 @@ struct ApplicationActivityTests {
     }
 
     private func process(_ pid: Int32 = 1, birth: UInt64 = 10, cpu: Double? = 0,
-                         group: String = "App", neural: UInt64? = nil, physical: UInt64? = nil) -> ActivityProcess {
+                         group: String = "App", neural: UInt64? = nil, physical: UInt64? = nil,
+                         approximate: Bool = false) -> ActivityProcess {
         ActivityProcess(pid: pid, birth: birth, group: group, name: group,
-                        cpuSeconds: cpu, neuralBytes: neural, physicalBytes: physical)
+                        cpuSeconds: cpu, neuralBytes: neural, physicalBytes: physical,
+                        memoryIsRSSApproximation: approximate)
     }
 
     @Test func cpuUsesDeltasGroupsHelpersAndAllowsMultipleCores() {
@@ -81,6 +83,28 @@ struct ApplicationActivityTests {
             process(2, physical: 2)
         ], clients: [], time: 4)
         #expect(overflow.first?.physicalBytes == UInt64.max)
+    }
+
+    @Test func zeroFootprintsAreMissingNotFalseZeroMemory() {
+        var model = ActivityAccumulator()
+        let rows = model.update(processes: [
+            process(1, group: "App", physical: 0),
+            process(2, group: "App", physical: nil),
+            process(3, group: "Other", physical: 12_000_000)
+        ], clients: [], time: 1)
+        #expect(rows.first { $0.id == "App" }?.physicalBytes == nil)
+        #expect(rows.first { $0.id == "Other" }?.physicalBytes == 12_000_000)
+    }
+
+    @Test func rssFallbackSourcePropagatesAcrossHelperProcesses() {
+        var model = ActivityAccumulator()
+        let rows = model.update(processes: [
+            process(1, group: "App", physical: 20_000_000),
+            process(2, group: "App", physical: 40_000_000, approximate: true)
+        ], clients: [], time: 1)
+        #expect(rows.count == 1)
+        #expect(rows[0].physicalBytes == 60_000_000)
+        #expect(rows[0].memoryIsRSSApproximation)
     }
 
     @Test func longGapsAndReusedPidDoNotInheritGPUWork() {
