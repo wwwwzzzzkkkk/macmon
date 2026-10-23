@@ -22,22 +22,35 @@ struct ActivitySnapshot: Sendable {
 /// RSS includes shared resident pages and is NOT identical to physical footprint.
 /// The fallback source propagates to the UI so it can be labelled as approximate.
 enum ProcessMemoryReader {
+    // A real macOS process footprint is page-backed. Some macOS releases
+    // return tiny positive placeholder values from libproc; treating 1 byte
+    // as valid bypassed RSS fallback and displayed "0.0 KB" for every app.
+    // Reject implausible sub-64 KiB values instead of representing them as usage.
+    static let minimumPlausibleBytes: UInt64 = 64 * 1024
+
+    static func isPlausible(_ bytes: UInt64?) -> Bool {
+        guard let bytes else { return false }
+        return bytes >= minimumPlausibleBytes
+    }
+
     static func read(pid: Int32, initialFootprint: UInt64?) -> (bytes: UInt64?, approximate: Bool) {
-        if let bytes = initialFootprint, bytes > 0 { return (bytes, false) }
+        if isPlausible(initialFootprint) { return (initialFootprint, false) }
 
         var legacy = rusage_info_v4()
         let legacyResult = withUnsafeMutablePointer(to: &legacy) {
             proc_pid_rusage(pid, RUSAGE_INFO_V4,
                 UnsafeMutableRawPointer($0).assumingMemoryBound(to: rusage_info_t?.self))
         }
-        if legacyResult == 0, legacy.ri_phys_footprint > 0 {
+        if legacyResult == 0, isPlausible(legacy.ri_phys_footprint) {
             return (legacy.ri_phys_footprint, false)
         }
 
+        // RSS is a separate estimate and may differ from Activity Monitor's
+        // Physical Footprint. Mark its use as approximate in the ranking.
         var task = proc_taskinfo()
         let taskSize = Int32(MemoryLayout<proc_taskinfo>.size)
         guard proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &task, taskSize) == taskSize,
-              task.pti_resident_size > 0 else {
+              isPlausible(task.pti_resident_size) else {
             return (nil, false)
         }
         return (task.pti_resident_size, true)
