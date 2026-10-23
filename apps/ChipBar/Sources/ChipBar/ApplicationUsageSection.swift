@@ -112,7 +112,9 @@ struct ApplicationUsageSection: View {
             return ApplicationMemoryDisplay.text(bytes: row.physicalBytes,
                                                   approximate: row.memoryIsRSSApproximation)
         case .ane:
-            return ApplicationMemoryDisplay.text(bytes: row.neuralBytes, approximate: false)
+            if number >= 1_000_000_000 { return String(format: "%.2f GB", number / 1_000_000_000) }
+            if number >= 1_000_000 { return String(format: "%.1f MB", number / 1_000_000) }
+            return String(format: "%.1f KB", number / 1_000)
         }
     }
 
