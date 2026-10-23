@@ -144,7 +144,7 @@ import ChipBarCore
                 self.refresh(forceLayout: true)
                 return
             }
-            let targetHeight = min(self.maximumHeight, max(250, naturalHeight))
+            let targetHeight = min(self.maximumHeight, naturalHeight)
             guard let destination = self.panelFrame(size: NSSize(
                 width: DashboardLayout.width, height: targetHeight)) else {
                 self.navigationViewportHeight = nil
