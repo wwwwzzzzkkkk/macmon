@@ -693,7 +693,7 @@ import ChipBarCore
         do {
             try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
             dashboardState.showSettings = true
-            try await Task.sleep(nanoseconds: 600_000_000)
+            try await Task.sleep(nanoseconds: 800_000_000)
             refresh()
             let maxOffset = max(0, hostingView.frame.height - scrollView.contentView.bounds.height)
             guard dashboardState.showSettings, navigationViewportHeight == nil else {
@@ -767,6 +767,7 @@ import ChipBarCore
                     let scrollHeight = scrollView.contentView.bounds.height
                     guard dashboardState.showSettings == settings,
                           navigationViewportHeight == nil, navigationTask == nil,
+                          !navigationResizeInFlight,
                           panel.isVisible, panel.alphaValue == 1,
                           abs(panel.frame.height - expected) < 2,
                           abs(scrollHeight - panel.frame.height) < 2,
@@ -776,11 +777,23 @@ import ChipBarCore
                     }
                 }
                 dashboardState.toggleSettings()
-                try await Task.sleep(nanoseconds: 480_000_000)
+                try await Task.sleep(nanoseconds: 350_000_000)
+                if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                    guard navigationResizeInFlight || navigationTask == nil else {
+                        failVerification("Settings resize did not start after the page slide.")
+                    }
+                }
+                try await Task.sleep(nanoseconds: 410_000_000)
                 verifyPage(true)
                 try record("settings")
                 dashboardState.toggleSettings()
-                try await Task.sleep(nanoseconds: 480_000_000)
+                try await Task.sleep(nanoseconds: 350_000_000)
+                if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                    guard navigationResizeInFlight || navigationTask == nil else {
+                        failVerification("Dashboard resize did not start after the page slide.")
+                    }
+                }
+                try await Task.sleep(nanoseconds: 410_000_000)
                 verifyPage(false)
                 try record("settings-closed")
                 // Reversing before the previous slide completes must still
@@ -789,7 +802,7 @@ import ChipBarCore
                     dashboardState.toggleSettings()
                     try await Task.sleep(nanoseconds: 55_000_000)
                 }
-                try await Task.sleep(nanoseconds: 480_000_000)
+                try await Task.sleep(nanoseconds: 760_000_000)
                 verifyPage(false)
                 try record("settings-fast-reversals")
             }
