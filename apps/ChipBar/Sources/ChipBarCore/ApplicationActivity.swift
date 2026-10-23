@@ -17,11 +17,14 @@ public struct ActivityProcess: Sendable {
     public let cpuSeconds: Double?
     public let neuralBytes: UInt64?
     public let physicalBytes: UInt64?
+    public let memoryIsRSSApproximation: Bool
     public init(pid: Int32, birth: UInt64, group: String, name: String, appPath: String? = nil,
-                cpuSeconds: Double?, neuralBytes: UInt64? = nil, physicalBytes: UInt64? = nil) {
+                cpuSeconds: Double?, neuralBytes: UInt64? = nil, physicalBytes: UInt64? = nil,
+                memoryIsRSSApproximation: Bool = false) {
         self.pid = pid; self.birth = birth; self.group = group; self.name = name
         self.appPath = appPath; self.cpuSeconds = cpuSeconds; self.neuralBytes = neuralBytes
         self.physicalBytes = physicalBytes
+        self.memoryIsRSSApproximation = memoryIsRSSApproximation
     }
 }
 
@@ -43,6 +46,7 @@ public struct ApplicationActivityRow: Identifiable, Sendable {
     public var neuralBytes: UInt64?
     /// Sum of the readable processes' physical footprints, in bytes.
     public var physicalBytes: UInt64?
+    public var memoryIsRSSApproximation: Bool
     public var processCount: Int
 }
 
@@ -82,7 +86,7 @@ public struct ActivityAccumulator: Sendable {
             }
             var row = rows[process.group] ?? ApplicationActivityRow(id: process.group, name: process.name,
                 appPath: process.appPath, cpuPercent: nil, gpuPercent: nil, neuralBytes: nil,
-                physicalBytes: nil, processCount: 0)
+                physicalBytes: nil, memoryIsRSSApproximation: false, processCount: 0)
             row.processCount += 1
             if let cpuRate { row.cpuPercent = (row.cpuPercent ?? 0) + cpuRate }
             if let rate = gpuRates[process.pid] { row.gpuPercent = (row.gpuPercent ?? 0) + rate }
@@ -90,9 +94,11 @@ public struct ActivityAccumulator: Sendable {
                 let (total, overflow) = (row.neuralBytes ?? 0).addingReportingOverflow(bytes)
                 row.neuralBytes = overflow ? UInt64.max : total
             }
-            if let bytes = process.physicalBytes {
+            // Zero isn't a useful memory reading; keep unavailable data as nil.
+            if let bytes = process.physicalBytes, bytes > 0 {
                 let (total, overflow) = (row.physicalBytes ?? 0).addingReportingOverflow(bytes)
                 row.physicalBytes = overflow ? UInt64.max : total
+                row.memoryIsRSSApproximation = row.memoryIsRSSApproximation || process.memoryIsRSSApproximation
             }
             rows[process.group] = row
         }
