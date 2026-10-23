@@ -8,8 +8,10 @@ struct ApplicationActivityTests {
         #expect(!ApplicationActivityCachePolicy.isFresh(sampledAt: 100, now: 99.9))
     }
 
-    private func process(_ pid: Int32 = 1, birth: UInt64 = 10, cpu: Double? = 0, group: String = "App", neural: UInt64? = nil) -> ActivityProcess {
-        ActivityProcess(pid: pid, birth: birth, group: group, name: group, cpuSeconds: cpu, neuralBytes: neural)
+    private func process(_ pid: Int32 = 1, birth: UInt64 = 10, cpu: Double? = 0,
+                         group: String = "App", neural: UInt64? = nil, physical: UInt64? = nil) -> ActivityProcess {
+        ActivityProcess(pid: pid, birth: birth, group: group, name: group,
+                        cpuSeconds: cpu, neuralBytes: neural, physicalBytes: physical)
     }
 
     @Test func cpuUsesDeltasGroupsHelpersAndAllowsMultipleCores() {
@@ -49,6 +51,36 @@ struct ApplicationActivityTests {
         let rows = model.update(processes: [p], clients: [ActivityGPUClient(id: 1, pid: 1, nanoseconds: [1_000_000_000, 1_000_000_000])], time: 2)
         #expect(rows[0].gpuPercent == 200)
         #expect(rows[0].neuralBytes == 1024)
+    }
+
+    @Test func physicalMemorySumsHelpersAndWorksOnFirstSample() {
+        var model = ActivityAccumulator()
+        let rows = model.update(processes: [
+            process(1, cpu: nil, group: "Mail", physical: 900_000_000),
+            process(2, cpu: nil, group: "Mail", physical: 200_000_000),
+            process(3, cpu: nil, group: "Editor", physical: 125_000_000),
+            process(4, cpu: nil, group: "Restricted")
+        ], clients: [], time: 1)
+        let mail = rows.first { $0.id == "Mail" }
+        let editor = rows.first { $0.id == "Editor" }
+        let restricted = rows.first { $0.id == "Restricted" }
+        #expect(mail?.physicalBytes == 1_100_000_000)
+        #expect(mail?.processCount == 2)
+        #expect(mail?.cpuPercent == nil)
+        #expect(editor?.physicalBytes == 125_000_000)
+        #expect(restricted?.physicalBytes == nil)
+    }
+
+    @Test func physicalMemoryIsCurrentNotAccumulatedAndCannotOverflow() {
+        var model = ActivityAccumulator()
+        _ = model.update(processes: [process(1, physical: 600)], clients: [], time: 1)
+        let next = model.update(processes: [process(1, physical: 900)], clients: [], time: 3)
+        #expect(next.first?.physicalBytes == 900)
+        let overflow = model.update(processes: [
+            process(1, physical: UInt64.max),
+            process(2, physical: 2)
+        ], clients: [], time: 4)
+        #expect(overflow.first?.physicalBytes == UInt64.max)
     }
 
     @Test func longGapsAndReusedPidDoNotInheritGPUWork() {

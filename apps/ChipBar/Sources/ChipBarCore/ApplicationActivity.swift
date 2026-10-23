@@ -16,10 +16,12 @@ public struct ActivityProcess: Sendable {
     public let appPath: String?
     public let cpuSeconds: Double?
     public let neuralBytes: UInt64?
+    public let physicalBytes: UInt64?
     public init(pid: Int32, birth: UInt64, group: String, name: String, appPath: String? = nil,
-                cpuSeconds: Double?, neuralBytes: UInt64? = nil) {
+                cpuSeconds: Double?, neuralBytes: UInt64? = nil, physicalBytes: UInt64? = nil) {
         self.pid = pid; self.birth = birth; self.group = group; self.name = name
         self.appPath = appPath; self.cpuSeconds = cpuSeconds; self.neuralBytes = neuralBytes
+        self.physicalBytes = physicalBytes
     }
 }
 
@@ -39,6 +41,8 @@ public struct ApplicationActivityRow: Identifiable, Sendable {
     public var cpuPercent: Double?
     public var gpuPercent: Double?
     public var neuralBytes: UInt64?
+    /// Sum of the readable processes' physical footprints, in bytes.
+    public var physicalBytes: UInt64?
     public var processCount: Int
 }
 
@@ -77,13 +81,18 @@ public struct ActivityAccumulator: Sendable {
                 nextCPU[process.pid] = CPU(birth: process.birth, seconds: seconds, time: time)
             }
             var row = rows[process.group] ?? ApplicationActivityRow(id: process.group, name: process.name,
-                appPath: process.appPath, cpuPercent: nil, gpuPercent: nil, neuralBytes: nil, processCount: 0)
+                appPath: process.appPath, cpuPercent: nil, gpuPercent: nil, neuralBytes: nil,
+                physicalBytes: nil, processCount: 0)
             row.processCount += 1
             if let cpuRate { row.cpuPercent = (row.cpuPercent ?? 0) + cpuRate }
             if let rate = gpuRates[process.pid] { row.gpuPercent = (row.gpuPercent ?? 0) + rate }
             if let bytes = process.neuralBytes {
                 let (total, overflow) = (row.neuralBytes ?? 0).addingReportingOverflow(bytes)
                 row.neuralBytes = overflow ? UInt64.max : total
+            }
+            if let bytes = process.physicalBytes {
+                let (total, overflow) = (row.physicalBytes ?? 0).addingReportingOverflow(bytes)
+                row.physicalBytes = overflow ? UInt64.max : total
             }
             rows[process.group] = row
         }
