@@ -1,9 +1,9 @@
 # ChipBar · Apple Silicon 菜单栏监控
 
-> **ChipBar v1.3.16** · macOS 13+ · Apple Silicon（arm64） · SwiftUI + AppKit  
+> **ChipBar v1.3.17** · macOS 13+ · Apple Silicon（arm64） · SwiftUI + AppKit  
 > 在一个 370 pt 的原生菜单栏面板中，查看功率、温度、CPU/GPU 活跃度、系统内存、应用排行和可选的外置 SSD 状态。
 
-**[返回产品主页](../../README.md)** · **[下载正式版](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v1.3.16)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+**[返回产品主页](../../README.md)** · **[下载正式版](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v1.3.17)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
 
 ## 产品截图
 
