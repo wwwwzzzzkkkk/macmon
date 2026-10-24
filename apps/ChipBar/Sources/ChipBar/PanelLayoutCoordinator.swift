@@ -13,6 +13,11 @@ import AppKit
     static let minimumSpacing: TimeInterval = 0.18
     static let scrollIdleDelay: TimeInterval = 0.28
 
+    /// Deterministic rule independent of runner scheduling and frame timing.
+    static func canApply(afterScrollIdle seconds: TimeInterval) -> Bool {
+        seconds >= scrollIdleDelay
+    }
+
     init(apply: @escaping () -> Void) { self.apply = apply }
 
     func noteScroll() {
@@ -28,7 +33,7 @@ import AppKit
                 catch { self?.worker = nil; return }
                 guard let self else { return }
                 let sinceScroll = ProcessInfo.processInfo.systemUptime - self.lastScrollAt
-                if sinceScroll >= Self.scrollIdleDelay { break }
+                if Self.canApply(afterScrollIdle: sinceScroll) { break }
             } while !Task.isCancelled
             guard let self, !Task.isCancelled else { return }
             self.worker = nil
