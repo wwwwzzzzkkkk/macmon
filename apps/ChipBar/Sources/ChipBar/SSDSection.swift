@@ -16,7 +16,7 @@ struct SSDSection: View {
                         Image(systemName: "chevron.down").font(.caption2)
                             .rotationEffect(.degrees(180 * state.ssdExpansion))
                     }.contentShape(Rectangle())
-                }.buttonStyle(.plain)
+                }.buttonStyle(ChipBarPressStyle())
                 ForEach(ssd.readings) { row in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
