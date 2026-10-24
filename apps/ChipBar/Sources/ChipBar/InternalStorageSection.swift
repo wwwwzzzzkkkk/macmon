@@ -82,9 +82,9 @@ struct InternalStorageSection: View {
                        value: model.capacity?.usedFraction)
             HStack {
                 if let capacity = model.capacity {
-                    Text("已使用 \\(ByteCountFormatter.string(fromByteCount: capacity.totalBytes - capacity.availableBytes, countStyle: .decimal))")
+                    Text("已使用 \(ByteCountFormatter.string(fromByteCount: capacity.totalBytes - capacity.availableBytes, countStyle: .decimal))")
                     Spacer()
-                    Text("总容量 \\(capacity.totalText)")
+                    Text("总容量 \(capacity.totalText)")
                 } else {
                     Text(model.sampled ? "无法确认内置启动磁盘；不计入外置盘" : "正在读取系统数据卷容量…")
                     Spacer(minLength: 0)
