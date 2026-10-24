@@ -151,7 +151,10 @@ import ChipBarCore
         resetScrollForPage = resetScroll
         refresh(forceLayout: true)
         navigationTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(nanoseconds: 270_000_000) } catch { return }
+            // The system-detail spring needs longer to settle than the
+            // simple settings crossfade; never measure an intermediate height.
+            let settleNanoseconds: UInt64 = resetScroll ? 270_000_000 : 420_000_000
+            do { try await Task.sleep(nanoseconds: settleNanoseconds) } catch { return }
             guard let self, self.navigationToken == token,
                   self.dashboardMounted, self.panelRequestedVisible else { return }
 
