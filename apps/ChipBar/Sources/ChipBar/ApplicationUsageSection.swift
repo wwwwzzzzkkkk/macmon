@@ -21,6 +21,7 @@ struct ApplicationUsageSection: View {
             Picker("应用资源排行", selection: $state.applicationMetric) {
                 ForEach(ApplicationResource.allCases) { Text($0.rawValue).tag($0) }
             }.labelsHidden().pickerStyle(.segmented)
+                .animation(ChipBarMotion.selection, value: state.applicationMetric)
             ranking.frame(height: 84 + 56 * state.applicationsExpansion, alignment: .topLeading).clipped()
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topLeading) {
@@ -51,7 +52,7 @@ struct ApplicationUsageSection: View {
                 Image(systemName: "chevron.down").font(.caption2)
                     .rotationEffect(.degrees(180 * state.applicationsExpansion))
             }.contentShape(Rectangle())
-        }.buttonStyle(.plain)
+        }.buttonStyle(ChipBarPressStyle())
             .accessibilityLabel(state.showApplications ? "收起为前三名应用" : "查看前五名应用及指标说明")
     }
 
