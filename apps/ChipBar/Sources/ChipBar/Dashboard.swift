@@ -23,6 +23,9 @@ final class DashboardState: ObservableObject {
     @Published var showApplications = CommandLine.arguments.contains("--apps")
     @Published var applicationsExpansion = CommandLine.arguments.contains("--apps") ? 1.0 : 0.0
     @Published var showSSDDetails = CommandLine.arguments.contains("--ssd-details")
+    @Published var showSystemDetails = CommandLine.arguments.contains("--system-details")
+        || CommandLine.arguments.contains("--ssd-details")
+        || CommandLine.arguments.contains("--ssd-disclosure-only")
     @Published var ssdExpansion = CommandLine.arguments.contains("--ssd-details") ? 1.0 : 0.0
     @Published var ssdDetailsHeight: CGFloat = 0
     @Published var applicationMetric: ApplicationResource = CommandLine.arguments.contains("--apps-gpu") ? .gpu : CommandLine.arguments.contains("--apps-ane") ? .ane : .cpu
@@ -71,7 +74,9 @@ struct Dashboard: View {
         .frame(width: DashboardLayout.width, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .animation(reduceMotion ? nil : .easeInOut(duration: DashboardMotion.navigation), value: state.showSettings)
+        .buttonStyle(ChipBarPressStyle())
+        .animation(ChipBarMotion.optional(ChipBarMotion.navigation, reduceMotion: reduceMotion),
+                   value: state.showSettings)
     }
 
     private var monitoringScreen: some View {
@@ -84,9 +89,23 @@ struct Dashboard: View {
             trend
             temperatures
             systemMemory
-            InternalStorageSection()
-            fanOverview
-            SSDSection(ssd: monitor.ssd, state: state)
+            ChipBarSectionToggle(title: "系统详情", systemImage: "square.stack.3d.up",
+                                 expanded: state.showSystemDetails) {
+                withAnimation(ChipBarMotion.optional(ChipBarMotion.disclosure,
+                                                     reduceMotion: reduceMotion)) {
+                    state.showSystemDetails.toggle()
+                }
+            }
+            if state.showSystemDetails {
+                VStack(alignment: .leading, spacing: 9) {
+                    InternalStorageSection()
+                    fanOverview
+                    SSDSection(ssd: monitor.ssd, state: state)
+                }
+                .transition(reduceMotion ? .opacity :
+                    .asymmetric(insertion: .opacity.combined(with: .move(edge: .top)),
+                                removal: .opacity.combined(with: .move(edge: .top))))
+            }
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
             footer
@@ -113,7 +132,7 @@ struct Dashboard: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ChipBarPressStyle())
             .accessibilityLabel("返回监控面板")
 
             Spacer()
@@ -154,7 +173,7 @@ struct Dashboard: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("芯片合计功率").font(.subheadline).foregroundStyle(.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(value(monitor.connected ? monitor.sample?.total : nil))
+                    AnimatedMetricValue(value: monitor.connected ? monitor.sample?.total : nil, decimals: 1)
                         .font(.system(size: 36, weight: .medium, design: .rounded)).monospacedDigit()
                     Text("W").font(.title3).foregroundStyle(.secondary)
                     Spacer()
@@ -168,9 +187,12 @@ struct Dashboard: View {
 
     @ViewBuilder private var powerCards: some View {
         HStack(spacing: 8) {
-            powerCard("CPU", monitor.sample?.cpu, "cpu")
-            powerCard("GPU", monitor.sample?.gpu, "square.stack.3d.up")
-            powerCard("ANE", monitor.sample?.ane, "sparkles")
+            PowerMetricCard(title: "CPU", power: monitor.sample?.cpu,
+                            connected: monitor.connected, icon: "cpu")
+            PowerMetricCard(title: "GPU", power: monitor.sample?.gpu,
+                            connected: monitor.connected, icon: "square.stack.3d.up")
+            PowerMetricCard(title: "ANE", power: monitor.sample?.ane,
+                            connected: monitor.connected, icon: "sparkles")
         }
     }
 
@@ -198,6 +220,9 @@ struct Dashboard: View {
                     Picker("趋势指标", selection: $state.chartMetric) {
                         ForEach(PowerMetric.allCases) { Text($0.title).tag($0) }
                     }.labelsHidden().pickerStyle(.menu).fixedSize()
+                        .animation(ChipBarMotion.optional(ChipBarMotion.selection,
+                                                        reduceMotion: reduceMotion),
+                                   value: state.chartMetric)
                 }
                 if monitor.history.compactMap({ $0.power(state.chartMetric) }).isEmpty {
                     Text("等待有效采样后显示趋势")
@@ -208,6 +233,11 @@ struct Dashboard: View {
                         maximum: max(1, (monitor.history.compactMap { $0.power(state.chartMetric) }.max() ?? 1) * 1.15),
                         axisDates: trendAxisDates, dateFormat: trendDateFormat, accent: accent)
                     .frame(height: 95)
+                    .id(state.chartMetric)
+                    .transition(.opacity)
+                    .animation(ChipBarMotion.optional(ChipBarMotion.selection,
+                                                      reduceMotion: reduceMotion),
+                               value: state.chartMetric)
                 }
                 HStack {
                     Text("最近 10 分钟 · W")
@@ -325,8 +355,11 @@ struct Dashboard: View {
                                     .strokeBorder(enabled ? accent.opacity(0.38) : Color.primary.opacity(0.07))
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ChipBarPressStyle())
                         .accessibilityLabel("\(item.title)，\(enabled ? "已显示" : "未显示")")
+                        .animation(ChipBarMotion.optional(ChipBarMotion.selection,
+                                                          reduceMotion: reduceMotion),
+                                   value: enabled)
                     }
                 }
                 if monitor.menuItems.contains(.power) {
@@ -399,25 +432,8 @@ struct Dashboard: View {
                 Spacer()
                 Button(monitor.paused ? "继续" : "暂停") { monitor.togglePause() }
                 Button("退出") { monitor.stop(forQuit: true); NSApplication.shared.terminate(nil) }
-            }.buttonStyle(.borderless).font(.subheadline)
+            }.buttonStyle(ChipBarPressStyle()).font(.subheadline)
             }
-    }
-
-    private func powerCard(_ title: String, _ power: Double?, _ icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: icon)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value(monitor.connected ? power : nil))
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                Text("W").font(.caption2).foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(9)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
     }
 
     private var trendAxisDates: [Date] {
