@@ -68,30 +68,33 @@ struct InternalStorageSection: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            if let capacity = model.capacity {
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.primary.opacity(0.10))
-                        Capsule().fill(Color.accentColor.opacity(0.62))
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.10))
+                    if let capacity = model.capacity {
+                        Capsule().fill(Color(red: 0.22, green: 0.65, blue: 0.79).opacity(0.7))
                             .frame(width: max(0, geometry.size.width * capacity.usedFraction))
                     }
                 }
-                .frame(height: 4)
-                .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.88),
-                           value: capacity.usedFraction)
-                HStack {
-                    Text("已使用 \(ByteCountFormatter.string(fromByteCount: capacity.totalBytes - capacity.availableBytes, countStyle: .decimal))")
-                    Spacer()
-                    Text("总容量 \(capacity.totalText)")
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-            } else if model.sampled {
-                Text("无法确认内置启动磁盘；外接盘和网络卷不会计入")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
+            .frame(height: 4)
+            .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.88),
+                       value: model.capacity?.usedFraction)
+            HStack {
+                if let capacity = model.capacity {
+                    Text("已使用 \\(ByteCountFormatter.string(fromByteCount: capacity.totalBytes - capacity.availableBytes, countStyle: .decimal))")
+                    Spacer()
+                    Text("总容量 \\(capacity.totalText)")
+                } else {
+                    Text(model.sampled ? "无法确认内置启动磁盘；不计入外置盘" : "正在读取系统数据卷容量…")
+                    Spacer(minLength: 0)
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
         }
         .padding(11)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
