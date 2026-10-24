@@ -29,6 +29,10 @@ import ChipBarCore
     private var mouseReleaseCleanup: Task<Void, Never>?
     private var panelMaterial: PanelMaterialView!
     private var subscription: AnyCancellable?
+    private lazy var layoutCoordinator = PanelLayoutCoordinator { [weak self] in
+        self?.refresh()
+    }
+    private var scrollObserver: NSObjectProtocol?
     private var menuPreferences: AnyCancellable?
     private var menuRefresh: MenuRefreshDriver!
     private var disclosureSubscription: AnyCancellable?
@@ -69,7 +73,8 @@ import ChipBarCore
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
-        scrollView.verticalScrollElasticity = .none
+        scrollView.verticalScrollElasticity = .automatic
+        scrollView.contentView.postsBoundsChangedNotifications = true
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
         scrollView.focusRingType = .none
@@ -90,7 +95,17 @@ import ChipBarCore
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .transient]
         panel.title = "ChipBar"
         panel.delegate = self
-        panel.onEscape = { [weak self] in self?.hidePanel(animated: false) }
+        panel.onEscape = { [weak self] in self?.hidePanel(animated: true) }
+        // A bounds change (including momentum scroll) defers costly layout
+        // fitting until the user's scroll settles. Programmatic scrolls are
+        // harmless: they simply extend the brief quiet period.
+        scrollObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.layoutCoordinator.noteScroll() }
+        }
         installDismissalHandlers()
         menuRefresh = MenuRefreshDriver(read: { [weak monitor] in
             await monitor?.sampleMenuSources()
@@ -110,8 +125,8 @@ import ChipBarCore
         refresh()
         subscription = Publishers.Merge(monitor.objectWillChange.map { _ in () },
                                         dashboardState.$ssdDetailsHeight.dropFirst().map { _ in () })
-            .debounce(for: .milliseconds(30), scheduler: DispatchQueue.main)
-            .sink { [weak self] _ in self?.refresh() }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.layoutCoordinator.request() }
         disclosureSubscription = dashboardState.$showApplications.combineLatest(dashboardState.$showSSDDetails)
             .dropFirst().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.animateDisclosure() }
@@ -323,6 +338,7 @@ import ChipBarCore
     }
 
     private func refresh(forceLayout: Bool = false) {
+        if forceLayout { layoutCoordinator.cancelPending() }
         guard dashboardMounted, forceLayout || panel.isVisible else { return }
         guard forceLayout || disclosureTransition == nil else { return }
         guard !navigationResizeInFlight else { return }
@@ -452,6 +468,7 @@ import ChipBarCore
     }
 
     private func removeDashboard() {
+        layoutCoordinator.cancelPending()
         guard dashboardMounted else { return }
         disclosureTransition = nil
         // Hidden NSPanel content still observes Monitor. Remove the dashboard so
