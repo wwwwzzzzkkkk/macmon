@@ -84,6 +84,7 @@ struct Dashboard: View {
             trend
             temperatures
             systemMemory
+            InternalStorageSection()
             fanOverview
             SSDSection(ssd: monitor.ssd, state: state)
             errorPanel
