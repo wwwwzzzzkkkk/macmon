@@ -29,26 +29,30 @@ actor InternalStorageSampler {
 }
 
 @MainActor final class InternalStorageModel: ObservableObject {
+    static let shared = InternalStorageModel()
+    private var lastSampleAt: Date?
     @Published private(set) var capacity: InternalStorageCapacity?
     @Published private(set) var sampled = false
 
     func watch() async {
         let sampler = InternalStorageSampler()
         while !Task.isCancelled {
-            let value = await sampler.read()
-            guard !Task.isCancelled else { return }
-            capacity = value
-            sampled = true
-            // Capacity is not a fast-changing performance metric. Recheck
-            // without polling every chip power sample or launching subprocesses.
-            do { try await Task.sleep(nanoseconds: 30_000_000_000) } catch { return }
+            // View transitions may remount the card several times. Reuse its
+            // most recent capacity instead of rescanning on each animation.
+            if lastSampleAt == nil || Date().timeIntervalSince(lastSampleAt!) >= 30 {
+                let value = await sampler.read()
+                guard !Task.isCancelled else { return }
+                capacity = value
+                sampled = true
+                lastSampleAt = Date()
+            }
+            do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
         }
     }
 }
 
 struct InternalStorageSection: View {
-    @StateObject private var model = InternalStorageModel()
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @StateObject private var model = InternalStorageModel.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -68,18 +72,7 @@ struct InternalStorageSection: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.primary.opacity(0.10))
-                    if let capacity = model.capacity {
-                        Capsule().fill(Color(red: 0.22, green: 0.65, blue: 0.79).opacity(0.7))
-                            .frame(width: max(0, geometry.size.width * capacity.usedFraction))
-                    }
-                }
-            }
-            .frame(height: 4)
-            .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.88),
-                       value: model.capacity?.usedFraction)
+            CapacityProgressTrack(usedFraction: model.capacity?.usedFraction)
             HStack {
                 if let capacity = model.capacity {
                     Text("已使用 \(ByteCountFormatter.string(fromByteCount: capacity.totalBytes - capacity.availableBytes, countStyle: .decimal))")
