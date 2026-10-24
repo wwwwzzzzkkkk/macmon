@@ -37,6 +37,7 @@ import ChipBarCore
     private var menuRefresh: MenuRefreshDriver!
     private var disclosureSubscription: AnyCancellable?
     private var settingsNavigationSubscription: AnyCancellable?
+    private var systemDisclosureSubscription: AnyCancellable?
     private var navigationViewportHeight: CGFloat?
     private var navigationResizeInFlight = false
     private var navigationTask: Task<Void, Never>?
@@ -133,9 +134,12 @@ import ChipBarCore
         settingsNavigationSubscription = dashboardState.$showSettings
             .dropFirst().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.navigateSettings() }
+        systemDisclosureSubscription = dashboardState.$showSystemDetails
+            .dropFirst().receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.navigateSettings(resetScroll: false) }
     }
 
-    private func navigateSettings() {
+    private func navigateSettings(resetScroll: Bool = true) {
         guard dashboardMounted, panelRequestedVisible else { return }
         // Let SwiftUI finish its 0.24s slide before measuring the destination:
         // the temporary ZStack contains both pages and reports the wrong height.
@@ -144,7 +148,7 @@ import ChipBarCore
         navigationToken = token
         navigationResizeInFlight = false
         navigationViewportHeight = panel.frame.height
-        resetScrollForPage = true
+        resetScrollForPage = resetScroll
         refresh(forceLayout: true)
         navigationTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(nanoseconds: 270_000_000) } catch { return }
@@ -171,7 +175,7 @@ import ChipBarCore
             if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ||
                abs(self.panel.frame.height - targetHeight) < 1 {
                 self.navigationViewportHeight = nil
-                self.resetScrollForPage = true
+                self.resetScrollForPage = resetScroll
                 self.navigationTask = nil
                 self.refresh(forceLayout: true)
                 self.panel.invalidateShadow()
@@ -193,7 +197,7 @@ import ChipBarCore
                     guard let self, self.navigationToken == token else { return }
                     self.navigationResizeInFlight = false
                     self.navigationViewportHeight = nil
-                    self.resetScrollForPage = true
+                    self.resetScrollForPage = resetScroll
                     self.navigationTask = nil
                     self.refresh(forceLayout: true)
                     self.panel.invalidateShadow()
