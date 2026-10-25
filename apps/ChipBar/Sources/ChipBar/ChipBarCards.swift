@@ -28,7 +28,15 @@ struct PowerMetricCard: View {
     let power: Double?
     let connected: Bool
     let icon: String
-    /// Only CPU/GPU cards have a temperature. ANE keeps the same height.
+
+    /// A fixed, top-trailing gauge slot keeps CPU, GPU and memory aligned.
+    let ringTitle: String
+    let ringCaption: String
+    let utilization: Double?
+    let ringTint: Color
+    var ringStatus: String? = nil
+
+    /// Only CPU/GPU cards show a temperature. ANE reserves the same row.
     var temperature: Double? = nil
     var showsTemperature = false
     var recentPowers: [Double] = []
@@ -38,40 +46,63 @@ struct PowerMetricCard: View {
         return String(format: "%.1f°C", temperature)
     }
 
+    private var powerDescription: String {
+        guard connected, let power, power.isFinite else { return "不可用" }
+        return String(format: "%.1f W", power)
+    }
+
+    private var usageDescription: String {
+        guard connected, let utilization, utilization.isFinite else { return "不可用" }
+        return String(format: "%.0f%%", min(100, max(0, utilization)))
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: icon)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .top, spacing: 2) {
+                Label(title, systemImage: icon)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 0)
+                MetricRing(title: ringTitle, caption: ringCaption,
+                           percentage: connected ? utilization : nil,
+                           tint: ringTint, status: ringStatus)
+            }
+            .frame(height: 56, alignment: .top)
+
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 AnimatedMetricValue(value: connected ? power : nil)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                     .layoutPriority(1)
                 Text("W")
-                    .font(.caption2)
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
-                if showsTemperature {
-                    Spacer(minLength: 1)
-                    Text(temperatureText)
-                        .font(.system(size: 9, weight: .medium, design: .rounded))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                        .help("\(title) 温度：\(temperatureText)")
-                }
             }
-            .lineLimit(1)
+            .frame(height: 26, alignment: .leading)
+
+            Text(showsTemperature ? temperatureText : " ")
+                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .frame(height: 11, alignment: .leading)
+                .opacity(showsTemperature ? 1 : 0)
+                .help(showsTemperature ? "\(title) 温度：\(temperatureText)" : "")
+
             PowerSparkline(values: recentPowers)
                 .frame(height: 14)
                 .accessibilityHidden(true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(9)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title) 功率 \(connected && power != nil ? String(format: "%.1f", power!) : "不可用") W"
-                            + (showsTemperature ? "，温度 \(temperatureText)" : ""))
+        .padding(10)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title) 功率 \(powerDescription)，\(ringTitle) \(usageDescription)" +
+                            (showsTemperature ? "，温度 \(temperatureText)" : "") +
+                            (ringStatus.map { "，内存压力\($0)" } ?? ""))
     }
 }
 
