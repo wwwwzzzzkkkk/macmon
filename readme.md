@@ -7,11 +7,11 @@
 
   原生 macOS 菜单栏监控工具 · 紧凑 Liquid Glass 面板 · 无需为基础功率监控授予管理员权限
 
-  [![ChipBar Release](https://img.shields.io/badge/ChipBar-v1.3.17-167f9f?style=flat-square)](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v1.3.17)
+  [![ChipBar Release](https://img.shields.io/badge/ChipBar-v2.0.0-167f9f?style=flat-square)](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.0)
   ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-555?style=flat-square)
   ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-555?style=flat-square)
 
-  **[下载最新版](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v1.3.17)** · **[功能与使用手册](apps/ChipBar/README.md)** · **[问题反馈](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+  **[下载最新版](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.0)** · **[功能与使用手册](apps/ChipBar/README.md)** · **[问题反馈](https://github.com/wwwwzzzzkkkk/macmon/issues)**
 </div>
 
 ---
@@ -30,12 +30,13 @@
 | 功能 | 可以查看什么 |
 | --- | --- |
 | ⚡ **芯片功率** | CPU / GPU / ANE 分项功率和合计功率（W），以及最近 10 分钟趋势 |
-| ◉ **圆环仪表** | CPU、GPU 活跃时间占比和系统内存使用率；圆环与数字同步弹簧过渡 |
+| ◉ **圆环仪表** | CPU/GPU 活跃率与内存已用比例；内存环直接以绿／黄／红对应系统内存压力，显示已用／总容量 |
+| ▥ **CPU 各核心占用** | 逐逻辑核心 CPU 忙碌比例的紧凑柱状图；仅在监控面板可见时更新，不需要管理员权限 |
 | 🧩 **应用资源排行** | 逐应用 CPU、GPU、**物理内存占用**、ANE 内存，自动合并可识别的辅助进程；支持前三名 / 前五名 |
-| 🌡️ **状态与温度** | CPU / GPU 温度、风扇 RPM、系统内存已用量及内存压力等级 |
+| 🌡️ **状态与温度** | CPU/GPU 功率旁显示温度；「设备与设置」展示风扇 RPM、Mac 基础信息和 SSD 状态 |
 | ⇅ **实时传输速率** | 菜单栏显示网络上下行、磁盘读写、外接磁盘读写速率 |
-| 💾 **内置储存容量** | 内置启动磁盘的可用 / 已使用 / 总容量，进度条显示占用比例；APFS 共享空间不重复统计 |
-| 💽 **外接 NVMe SSD** | 可选 SSD 型号、综合温度、SMART 状态、可用空间及整盘实时 I/O 速度 |
+| 💾 **内置与外接容量** | 首页同一「储存空间」区域展示内置与外接磁盘的可用、已使用、总容量与进度条；避免 APFS 共享空间重复计数 |
+| 💽 **外接 NVMe SSD** | 容量直接显示于首页；可在「设备与设置」查看可选 SSD 温度、SMART 和整盘实时 I/O 速度 |
 | ✨ **原生 macOS 体验** | 370 pt 紧凑面板、macOS 26+ 原生 Liquid Glass、旧系统磨砂材质、深浅模式与减少动态效果适配 |
 
 > **功率定义：**“芯片合计”是 CPU + GPU + ANE 的芯片功率读数，**不是整台 Mac 从插座获取的电功率**。应用 GPU 百分比来自驱动时间统计；应用 ANE 项是记账内存，不是神经网络引擎的运算利用率。硬件和系统不支持的数据会标记为不可用。
@@ -44,7 +45,7 @@
 
 **方式一：下载应用**（Apple Silicon，macOS 13 或更高）
 
-前往 **[ChipBar 最新正式版本](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v1.3.17)**，下载 `ChipBar-macOS-arm64.zip`，解压后将 `ChipBar.app` 拖到“应用程序”，退出旧版后启动新版。ChipBar 使用独立安装的 [macmon](https://github.com/vladkens/macmon) 采集芯片指标。
+前往 **[ChipBar 最新正式版本](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.0)**，下载 `ChipBar-macOS-arm64.zip`，解压后将 `ChipBar.app` 拖到“应用程序”，退出旧版后启动新版。ChipBar 使用独立安装的 [macmon](https://github.com/vladkens/macmon) 采集芯片指标。
 
 **方式二：Homebrew（推荐，自动安装 macmon 依赖）**
 
