@@ -167,12 +167,11 @@ import ChipBarCore
         // The pages scroll natively inside this unchanged viewport.
         navigationViewportHeight = panel.frame.height
         navigationResizeInFlight = true
+        // Do not scroll the *outgoing* page to its top when the user clicks
+        // Settings at the bottom of Home. That instant offset reset was visible
+        // as a vertical hop immediately before the horizontal page transition.
+        // Reset the new page only after the navigation animation finishes.
         resetScrollForPage = true
-        let clip = scrollView.contentView
-        let topY = hostingView.isFlipped ? CGFloat(0)
-            : max(0, hostingView.frame.height - clip.bounds.height)
-        clip.scroll(to: NSPoint(x: 0, y: topY))
-        scrollView.reflectScrolledClipView(clip)
         navigationTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .milliseconds(270)) }
             catch { return }
