@@ -42,7 +42,7 @@ private final class WeakMemoryPressureSource {
     }
     @Published private(set) var menuDisk: DiskActivitySnapshot?
     private var menuDiskSampler: DiskActivitySampler?
-    private var dashboardVisible = false
+    @Published private(set) var dashboardVisible = false
     private let startsAutomatically: Bool
     @Published var interval: Int {
         didSet { UserDefaults.standard.set(interval, forKey: "interval"); restart() }

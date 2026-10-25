@@ -27,7 +27,12 @@ with (Path(app) / "Contents/Info.plist").open("wb") as stream:
     plistlib.dump(metadata, stream)
 PYINFO
 
-codesign --force --sign - "$APP"
+# For a test build that should retain macOS TCC consent across updates,
+# sign each build with the SAME real Keychain identity and preserve the bundle
+# identifier. CI has no signing certificate and still uses ad-hoc (-) signing.
+# A new ad-hoc build has a new code identity and can trigger OS consent again.
+SIGN_IDENTITY="${CHIPBAR_CODESIGN_IDENTITY:--}"
+codesign --force --sign "$SIGN_IDENTITY" "$APP"
 codesign --verify --strict "$APP"
 mkdir -p dist
 ditto --norsrc --noextattr "$APP" "$PWD/dist/ChipBar.app"

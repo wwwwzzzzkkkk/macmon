@@ -6,6 +6,10 @@ struct MetricRing: View {
     let title: String
     let percentage: Double?
     let tint: Color
+    /// Optional memory pressure status and RAM usage, shown in the compact
+    /// ring itself instead of an additional full-width memory row.
+    var status: String? = nil
+    var detail: String? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -19,32 +23,49 @@ struct MetricRing: View {
     }
 
     var body: some View {
-        VStack(spacing: 7) {
+        VStack(spacing: 4) {
             Text(title).font(.caption.weight(.medium)).foregroundStyle(.secondary)
             ZStack {
                 Circle()
-                    .stroke(Color.primary.opacity(0.10), lineWidth: 7)
+                    .stroke(Color.primary.opacity(0.10), lineWidth: 5)
                 Circle()
                     .trim(from: 0, to: CGFloat(fraction))
-                    .stroke(tint, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                    .stroke(tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(motion, value: fraction)
                 if percentage != nil, percentage?.isFinite == true {
                     AnimatedPercentage(value: fraction * 100)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .animation(motion, value: fraction)
                 } else {
-                    Text("—").font(.system(size: 18, weight: .medium, design: .rounded))
+                    Text("—").font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: 70, height: 70)
+            .frame(width: 52, height: 52)
             .accessibilityHidden(true)
+            if let status {
+                Text(status)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+            }
+            if let detail {
+                Text(detail)
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .help(detail)
+            }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .top)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title)：\(percentage.map { String(format: "%.0f%%", $0) } ?? "不可用")")
+        .accessibilityLabel("\(title)：\(percentage.map { String(format: "%.0f%%", $0) } ?? "不可用")" +
+                            (status.map { "，内存压力\($0)" } ?? "") +
+                            (detail.map { "，\($0)" } ?? ""))
     }
 }
 

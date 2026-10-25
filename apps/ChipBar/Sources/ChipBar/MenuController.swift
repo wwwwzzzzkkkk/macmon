@@ -29,11 +29,22 @@ import ChipBarCore
     private var mouseReleaseCleanup: Task<Void, Never>?
     private var panelMaterial: PanelMaterialView!
     private var subscription: AnyCancellable?
+    private lazy var layoutCoordinator = PanelLayoutCoordinator { [weak self] in
+        self?.refresh()
+    }
+    private var scrollObserver: NSObjectProtocol?
     private var menuPreferences: AnyCancellable?
     private var menuRefresh: MenuRefreshDriver!
     private var disclosureSubscription: AnyCancellable?
     private var settingsNavigationSubscription: AnyCancellable?
+    private var systemDisclosureSubscription: AnyCancellable?
     private var navigationViewportHeight: CGFloat?
+    /// The system disclosure predicts the first expansion immediately and
+    /// caches measured heights for subsequent openings in the same process.
+    private var systemCollapsedDocumentHeight: CGFloat?
+    private var systemExpandedDocumentHeight: CGFloat?
+    private var monitoringPageHeight: CGFloat?
+    private var settingsPageHeight: CGFloat?
     private var navigationResizeInFlight = false
     private var navigationTask: Task<Void, Never>?
     private var navigationToken = UUID()
@@ -65,11 +76,15 @@ import ChipBarCore
             button.action = #selector(togglePanel)
         }
         hostingView = NSHostingView<AnyView>(rootView: AnyView(EmptyView()))
-        scrollView.hasVerticalScroller = true
+        // Never show the bright system scroll indicator over Liquid Glass.
+        // NSScrollView still handles trackpad/wheel and momentum events when
+        // vertical scroller chrome is disabled.
+        scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
-        scrollView.verticalScrollElasticity = .none
+        scrollView.verticalScrollElasticity = .automatic
+        scrollView.contentView.postsBoundsChangedNotifications = true
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
         scrollView.focusRingType = .none
@@ -90,7 +105,17 @@ import ChipBarCore
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .transient]
         panel.title = "ChipBar"
         panel.delegate = self
-        panel.onEscape = { [weak self] in self?.hidePanel(animated: false) }
+        panel.onEscape = { [weak self] in self?.hidePanel(animated: true) }
+        // A bounds change (including momentum scroll) defers costly layout
+        // fitting until the user's scroll settles. Programmatic scrolls are
+        // harmless: they simply extend the brief quiet period.
+        scrollObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.layoutCoordinator.noteScroll() }
+        }
         installDismissalHandlers()
         menuRefresh = MenuRefreshDriver(read: { [weak monitor] in
             await monitor?.sampleMenuSources()
@@ -110,93 +135,72 @@ import ChipBarCore
         refresh()
         subscription = Publishers.Merge(monitor.objectWillChange.map { _ in () },
                                         dashboardState.$ssdDetailsHeight.dropFirst().map { _ in () })
-            .debounce(for: .milliseconds(30), scheduler: DispatchQueue.main)
-            .sink { [weak self] _ in self?.refresh() }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.layoutCoordinator.request() }
+        // Synchronous main-thread state delivery: resetForOpening() happens
+        // before the panel is presented, so it cannot queue stale navigation.
         disclosureSubscription = dashboardState.$showApplications.combineLatest(dashboardState.$showSSDDetails)
-            .dropFirst().receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.animateDisclosure() }
+            .dropFirst()
+            .sink { [weak self] apps, ssd in
+                self?.animateDisclosure(applications: apps, ssd: ssd)
+            }
         settingsNavigationSubscription = dashboardState.$showSettings
-            .dropFirst().receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.navigateSettings() }
+            .dropFirst()
+            .sink { [weak self] _ in self?.navigateBetweenPages() }
+        systemDisclosureSubscription = dashboardState.$showSystemDetails
+            .dropFirst()
+            .sink { [weak self] _ in self?.navigateBetweenPages() }
     }
 
-    private func navigateSettings() {
+    /// The same viewport is shared by Home, System Details, and Settings.
+    /// Page navigation changes only the SwiftUI content; AppKit never changes
+    /// the glass NSPanel frame mid-slide. This avoids two-stage fitting
+    /// corrections, vertical hops, and Liquid Glass frame compositing hitches.
+    private func navigateBetweenPages() {
         guard dashboardMounted, panelRequestedVisible else { return }
-        // Let SwiftUI finish its 0.24s slide before measuring the destination:
-        // the temporary ZStack contains both pages and reports the wrong height.
         navigationTask?.cancel()
+        layoutCoordinator.cancelPending()
         let token = UUID()
         navigationToken = token
-        navigationResizeInFlight = false
+        disclosureTransition = nil
+        // Pin the visible window height during all secondary page navigation.
+        // The pages scroll natively inside this unchanged viewport.
         navigationViewportHeight = panel.frame.height
+        navigationResizeInFlight = true
         resetScrollForPage = true
-        refresh(forceLayout: true)
+        let clip = scrollView.contentView
+        let topY = hostingView.isFlipped ? CGFloat(0)
+            : max(0, hostingView.frame.height - clip.bounds.height)
+        clip.scroll(to: NSPoint(x: 0, y: topY))
+        scrollView.reflectScrolledClipView(clip)
         navigationTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(nanoseconds: 270_000_000) } catch { return }
+            do { try await Task.sleep(for: .milliseconds(270)) }
+            catch { return }
             guard let self, self.navigationToken == token,
                   self.dashboardMounted, self.panelRequestedVisible else { return }
-
-            self.hostingView.layoutSubtreeIfNeeded()
-            let naturalHeight = ceil(self.hostingView.fittingSize.height)
-            guard naturalHeight.isFinite, naturalHeight > 0 else {
-                self.navigationViewportHeight = nil
-                self.navigationTask = nil
-                self.refresh(forceLayout: true)
-                return
-            }
-            let targetHeight = min(self.maximumHeight, naturalHeight)
-            guard let destination = self.panelFrame(size: NSSize(
-                width: DashboardLayout.width, height: targetHeight)) else {
-                self.navigationViewportHeight = nil
-                self.navigationTask = nil
-                self.refresh(forceLayout: true)
-                return
-            }
-
-            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ||
-               abs(self.panel.frame.height - targetHeight) < 1 {
-                self.navigationViewportHeight = nil
-                self.resetScrollForPage = true
-                self.navigationTask = nil
-                self.refresh(forceLayout: true)
-                self.panel.invalidateShadow()
-                return
-            }
-
-            // Animate the actual transparent NSPanel, anchored to the menu bar.
-            // A soft spring-like timing curve makes both shrinking and expanding
-            // continuous rather than snapping after the content transition.
-            // While AppKit owns the resize, sampling updates must not reset its
-            // frame; the document is measured again once the motion completes.
-            self.navigationResizeInFlight = true
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = DashboardMotion.navigationResize
-                context.timingFunction = DashboardMotion.navigationSpringCurve
-                self.panel.animator().setFrame(destination, display: true)
-            } completionHandler: { [weak self] in
-                Task { @MainActor in
-                    guard let self, self.navigationToken == token else { return }
-                    self.navigationResizeInFlight = false
-                    self.navigationViewportHeight = nil
-                    self.resetScrollForPage = true
-                    self.navigationTask = nil
-                    self.refresh(forceLayout: true)
-                    self.panel.invalidateShadow()
-                }
-            }
+            self.navigationTask = nil
+            self.navigationResizeInFlight = false
+            self.refresh(forceLayout: true)
         }
     }
 
-    private func animateDisclosure() {
-        let target = (applications: dashboardState.showApplications ? 1.0 : 0.0,
-                      ssd: dashboardState.showSSDDetails ? 1.0 : 0.0)
+    private func animateDisclosure(applications: Bool, ssd: Bool) {
+        let target = (applications: applications ? 1.0 : 0.0,
+                      ssd: ssd ? 1.0 : 0.0)
         let start = currentDisclosureValues()
-        guard dashboardMounted, !dashboardState.showSettings,
+        guard dashboardMounted, panelRequestedVisible, !dashboardState.showSettings,
+              !dashboardState.showSystemDetails,
               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
             disclosureTransition = nil
+            if dashboardState.showSystemDetails &&
+                !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                withAnimation(ChipBarMotion.disclosure) {
+                    dashboardState.ssdExpansion = target.ssd
+                }
+            } else {
+                dashboardState.ssdExpansion = target.ssd
+            }
             dashboardState.applicationsExpansion = target.applications
-            dashboardState.ssdExpansion = target.ssd
-            navigationViewportHeight = nil
             if dashboardMounted {
                 hostingView.needsLayout = true
                 refresh()
@@ -204,7 +208,6 @@ import ChipBarCore
             }
             return
         }
-        navigationViewportHeight = nil
         let token = UUID()
         disclosureTransition = DisclosureTransition(start: start, target: target,
             began: ProcessInfo.processInfo.systemUptime, token: token)
@@ -219,6 +222,7 @@ import ChipBarCore
             dashboardState.applicationsExpansion = target.applications
             dashboardState.ssdExpansion = target.ssd
         }
+        if navigationViewportHeight != nil { navigationViewportHeight = targetHeight }
         if let frame = panelFrame(size: NSSize(width: panel.frame.width, height: targetHeight)) {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = DashboardMotion.duration
@@ -323,6 +327,7 @@ import ChipBarCore
     }
 
     private func refresh(forceLayout: Bool = false) {
+        if forceLayout { layoutCoordinator.cancelPending() }
         guard dashboardMounted, forceLayout || panel.isVisible else { return }
         guard forceLayout || disclosureTransition == nil else { return }
         guard !navigationResizeInFlight else { return }
@@ -379,6 +384,26 @@ import ChipBarCore
         }
     }
 
+    /// Lock the AppKit glass and its SwiftUI content to one effective
+    /// system appearance for the entire menu-panel session. NSPanel may
+    /// acquire/relinquish key focus when a Picker is opened; that should not
+    /// temporarily repaint one page dark and the next page light.
+    private func synchronizeAppearanceForOpen() {
+        let requested: NSAppearance.Name
+        if CommandLine.arguments.contains("--light") {
+            requested = .aqua
+        } else if CommandLine.arguments.contains("--dark") {
+            requested = .darkAqua
+        } else {
+            let match = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+            requested = match == .darkAqua ? .darkAqua : .aqua
+        }
+        guard let appearance = NSAppearance(named: requested) else { return }
+        panel.appearance = appearance
+        panelMaterial.appearance = appearance
+        hostingView.appearance = appearance
+    }
+
     @objc private func togglePanel() {
         recordMouseQA("buttonAction")
         let shouldOpen = mouseDownTarget ?? !panelRequestedVisible
@@ -388,9 +413,21 @@ import ChipBarCore
         if !shouldOpen { hidePanel(); return }
         guard let (rect, screen) = anchor() else { return }
         maximumHeight = max(250, min(rect.minY - 6, screen.visibleFrame.maxY - 6) - screen.visibleFrame.minY - 8)
+        synchronizeAppearanceForOpen()
+        // Restore the initial dashboard on EVERY opening, including a rapid
+        // close -> reopen while the NSPanel fade-out is still in progress.
+        layoutCoordinator.cancelPending()
+        navigationTask?.cancel()
+        navigationTask = nil
+        navigationToken = UUID()
+        navigationResizeInFlight = false
+        navigationViewportHeight = nil
+        disclosureTransition = nil
+        resetScrollForPage = true
+        withTransaction(Transaction(animation: nil)) {
+            dashboardState.resetForOpening()
+        }
         if !dashboardMounted {
-            dashboardState.applicationsExpansion = dashboardState.showApplications ? 1 : 0
-            dashboardState.ssdExpansion = dashboardState.showSSDDetails ? 1 : 0
             hostingView.rootView = AnyView(Dashboard(monitor: monitor, state: dashboardState))
             if CommandLine.arguments.contains("--light") {
                 hostingView.rootView = AnyView(hostingView.rootView.environment(\.colorScheme, .light))
@@ -452,6 +489,7 @@ import ChipBarCore
     }
 
     private func removeDashboard() {
+        layoutCoordinator.cancelPending()
         guard dashboardMounted else { return }
         disclosureTransition = nil
         // Hidden NSPanel content still observes Monitor. Remove the dashboard so
@@ -627,7 +665,7 @@ import ChipBarCore
         if CommandLine.arguments.contains("--light") { panel.appearance = NSAppearance(named: .aqua) }
         if CommandLine.arguments.contains("--dark") { panel.appearance = NSAppearance(named: .darkAqua) }
         guard monitor.connected else { failVerification("UI verification needs live macmon data.") }
-        if (CommandLine.arguments.contains("--disclosure-only") || CommandLine.arguments.contains("--ssd-disclosure-only") || CommandLine.arguments.contains("--scroll-only")) { menuTracking = true }
+        if (CommandLine.arguments.contains("--disclosure-only") || CommandLine.arguments.contains("--ssd-disclosure-only") || CommandLine.arguments.contains("--system-disclosure-only") || CommandLine.arguments.contains("--scroll-only")) { menuTracking = true }
         let previousApplication = NSWorkspace.shared.frontmostApplication?.processIdentifier
         statusItem.button?.performClick(nil)
         if CommandLine.arguments.contains("--scroll-only") {
@@ -636,7 +674,7 @@ import ChipBarCore
             Task { @MainActor in await self.verifySettingsScrolling(directory: directory) }
             return
         }
-        if (CommandLine.arguments.contains("--disclosure-only") || CommandLine.arguments.contains("--ssd-disclosure-only")) {
+        if (CommandLine.arguments.contains("--disclosure-only") || CommandLine.arguments.contains("--ssd-disclosure-only") || CommandLine.arguments.contains("--system-disclosure-only")) {
             // A fixed preview viewport also works when the menu-bar host is hidden.
             maximumHeight = min(850, (panel.screen ?? NSScreen.main)?.visibleFrame.height ?? 850) - 16
             refresh(forceLayout: true)
@@ -696,7 +734,7 @@ import ChipBarCore
             try await Task.sleep(nanoseconds: 800_000_000)
             refresh()
             let maxOffset = max(0, hostingView.frame.height - scrollView.contentView.bounds.height)
-            guard dashboardState.showSettings, navigationViewportHeight == nil else {
+            guard dashboardState.showSettings, navigationViewportHeight != nil else {
                 failVerification("Settings navigation did not settle.")
             }
             let expectedTop: CGFloat = hostingView.isFlipped ? 0 : maxOffset
@@ -724,8 +762,11 @@ import ChipBarCore
     /// Short visual check for content disclosure, without running menu stress checks.
     private func verifyDisclosures(directory: String, previousApplication: pid_t?) async {
         let ssdOnly = CommandLine.arguments.contains("--ssd-disclosure-only")
+        let systemOnly = CommandLine.arguments.contains("--system-disclosure-only")
         func toggleDetail() {
-            if ssdOnly { dashboardState.showSSDDetails.toggle() } else { dashboardState.toggleApplications() }
+            if systemOnly { dashboardState.showSystemDetails.toggle() }
+            else if ssdOnly { dashboardState.showSSDDetails.toggle() }
+            else { dashboardState.toggleApplications() }
         }
         do {
             try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
@@ -742,6 +783,7 @@ import ChipBarCore
                                "clipY": scrollView.contentView.bounds.origin.y, "flipped": hostingView.isFlipped,
                                "applicationsExpansion": dashboardState.applicationsExpansion,
                                "settingsScreen": dashboardState.showSettings,
+                               "systemDetails": dashboardState.showSystemDetails,
                                "ssdExpansion": dashboardState.ssdExpansion,
                                "ssdDetailsHeight": dashboardState.ssdDetailsHeight,
                                "scrollBorder": scrollView.borderType.rawValue,
@@ -757,23 +799,32 @@ import ChipBarCore
             toggleDetail()
             try await Task.sleep(nanoseconds: 90_000_000)
             try record("collapsing")
-            try await Task.sleep(nanoseconds: 260_000_000)
+            try await Task.sleep(nanoseconds: systemOnly ? 330_000_000 : 260_000_000)
             try record("collapsed-again")
-            if !ssdOnly {
+            if systemOnly, let firstTop = frames.first?["top"] as? CGFloat,
+               let firstHeight = frames.first?["height"] as? CGFloat {
+                guard frames.allSatisfy({
+                    abs(($0["top"] as? CGFloat ?? firstTop) - firstTop) < 1 &&
+                    abs(($0["height"] as? CGFloat ?? firstHeight) - firstHeight) < 1
+                }) else {
+                    failVerification("System page navigation resized or moved the shared glass window.")
+                }
+            }
+            if !ssdOnly && !systemOnly {
                 func verifyPage(_ settings: Bool) {
                     hostingView.layoutSubtreeIfNeeded()
                     let content = ceil(hostingView.fittingSize.height)
-                    let expected = min(content, maximumHeight)
                     let scrollHeight = scrollView.contentView.bounds.height
+                    let originalHeight = frames.first?["height"] as? CGFloat ?? panel.frame.height
                     guard dashboardState.showSettings == settings,
-                          navigationViewportHeight == nil, navigationTask == nil,
+                          navigationViewportHeight != nil, navigationTask == nil,
                           !navigationResizeInFlight,
                           panel.isVisible, panel.alphaValue == 1,
-                          abs(panel.frame.height - expected) < 2,
+                          abs(panel.frame.height - originalHeight) < 2,
                           abs(scrollHeight - panel.frame.height) < 2,
-                          hostingView.frame.height >= scrollHeight - 2,
+                          hostingView.frame.height >= max(content, scrollHeight) - 2,
                           abs(panel.frame.width - DashboardLayout.width) < 1 else {
-                        failVerification("Page transition left a stale viewport or truncated document.")
+                        failVerification("Page transition resized fixed viewport or left truncated content.")
                     }
                 }
                 dashboardState.toggleSettings()
@@ -827,8 +878,8 @@ import ChipBarCore
         try? await Task.sleep(nanoseconds: 60_000_000)
         let openingAlpha = panel.alphaValue
         try? await Task.sleep(nanoseconds: 250_000_000)
-        guard panel.isVisible, dashboardMounted, dashboardState.showSettings, panel.alphaValue == 1 else {
-            failVerification("Panel reopening or settings preservation failed.")
+        guard panel.isVisible, dashboardMounted, !dashboardState.showSettings, panel.alphaValue == 1 else {
+            failVerification("Panel reopening did not restore its default home screen.")
         }
         // Close, then reopen while fade-out is still in flight.
         togglePanel()

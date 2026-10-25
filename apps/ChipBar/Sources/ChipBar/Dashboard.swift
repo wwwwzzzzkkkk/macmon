@@ -11,7 +11,7 @@ enum DashboardMotion {
     static let navigation = 0.24
     // The page slide finishes before the glass window settles to its new size.
     static let navigationResize = 0.34
-    static let navigationSpringCurve = CAMediaTimingFunction(controlPoints: 0.20, 0.90, 0.30, 1.03)
+    static let navigationSpringCurve = CAMediaTimingFunction(controlPoints: 0.22, 0.72, 0.30, 1.00)
     static let popoverEnter = 0.18
     static let popoverExit = 0.14
     static let popoverCurve = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -23,11 +23,33 @@ final class DashboardState: ObservableObject {
     @Published var showApplications = CommandLine.arguments.contains("--apps")
     @Published var applicationsExpansion = CommandLine.arguments.contains("--apps") ? 1.0 : 0.0
     @Published var showSSDDetails = CommandLine.arguments.contains("--ssd-details")
+    @Published var showSystemDetails = CommandLine.arguments.contains("--system-details")
+        || CommandLine.arguments.contains("--ssd-details")
+        || CommandLine.arguments.contains("--ssd-disclosure-only")
     @Published var ssdExpansion = CommandLine.arguments.contains("--ssd-details") ? 1.0 : 0.0
     @Published var ssdDetailsHeight: CGFloat = 0
     @Published var applicationMetric: ApplicationResource = CommandLine.arguments.contains("--apps-gpu") ? .gpu : CommandLine.arguments.contains("--apps-ane") ? .ane : .cpu
     init(showSettings: Bool = false) {
         self.showSettings = showSettings
+    }
+    /// Every menu-bar open starts from the same visual state. Saved user
+    /// preferences (refresh interval, menu items and SSD monitoring) remain.
+    /// Dedicated -- QA flags are preserved for screenshot/interaction tests.
+    func resetForOpening(arguments: [String] = CommandLine.arguments) {
+        let apps = arguments.contains("--apps")
+        let ssd = arguments.contains("--ssd-details")
+        let system = arguments.contains("--system-details") || ssd
+            || arguments.contains("--ssd-disclosure-only")
+        chartMetric = .total
+        showSettings = false
+        showApplications = apps
+        applicationsExpansion = apps ? 1 : 0
+        showSSDDetails = ssd
+        ssdExpansion = ssd ? 1 : 0
+        showSystemDetails = system
+        ssdDetailsHeight = 0
+        applicationMetric = arguments.contains("--apps-gpu") ? .gpu :
+            arguments.contains("--apps-ane") ? .ane : .cpu
     }
     func toggleApplications() { showApplications.toggle() }
     func toggleSettings() { showSettings.toggle() }
@@ -46,9 +68,13 @@ struct Dashboard: View {
         _state = StateObject(wrappedValue: state ?? DashboardState(showSettings: showSettings))
     }
 
+    private var showsDeviceAndSettings: Bool {
+        state.showSettings || state.showSystemDetails
+    }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
-            if state.showSettings {
+            if showsDeviceAndSettings {
                 settingsScreen
                     .transition(reduceMotion ? .opacity :
                         .asymmetric(
@@ -71,7 +97,12 @@ struct Dashboard: View {
         .frame(width: DashboardLayout.width, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .animation(reduceMotion ? nil : .easeInOut(duration: DashboardMotion.navigation), value: state.showSettings)
+        .buttonStyle(ChipBarPressStyle())
+        // One navigation state and one animation transaction: having a second
+        // animation for the old System page could briefly restyle the material
+        // during Settings transitions.
+        .animation(ChipBarMotion.optional(ChipBarMotion.navigation, reduceMotion: reduceMotion),
+                   value: showsDeviceAndSettings)
     }
 
     private var monitoringScreen: some View {
@@ -80,13 +111,11 @@ struct Dashboard: View {
             hero
             powerCards
             utilizationOverview
+            CPUCoreUsageSection(samplingInterval: monitor.interval,
+                                active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
             ApplicationUsageSection(monitor: monitor, state: state)
             trend
-            temperatures
-            systemMemory
-            InternalStorageSection()
-            fanOverview
-            SSDSection(ssd: monitor.ssd, state: state)
+            StorageCapacitySection()
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
             footer
@@ -94,9 +123,31 @@ struct Dashboard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// The only secondary page: system facts, hardware details and settings.
+    /// Home remains compact, with internal/external storage space bars.
     private var settingsScreen: some View {
         VStack(alignment: .leading, spacing: 12) {
             settingsNavigation
+            MacHardwareInformationSection(
+                chip: monitor.sample?.chip ?? monitor.hardware)
+            HStack {
+                Label("硬件状态", systemImage: "cpu")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+            }
+            fanOverview
+            if monitor.ssd.enabled {
+                SSDSection(ssd: monitor.ssd, state: state)
+            } else {
+                HStack(spacing: 8) {
+                    Label("外接 SSD 状态", systemImage: "externaldrive")
+                    Spacer()
+                    Text("监控未启用").foregroundStyle(.secondary)
+                }
+                .font(.subheadline)
+                .padding(11)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
+            }
             settingsPanel
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -105,7 +156,8 @@ struct Dashboard: View {
     private var settingsNavigation: some View {
         HStack(spacing: 10) {
             Button {
-                state.showSettings = false
+                if state.showSettings { state.showSettings = false }
+                else { state.showSystemDetails = false }
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "chevron.left").font(.caption.weight(.semibold))
@@ -113,11 +165,11 @@ struct Dashboard: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ChipBarPressStyle())
             .accessibilityLabel("返回监控面板")
 
             Spacer()
-            Text("设置").font(.headline)
+            Text("设备与设置").font(.headline)
             Spacer()
             Image(systemName: "gearshape")
                 .foregroundStyle(.secondary)
@@ -154,7 +206,7 @@ struct Dashboard: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("芯片合计功率").font(.subheadline).foregroundStyle(.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(value(monitor.connected ? monitor.sample?.total : nil))
+                    AnimatedMetricValue(value: monitor.connected ? monitor.sample?.total : nil, decimals: 1)
                         .font(.system(size: 36, weight: .medium, design: .rounded)).monospacedDigit()
                     Text("W").font(.title3).foregroundStyle(.secondary)
                     Spacer()
@@ -168,9 +220,17 @@ struct Dashboard: View {
 
     @ViewBuilder private var powerCards: some View {
         HStack(spacing: 8) {
-            powerCard("CPU", monitor.sample?.cpu, "cpu")
-            powerCard("GPU", monitor.sample?.gpu, "square.stack.3d.up")
-            powerCard("ANE", monitor.sample?.ane, "sparkles")
+            PowerMetricCard(title: "CPU", power: monitor.sample?.cpu,
+                            connected: monitor.connected, icon: "cpu",
+                            temperature: monitor.sample?.cpuTemperature, showsTemperature: true,
+                            recentPowers: monitor.history.suffix(24).compactMap { $0.power(.cpu) })
+            PowerMetricCard(title: "GPU", power: monitor.sample?.gpu,
+                            connected: monitor.connected, icon: "square.stack.3d.up",
+                            temperature: monitor.sample?.gpuTemperature, showsTemperature: true,
+                            recentPowers: monitor.history.suffix(24).compactMap { $0.power(.gpu) })
+            PowerMetricCard(title: "ANE", power: monitor.sample?.ane,
+                            connected: monitor.connected, icon: "sparkles",
+                            recentPowers: monitor.history.suffix(24).compactMap { $0.ane })
         }
     }
 
@@ -182,32 +242,45 @@ struct Dashboard: View {
                        tint: accent)
             MetricRing(title: "GPU 占用", percentage: monitor.connected ? monitor.sample?.gpuUtilization : nil,
                        tint: accent.opacity(0.78))
-            MetricRing(title: "内存", percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
-                       tint: accent.opacity(0.60))
+            MetricRing(title: "内存占用",
+                       percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
+                       tint: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
+                       status: monitor.memoryPressure.title,
+                       detail: (monitor.connected ? monitor.sample?.memory : nil).map {
+                           String(format: "%.1f / %.1f GB", $0.usedGiB, $0.totalGiB)
+                       })
         }
-        .padding(.vertical, 11)
+        .padding(.vertical, 6)
         .padding(.horizontal, 7)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder private var trend: some View {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 7) {
                 HStack {
                     Text("功率趋势").font(.subheadline.weight(.medium))
                     Spacer()
                     Picker("趋势指标", selection: $state.chartMetric) {
                         ForEach(PowerMetric.allCases) { Text($0.title).tag($0) }
                     }.labelsHidden().pickerStyle(.menu).fixedSize()
+                        .animation(ChipBarMotion.optional(ChipBarMotion.selection,
+                                                        reduceMotion: reduceMotion),
+                                   value: state.chartMetric)
                 }
                 if monitor.history.compactMap({ $0.power(state.chartMetric) }).isEmpty {
                     Text("等待有效采样后显示趋势")
                         .font(.caption).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity).frame(height: 95)
+                        .frame(maxWidth: .infinity).frame(height: 64)
                 } else {
                     PowerTrendPlot(points: chartPoints,
                         maximum: max(1, (monitor.history.compactMap { $0.power(state.chartMetric) }.max() ?? 1) * 1.15),
                         axisDates: trendAxisDates, dateFormat: trendDateFormat, accent: accent)
-                    .frame(height: 95)
+                    .frame(height: 64)
+                    .id(state.chartMetric)
+                    .transition(.opacity)
+                    .animation(ChipBarMotion.optional(ChipBarMotion.selection,
+                                                      reduceMotion: reduceMotion),
+                               value: state.chartMetric)
                 }
                 HStack {
                     Text("最近 10 分钟 · W")
@@ -216,31 +289,6 @@ struct Dashboard: View {
                 }.font(.caption2).foregroundStyle(.secondary)
             }
 
-    }
-
-    @ViewBuilder private var temperatures: some View {
-            HStack {
-                Label("CPU \(temperature(monitor.sample?.cpuTemperature))", systemImage: "thermometer.medium")
-                Spacer()
-                Text("GPU \(temperature(monitor.sample?.gpuTemperature))")
-            }.font(.subheadline).monospacedDigit()
-
-    }
-
-    @ViewBuilder private var systemMemory: some View {
-        HStack {
-            Label("内存", systemImage: "memorychip")
-            Spacer(minLength: 8)
-            if let memory = monitor.connected ? monitor.sample?.memory : nil {
-                Text(String(format: "%.1f / %.1f GB · %.0f%%", memory.usedGiB, memory.totalGiB, memory.usedPercent))
-                    .lineLimit(1).minimumScaleFactor(0.85)
-            } else {
-                Text("不可用").foregroundStyle(.secondary)
-            }
-            MemoryPressureBadge(level: monitor.memoryPressure)
-        }
-        .font(.subheadline).monospacedDigit()
-        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder private var errorPanel: some View {
@@ -280,14 +328,7 @@ struct Dashboard: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("刷新频率").font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                Picker("刷新频率", selection: $monitor.interval) {
-                    Text("1 秒").tag(1000)
-                    Text("2 秒").tag(2000)
-                    Text("5 秒").tag(5000)
-                    Text("10 秒").tag(10000)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                RefreshIntervalSelector(selection: $monitor.interval)
             }
 
             Divider()
@@ -325,8 +366,11 @@ struct Dashboard: View {
                                     .strokeBorder(enabled ? accent.opacity(0.38) : Color.primary.opacity(0.07))
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ChipBarPressStyle())
                         .accessibilityLabel("\(item.title)，\(enabled ? "已显示" : "未显示")")
+                        .animation(ChipBarMotion.optional(ChipBarMotion.selection,
+                                                          reduceMotion: reduceMotion),
+                                   value: enabled)
                     }
                 }
                 if monitor.menuItems.contains(.power) {
@@ -391,33 +435,16 @@ struct Dashboard: View {
             HStack {
                 Button { state.showSettings = true } label: {
                     HStack(spacing: 6) {
-                        Label("设置", systemImage: "slider.horizontal.3")
+                        Label("设备与设置", systemImage: "slider.horizontal.3")
                         Image(systemName: "chevron.right").font(.caption2)
                     }
                 }
-                .accessibilityLabel("打开设置页面")
+                .accessibilityLabel("打开设备信息与设置页面")
                 Spacer()
                 Button(monitor.paused ? "继续" : "暂停") { monitor.togglePause() }
                 Button("退出") { monitor.stop(forQuit: true); NSApplication.shared.terminate(nil) }
-            }.buttonStyle(.borderless).font(.subheadline)
+            }.buttonStyle(ChipBarPressStyle()).font(.subheadline)
             }
-    }
-
-    private func powerCard(_ title: String, _ power: Double?, _ icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: icon)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value(monitor.connected ? power : nil))
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                Text("W").font(.caption2).foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(9)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
     }
 
     private var trendAxisDates: [Date] {
@@ -460,32 +487,3 @@ struct Dashboard: View {
     }
 }
 
-private struct MemoryPressureBadge: View {
-    let level: MemoryPressureLevel
-
-    private let colors: [Color] = [.green, .yellow, .red]
-    private var activeIndex: Int? {
-        switch level {
-        case .normal: return 0
-        case .warning: return 1
-        case .critical: return 2
-        case .unknown: return nil
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 5) {
-            HStack(spacing: 2) {
-                ForEach(colors.indices, id: \.self) { index in
-                    Capsule().fill(index == activeIndex ? colors[index] : colors[index].opacity(0.22))
-                        .frame(width: 7, height: 4)
-                }
-            }
-            Text(level.title).font(.caption2.weight(.medium)).foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 7).padding(.vertical, 5)
-        .background(.quaternary, in: Capsule())
-        .accessibilityLabel("系统内存压力：\(level.title)")
-        .help("系统内存压力：\(level.title)")
-    }
-}

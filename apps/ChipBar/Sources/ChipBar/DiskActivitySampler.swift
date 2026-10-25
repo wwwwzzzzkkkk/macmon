@@ -35,7 +35,7 @@ actor DiskActivitySampler {
     private var lastCapacity: Double = -.infinity
     private var identities: [String: UInt64] = [:]
 
-    func sampleAll() -> DiskActivitySnapshot {
+    func sampleAll(includeVolumes: Bool = false) -> DiskActivitySnapshot {
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOMedia"), &iterator) == KERN_SUCCESS else { return DiskActivitySnapshot() }
         defer { IOObjectRelease(iterator) }
@@ -49,7 +49,7 @@ actor DiskActivitySampler {
             defer { IOObjectRelease(parent) }
             if IOObjectConformsTo(parent, "IOBlockStorageDriver") != 0 { ids.append(id) }
         }
-        return sample(ids: ids.sorted(), externalOnly: false, includeVolumes: false)
+        return sample(ids: ids.sorted(), externalOnly: false, includeVolumes: includeVolumes)
     }
 
     func sample(ids: [String], externalOnly: Bool = true, includeVolumes: Bool = true) -> DiskActivitySnapshot {
@@ -167,11 +167,11 @@ actor DiskActivitySampler {
 
 @MainActor final class DiskActivityModel: ObservableObject {
     @Published private(set) var snapshot: DiskActivitySnapshot?
-    func watch(ids: [String]) async {
+    func watch(ids: [String], includeVolumes: Bool = true) async {
         snapshot = nil
         let sampler = DiskActivitySampler()
         while !Task.isCancelled {
-            let next = await sampler.sample(ids: ids)
+            let next = await sampler.sample(ids: ids, includeVolumes: includeVolumes)
             guard !Task.isCancelled else { return }
             snapshot = next
             do { try await Task.sleep(nanoseconds: 2_000_000_000) } catch { return }
