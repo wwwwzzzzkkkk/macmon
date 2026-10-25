@@ -192,8 +192,15 @@ import ChipBarCore
               !dashboardState.showSystemDetails,
               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
             disclosureTransition = nil
+            if dashboardState.showSystemDetails &&
+                !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                withAnimation(ChipBarMotion.disclosure) {
+                    dashboardState.ssdExpansion = target.ssd
+                }
+            } else {
+                dashboardState.ssdExpansion = target.ssd
+            }
             dashboardState.applicationsExpansion = target.applications
-            dashboardState.ssdExpansion = target.ssd
             if dashboardMounted {
                 hostingView.needsLayout = true
                 refresh()
