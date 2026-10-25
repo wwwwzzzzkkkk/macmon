@@ -3,7 +3,7 @@ import QuartzCore
 import ChipBarCore
 
 enum DashboardLayout {
-    static let width: CGFloat = 370
+    static let width: CGFloat = 420
 }
 
 enum DashboardMotion {

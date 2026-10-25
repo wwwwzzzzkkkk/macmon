@@ -27,39 +27,39 @@ struct MetricRing: View {
     }
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 5) {
             ZStack {
                 Circle()
-                    .stroke(Color.primary.opacity(0.10), lineWidth: 3.5)
+                    .stroke(Color.primary.opacity(0.10), lineWidth: 4)
                 Circle()
                     .trim(from: 0, to: CGFloat(fraction))
-                    .stroke(tint, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                    .stroke(tint, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(motion, value: fraction)
                 if percentage != nil, percentage?.isFinite == true {
                     AnimatedPercentage(value: fraction * 100)
-                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .animation(motion, value: fraction)
                 } else {
                     Text("—")
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: 39, height: 39)
+            .frame(width: 44, height: 44)
             .accessibilityHidden(true)
 
             // Reserve one uniform caption baseline for all three gauges:
             // CPU/GPU show no '占用' text, ANE still says '内存'.
             Text(caption.isEmpty ? " " : caption)
-                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .font(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .frame(height: 11)
+                .frame(height: 12)
                 .accessibilityHidden(true)
         }
-        .frame(width: 39, height: 56, alignment: .center)
+        .frame(width: 44, height: 62, alignment: .center)
         .help("\(title)：\(percentageText)" +
               (status.map { " · 内存压力：\($0)" } ?? ""))
         .accessibilityElement(children: .ignore)
