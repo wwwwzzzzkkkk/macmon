@@ -27,6 +27,37 @@ The next 2.0 preview preserves that tested motion baseline and addresses reporte
 - **Animated app metric selection:** 4-way CPU/GPU/Memory/ANE indicator moves with a spring and presses respond immediately. Ranking contents crossfade within a fixed height, so switching tabs does not resize the window or jolt scroll position.
 - **Stable signing support:** by default GitHub builds still use ad-hoc signing. macOS can treat each rebuilt ad-hoc executable as a new code identity and ask for privacy permissions again; the program cannot and must not silently bypass the system prompt. Developers with a valid and persistent macOS code-signing certificate can use `CHIPBAR_CODESIGN_IDENTITY="Apple Development: ..." ./scripts/build.sh` to sign successive local builds with the same Team ID and bundle ID. This is **optional** and does not imply notarization or promise to eliminate all possible consent dialogs. Install/test the same app path, close old ChipBar instances first, and avoid changing the signing identity between builds. No accessibility/screen-capture privilege is requested by a normal ChipBar launch; synthetic mouse-automation QA explicitly needs existing event-posting permission.
 
+## M5 Pro performance follow-up: system details and 1.3.17 comparison
+
+**Observed symptom:** The user reported a noticeable pause when expanding System Details after previously verifying smooth trackpad scrolling, animation synchronization, and rapid settings navigation. A smooth sequence can still *feel* slow if the first visible response is delayed.
+
+**Code-level cause:** The first 2.0 preview ran the `navigateSettings(resetScroll: false)` path on System Details: it slept **420 ms** before measuring `fittingSize.height`, then ran **340 ms** of NSPanel height animation. The popup thus appeared to wait before responding, while mounting internal / external disk views could start IOKit and APFS reads during the transition.
+
+**Change:** Dedicated `animateSystemDisclosure()` predicts the destination immediately: on the first expansion it animates toward the available viewport height, and after the animation caches the real SwiftUI document height for subsequent toggles. It only applies a short (~170 ms) correction if measurement is different. Opening and closing remain cancelable by generation token, use the same timing curve and protect the scroller offset. The internal and external storage cards defer their initial APFS / disk scanning until after the ~340 ms spring and are canceled if collapsed beforehand.
+
+**What this proves:** The prior serialized **420 + 340 ms** wait has been removed from the code. It does **not** prove zero visual hitches on the M5 Pro; actual FPS, frame-time outliers and per-process load require a hardware trace.
+
+### CPU and memory comparison against v1.3.17
+
+Do not claim that the preview uses fewer CPU cycles or less RAM without paired measurements. Most source readers and the 2 s application sampler are still shared with v1.3.17. The 2.0 branch adds UI components and caches and defers some work, so its idle and interactive performance must be measured separately.
+
+Run the bundled lightweight profiler on each version with **only one ChipBar process running**, matching macmon executable, menu display items, sampling frequency, SSD monitoring state and the same workload:
+
+```bash
+cd macmon/apps/ChipBar
+
+# First, run ChipBar 1.3.17 (all other versions quit).
+bash scripts/profile-chipbar.sh stable-closed 60
+# Open its main panel and leave it open.
+bash scripts/profile-chipbar.sh stable-open 60
+
+# Quit 1.3.17, start the 2.0 preview; use same conditions:
+bash scripts/profile-chipbar.sh preview-closed 60
+bash scripts/profile-chipbar.sh preview-open 60
+```
+
+The script outputs CSV and mean/peak process CPU (%) and resident memory (MiB) from macOS `ps`, requires no sudo or TCC prompts, and intentionally does not automatically open or control the GUI. The open/closed test does not compare the exact same number of cards across versions; use matched visible widgets for fairer analysis. `%CPU` counts a single logical CPU at roughly 100% and may exceed that for multithreaded apps. These snapshots **do not** measure GPU compositing, Apple Silicon hardware power, entire `macmon` process tree, or animation stutter. For the latter use Instruments Time Profiler / Animation Hitches (recorded during repeatable 10x disclosure toggles on the same machine).
+
 ## Known limitation: GitHub preview signing
 
 The CI zip contains ad-hoc signed app code. Because its signed code identity can change with each CI run, TCC approvals may not carry over. Removing OS privacy prompts programmatically would be neither reliable nor appropriate. Use a consistent trusted signing identity for long-term iterative local testing, or accept OS prompts on a new CI build. If prompts continue on an unchanged build, capture the **exact prompt text and the executable requesting consent**, since they may originate from macOS, smartctl/macmon or an external path rather than ChipBar.
