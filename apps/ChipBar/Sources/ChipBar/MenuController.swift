@@ -70,7 +70,10 @@ import ChipBarCore
             button.action = #selector(togglePanel)
         }
         hostingView = NSHostingView<AnyView>(rootView: AnyView(EmptyView()))
-        scrollView.hasVerticalScroller = true
+        // Never show the bright system scroll indicator over Liquid Glass.
+        // NSScrollView still handles trackpad/wheel and momentum events when
+        // vertical scroller chrome is disabled.
+        scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
@@ -411,9 +414,20 @@ import ChipBarCore
         if !shouldOpen { hidePanel(); return }
         guard let (rect, screen) = anchor() else { return }
         maximumHeight = max(250, min(rect.minY - 6, screen.visibleFrame.maxY - 6) - screen.visibleFrame.minY - 8)
+        // Restore the initial dashboard on EVERY opening, including a rapid
+        // close -> reopen while the NSPanel fade-out is still in progress.
+        layoutCoordinator.cancelPending()
+        navigationTask?.cancel()
+        navigationTask = nil
+        navigationToken = UUID()
+        navigationResizeInFlight = false
+        navigationViewportHeight = nil
+        disclosureTransition = nil
+        resetScrollForPage = true
+        withTransaction(Transaction(animation: nil)) {
+            dashboardState.resetForOpening()
+        }
         if !dashboardMounted {
-            dashboardState.applicationsExpansion = dashboardState.showApplications ? 1 : 0
-            dashboardState.ssdExpansion = dashboardState.showSSDDetails ? 1 : 0
             hostingView.rootView = AnyView(Dashboard(monitor: monitor, state: dashboardState))
             if CommandLine.arguments.contains("--light") {
                 hostingView.rootView = AnyView(hostingView.rootView.environment(\.colorScheme, .light))
