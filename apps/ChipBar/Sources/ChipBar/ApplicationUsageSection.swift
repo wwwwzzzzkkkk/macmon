@@ -10,6 +10,7 @@ struct ApplicationUsageSection: View {
     @ObservedObject var monitor: Monitor
     @ObservedObject var state: DashboardState
     @StateObject private var activity = ApplicationActivityModel.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -18,11 +19,22 @@ struct ApplicationUsageSection: View {
             } else {
                 disclosureButton
             }
-            Picker("应用资源排行", selection: $state.applicationMetric) {
-                ForEach(ApplicationResource.allCases) { Text($0.rawValue).tag($0) }
-            }.labelsHidden().pickerStyle(.segmented)
-                .animation(ChipBarMotion.selection, value: state.applicationMetric)
-            ranking.frame(height: 84 + 56 * state.applicationsExpansion, alignment: .topLeading).clipped()
+            ApplicationMetricSelector(selection: $state.applicationMetric)
+            // Animate only when the *selected resource* changes. Incoming
+            // rankings crossfade inside a fixed-height viewport, so a new
+            // process sample does not relayout the panel or jump the scroller.
+            ZStack(alignment: .topLeading) {
+                ranking
+                    .id(state.applicationMetric)
+                    .transition(reduceMotion ? .opacity :
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .offset(y: 5)),
+                            removal: .opacity.combined(with: .offset(y: -4))))
+            }
+            .frame(height: 84 + 56 * state.applicationsExpansion, alignment: .topLeading)
+            .clipped()
+            .animation(ChipBarMotion.optional(ChipBarMotion.selection,
+                                              reduceMotion: reduceMotion), value: state.applicationMetric)
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topLeading) {
                     Text(shortExplanation).opacity(1 - state.applicationsExpansion)
