@@ -43,6 +43,8 @@ import ChipBarCore
     /// caches measured heights for subsequent openings in the same process.
     private var systemCollapsedDocumentHeight: CGFloat?
     private var systemExpandedDocumentHeight: CGFloat?
+    private var monitoringPageHeight: CGFloat?
+    private var settingsPageHeight: CGFloat?
     private var navigationResizeInFlight = false
     private var navigationTask: Task<Void, Never>?
     private var navigationToken = UUID()
@@ -144,82 +146,97 @@ import ChipBarCore
             }
         settingsNavigationSubscription = dashboardState.$showSettings
             .dropFirst()
-            .sink { [weak self] _ in self?.navigateSettings() }
+            .sink { [weak self] entering in self?.navigateSettings(to: entering) }
         systemDisclosureSubscription = dashboardState.$showSystemDetails
             .dropFirst()
             .sink { [weak self] expanded in self?.animateSystemDisclosure(expanding: expanded) }
     }
 
-    private func navigateSettings(resetScroll: Bool = true) {
+    /// The page slide and AppKit frame transition run together.
+    /// Cache the natural home size before entering settings, so returning
+    /// never needs to wait for the old page to finish its slide.
+    private func navigateSettings(to settings: Bool) {
         guard dashboardMounted, panelRequestedVisible else { return }
-        // Let SwiftUI finish its 0.24s slide before measuring the destination:
-        // the temporary ZStack contains both pages and reports the wrong height.
         navigationTask?.cancel()
+        navigationTask = nil
+        layoutCoordinator.cancelPending()
         let token = UUID()
         navigationToken = token
-        navigationResizeInFlight = false
-        navigationViewportHeight = panel.frame.height
-        resetScrollForPage = resetScroll
-        refresh(forceLayout: true)
-        navigationTask = Task { @MainActor [weak self] in
-            // The system-detail spring needs longer to settle than the
-            // simple settings crossfade; never measure an intermediate height.
-            let settleNanoseconds: UInt64 = resetScroll ? 270_000_000 : 420_000_000
-            do { try await Task.sleep(nanoseconds: settleNanoseconds) } catch { return }
-            guard let self, self.navigationToken == token,
-                  self.dashboardMounted, self.panelRequestedVisible else { return }
+        if settings { monitoringPageHeight = measuredHeight }
+        else { settingsPageHeight = measuredHeight }
+        let predicted = settings ? (settingsPageHeight ?? maximumHeight)
+                                 : (monitoringPageHeight ?? measuredHeight)
+        let height = min(maximumHeight, max(250, predicted))
+        navigationResizeInFlight = true
+        navigationViewportHeight = nil
+        resetScrollForPage = true
 
-            self.hostingView.layoutSubtreeIfNeeded()
-            let naturalHeight = ceil(self.hostingView.fittingSize.height)
-            guard naturalHeight.isFinite, naturalHeight > 0 else {
-                self.navigationViewportHeight = nil
-                self.navigationTask = nil
-                self.refresh(forceLayout: true)
-                return
-            }
-            let targetHeight = min(self.maximumHeight, naturalHeight)
-            guard let destination = self.panelFrame(size: NSSize(
-                width: DashboardLayout.width, height: targetHeight)) else {
-                self.navigationViewportHeight = nil
-                self.navigationTask = nil
-                self.refresh(forceLayout: true)
-                return
-            }
+        // Align both screens to their first row before starting the
+        // synchronized page transition; do not visibly jump afterward.
+        let clip = scrollView.contentView
+        let oldMaximum = max(0, hostingView.frame.height - clip.bounds.height)
+        clip.scroll(to: NSPoint(x: 0, y: hostingView.isFlipped ? 0 : oldMaximum))
+        scrollView.reflectScrolledClipView(clip)
 
-            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ||
-               abs(self.panel.frame.height - targetHeight) < 1 {
-                self.navigationViewportHeight = nil
-                self.resetScrollForPage = resetScroll
-                self.navigationTask = nil
-                self.refresh(forceLayout: true)
-                self.panel.invalidateShadow()
-                return
-            }
-
-            // Animate the actual transparent NSPanel, anchored to the menu bar.
-            // A soft spring-like timing curve makes both shrinking and expanding
-            // continuous rather than snapping after the content transition.
-            // While AppKit owns the resize, sampling updates must not reset its
-            // frame; the document is measured again once the motion completes.
-            self.navigationResizeInFlight = true
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = DashboardMotion.navigationResize
-                context.timingFunction = DashboardMotion.navigationSpringCurve
-                self.panel.animator().setFrame(destination, display: true)
-            } completionHandler: { [weak self] in
-                Task { @MainActor in
-                    guard let self, self.navigationToken == token else { return }
+        let settle: () -> Void = { [weak self] in
+            Task { @MainActor in
+                guard let self, self.navigationToken == token, self.dashboardMounted,
+                      self.panelRequestedVisible else { return }
+                self.hostingView.layoutSubtreeIfNeeded()
+                let natural = ceil(self.hostingView.fittingSize.height)
+                guard natural.isFinite, natural > 0 else {
                     self.navigationResizeInFlight = false
-                    self.navigationViewportHeight = nil
-                    self.resetScrollForPage = resetScroll
-                    self.navigationTask = nil
                     self.refresh(forceLayout: true)
-                    self.panel.invalidateShadow()
+                    return
                 }
+                if settings { self.settingsPageHeight = natural }
+                else { self.monitoringPageHeight = natural }
+                let exact = min(self.maximumHeight, max(250, natural))
+                let finish: () -> Void = { [weak self] in
+                    Task { @MainActor in
+                        guard let self, self.navigationToken == token else { return }
+                        self.navigationResizeInFlight = false
+                        self.resetScrollForPage = true
+                        self.refresh(forceLayout: true)
+                        self.panel.invalidateShadow()
+                    }
+                }
+                // The return route should already have an exact cached height.
+                // A first settings visit can require one small correction.
+                guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                      abs(self.panel.frame.height - exact) >= 2,
+                      let precise = self.panelFrame(size: NSSize(
+                          width: DashboardLayout.width, height: exact)) else {
+                    finish()
+                    return
+                }
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.16
+                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    self.panel.animator().setFrame(precise, display: true)
+                } completionHandler: { finish() }
             }
         }
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              abs(panel.frame.height - height) >= 1,
+              let destination = panelFrame(size: NSSize(
+                  width: DashboardLayout.width, height: height)) else {
+            // If the viewport is already screen capped, allow the 240ms page
+            // crossfade to complete before measuring its destination.
+            navigationTask = Task { @MainActor in
+                do { try await Task.sleep(for: .milliseconds(270)) } catch { return }
+                guard navigationToken == token else { return }
+                navigationTask = nil
+                settle()
+            }
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = DashboardMotion.navigationResize
+            context.timingFunction = DashboardMotion.navigationSpringCurve
+            panel.animator().setFrame(destination, display: true)
+        } completionHandler: { settle() }
     }
-
 
     /// Make the panel respond to System Details immediately. Previously this
     /// waited 420 ms for the SwiftUI spring to finish and THEN ran another
