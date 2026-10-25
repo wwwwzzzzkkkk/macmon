@@ -32,6 +32,25 @@ final class DashboardState: ObservableObject {
     init(showSettings: Bool = false) {
         self.showSettings = showSettings
     }
+    /// Every menu-bar open starts from the same visual state. Saved user
+    /// preferences (refresh interval, menu items and SSD monitoring) remain.
+    /// Dedicated -- QA flags are preserved for screenshot/interaction tests.
+    func resetForOpening(arguments: [String] = CommandLine.arguments) {
+        let apps = arguments.contains("--apps")
+        let ssd = arguments.contains("--ssd-details")
+        let system = arguments.contains("--system-details") || ssd
+            || arguments.contains("--ssd-disclosure-only")
+        chartMetric = .total
+        showSettings = false
+        showApplications = apps
+        applicationsExpansion = apps ? 1 : 0
+        showSSDDetails = ssd
+        ssdExpansion = ssd ? 1 : 0
+        showSystemDetails = system
+        ssdDetailsHeight = 0
+        applicationMetric = arguments.contains("--apps-gpu") ? .gpu :
+            arguments.contains("--apps-ane") ? .ane : .cpu
+    }
     func toggleApplications() { showApplications.toggle() }
     func toggleSettings() { showSettings.toggle() }
 }
