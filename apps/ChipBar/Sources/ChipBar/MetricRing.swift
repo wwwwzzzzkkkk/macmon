@@ -6,10 +6,9 @@ struct MetricRing: View {
     let title: String
     let percentage: Double?
     let tint: Color
-    /// Optional memory pressure status and RAM usage, shown in the compact
-    /// ring itself instead of an additional full-width memory row.
+    /// Memory pressure remains available to accessibility and hover, but
+    /// its color alone conveys the state in the visible ring layout.
     var status: String? = nil
-    var detail: String? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -45,23 +44,15 @@ struct MetricRing: View {
             }
             .frame(width: 52, height: 52)
             .accessibilityHidden(true)
-            // Keep a single fixed caption line under every ring, including
-            // CPU and GPU: the three circular gauges always share a baseline.
-            Text(detail ?? status ?? " ")
-                .font(.system(size: 9, weight: .medium, design: .rounded))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-                .frame(height: 12)
-                .help([status, detail].compactMap { $0 }.joined(separator: " · "))
         }
         .frame(maxWidth: .infinity, alignment: .top)
-        .frame(height: 90, alignment: .top)
+        // All three gauges share exactly the same compact height; no blank
+        // caption line is reserved for the memory-pressure wording.
+        .frame(height: 74, alignment: .top)
+        .help(status.map { "系统内存压力：\($0)" } ?? "")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title)：\(percentage.map { String(format: "%.0f%%", $0) } ?? "不可用")" +
-                            (status.map { "，内存压力\($0)" } ?? "") +
-                            (detail.map { "，\($0)" } ?? ""))
+                            (status.map { "，内存压力\($0)" } ?? ""))
     }
 }
 
