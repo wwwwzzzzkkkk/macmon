@@ -106,7 +106,6 @@ struct Dashboard: View {
             utilizationOverview
             ApplicationUsageSection(monitor: monitor, state: state)
             trend
-            temperatures
             systemMemory
             ChipBarSectionToggle(title: "系统详情", systemImage: "square.stack.3d.up",
                                  expanded: state.showSystemDetails) {
@@ -207,9 +206,11 @@ struct Dashboard: View {
     @ViewBuilder private var powerCards: some View {
         HStack(spacing: 8) {
             PowerMetricCard(title: "CPU", power: monitor.sample?.cpu,
-                            connected: monitor.connected, icon: "cpu")
+                            connected: monitor.connected, icon: "cpu",
+                            temperature: monitor.sample?.cpuTemperature, showsTemperature: true)
             PowerMetricCard(title: "GPU", power: monitor.sample?.gpu,
-                            connected: monitor.connected, icon: "square.stack.3d.up")
+                            connected: monitor.connected, icon: "square.stack.3d.up",
+                            temperature: monitor.sample?.gpuTemperature, showsTemperature: true)
             PowerMetricCard(title: "ANE", power: monitor.sample?.ane,
                             connected: monitor.connected, icon: "sparkles")
         }
@@ -264,15 +265,6 @@ struct Dashboard: View {
                     Text("均值 \(value(average)) W")
                 }.font(.caption2).foregroundStyle(.secondary)
             }
-
-    }
-
-    @ViewBuilder private var temperatures: some View {
-            HStack {
-                Label("CPU \(temperature(monitor.sample?.cpuTemperature))", systemImage: "thermometer.medium")
-                Spacer()
-                Text("GPU \(temperature(monitor.sample?.gpuTemperature))")
-            }.font(.subheadline).monospacedDigit()
 
     }
 
