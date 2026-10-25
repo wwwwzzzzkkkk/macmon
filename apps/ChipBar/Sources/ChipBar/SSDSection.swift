@@ -26,7 +26,6 @@ struct SSDSection: View {
                                 .map { String(format: "%.0f °C", $0) } ?? "—")
                                 .monospacedDigit().fontWeight(.medium)
                         }.font(.caption)
-                        Text(spaceSummary(row.id)).font(.caption2).foregroundStyle(.secondary)
                         Text(speedSummary(row.id)).font(.caption2).monospacedDigit().foregroundStyle(.secondary)
                     }
                 }
@@ -47,7 +46,7 @@ struct SSDSection: View {
                     do { try await Task.sleep(for: .milliseconds(560)) }
                     catch { return }
                     guard !Task.isCancelled else { return }
-                    await activity.watch(ids: ssd.readings.map(\.id))
+                    await activity.watch(ids: ssd.readings.map(\.id), includeVolumes: false)
                 }
         }
     }
@@ -67,14 +66,10 @@ struct SSDSection: View {
                         Text("温度更新于 \(reading.date.formatted(date: .omitted, time: .standard))")
                             .font(.caption2).foregroundStyle(.secondary)
                     }
-                    ForEach(volumes(row.id)) { volume in
-                        Text("\(volume.name)：可用 \(bytes(volume.available)) / \(bytes(volume.total))\(volume.apfs ? " · APFS 共享空间" : "")")
-                            .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    }
                     if let error = row.error { Text(error).font(.caption2).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
                 }
             }
-            Text("读写速度为整盘实际 I/O，MB/s；面板可见时每 2 秒更新。空间每 30 秒更新，多个卷的共享容量不累加。")
+            Text("读写速度为整盘实际 I/O，MB/s；面板可见时每 2 秒更新。容量和占用进度请查看主页「储存空间」。")
                 .font(.caption2).foregroundStyle(.secondary)
             Text(ssd.status).font(.caption2).foregroundStyle(.secondary)
         }
@@ -83,16 +78,6 @@ struct SSDSection: View {
     private func liveTemperature(_ row: SSDReading) -> SSDTemperature? {
         if let snapshot = activity.snapshot, !snapshot.connected.contains(row.id) { return nil }
         return row.temperature.flatMap { $0.isFresh() ? $0 : nil }
-    }
-    private func volumes(_ id: String) -> [DiskVolumeSpace] { activity.snapshot?.volumes[id] ?? [] }
-    private func bytes(_ number: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: number, countStyle: .decimal)
-    }
-    private func spaceSummary(_ id: String) -> String {
-        let spaces = volumes(id)
-        if spaces.count == 1, let space = spaces.first { return "可用 \(bytes(space.available)) / \(bytes(space.total))" }
-        if spaces.count > 1 { return "\(spaces.count) 个卷 · 展开详情查看可用空间" }
-        return "可用空间 — · 未挂载或暂不可读"
     }
     private func speedSummary(_ id: String) -> String {
         guard let snapshot = activity.snapshot, snapshot.connected.contains(id),
