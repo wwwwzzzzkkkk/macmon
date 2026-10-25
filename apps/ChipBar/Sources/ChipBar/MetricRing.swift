@@ -19,27 +19,27 @@ struct MetricRing: View {
     }
 
     var body: some View {
-        VStack(spacing: 7) {
+        VStack(spacing: 4) {
             Text(title).font(.caption.weight(.medium)).foregroundStyle(.secondary)
             ZStack {
                 Circle()
-                    .stroke(Color.primary.opacity(0.10), lineWidth: 7)
+                    .stroke(Color.primary.opacity(0.10), lineWidth: 5)
                 Circle()
                     .trim(from: 0, to: CGFloat(fraction))
-                    .stroke(tint, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                    .stroke(tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(motion, value: fraction)
                 if percentage != nil, percentage?.isFinite == true {
                     AnimatedPercentage(value: fraction * 100)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .animation(motion, value: fraction)
                 } else {
-                    Text("—").font(.system(size: 18, weight: .medium, design: .rounded))
+                    Text("—").font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: 70, height: 70)
+            .frame(width: 52, height: 52)
             .accessibilityHidden(true)
         }
         .frame(maxWidth: .infinity)
