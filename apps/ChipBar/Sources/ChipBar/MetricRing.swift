@@ -27,7 +27,7 @@ struct MetricRing: View {
     }
 
     var body: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 4) {
             ZStack {
                 Circle()
                     .stroke(Color.primary.opacity(0.10), lineWidth: 3.5)
@@ -38,25 +38,28 @@ struct MetricRing: View {
                     .animation(motion, value: fraction)
                 if percentage != nil, percentage?.isFinite == true {
                     AnimatedPercentage(value: fraction * 100)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .animation(motion, value: fraction)
                 } else {
                     Text("—")
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: 42, height: 42)
+            .frame(width: 39, height: 39)
             .accessibilityHidden(true)
 
-            Text(caption)
+            // Reserve one uniform caption baseline for all three gauges:
+            // CPU/GPU show no '占用' text, ANE still says '内存'.
+            Text(caption.isEmpty ? " " : caption)
                 .font(.system(size: 9, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .frame(height: 11)
+                .accessibilityHidden(true)
         }
-        .frame(width: 46, height: 56, alignment: .top)
+        .frame(width: 39, height: 56, alignment: .center)
         .help("\(title)：\(percentageText)" +
               (status.map { " · 内存压力：\($0)" } ?? ""))
         .accessibilityElement(children: .ignore)
