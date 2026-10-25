@@ -23,6 +23,22 @@ struct ExternalVolumeCapacity: Identifiable {
     private var lastSampleAt: Date?
     private var scanning = false
 
+    /// Display filesystem capacity per mounted external volume, never sum
+    /// APFS sharing members. Identical APFS capacity/free records on one
+    /// physical disk represent shared capacity and need one compact bar.
+    static func displayRows(from snapshot: DiskActivitySnapshot) -> [ExternalVolumeCapacity] {
+        snapshot.external.sorted().flatMap { diskID -> [ExternalVolumeCapacity] in
+            var knownShared: Set<String> = []
+            return (snapshot.volumes[diskID] ?? []).compactMap { volume in
+                if volume.apfs {
+                    let key = "\(volume.total):\(volume.available)"
+                    guard knownShared.insert(key).inserted else { return nil }
+                }
+                return ExternalVolumeCapacity(diskID: diskID, volume: volume)
+            }
+        }
+    }
+
     func watch() async {
         while !Task.isCancelled {
             if !scanning &&
@@ -34,11 +50,7 @@ struct ExternalVolumeCapacity: Identifiable {
 
                 // Never add APFS System/Data partitions or several volumes
                 // together: each mounted volume gets its own space bar.
-                volumes = result.external.sorted().flatMap { diskID in
-                    (result.volumes[diskID] ?? []).map {
-                        ExternalVolumeCapacity(diskID: diskID, volume: $0)
-                    }
-                }
+                volumes = Self.displayRows(from: result)
                 sampled = true
                 lastSampleAt = Date()
             }
