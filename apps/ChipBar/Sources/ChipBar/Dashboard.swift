@@ -111,6 +111,7 @@ struct Dashboard: View {
             hero
             powerCards
             utilizationOverview
+            CPUCoreUsageSection(samplingInterval: monitor.interval)
             ApplicationUsageSection(monitor: monitor, state: state)
             trend
             systemMemory
@@ -244,13 +245,13 @@ struct Dashboard: View {
             MetricRing(title: "内存", percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
                        tint: accent.opacity(0.60))
         }
-        .padding(.vertical, 11)
+        .padding(.vertical, 6)
         .padding(.horizontal, 7)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder private var trend: some View {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 7) {
                 HStack {
                     Text("功率趋势").font(.subheadline.weight(.medium))
                     Spacer()
@@ -264,12 +265,12 @@ struct Dashboard: View {
                 if monitor.history.compactMap({ $0.power(state.chartMetric) }).isEmpty {
                     Text("等待有效采样后显示趋势")
                         .font(.caption).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity).frame(height: 95)
+                        .frame(maxWidth: .infinity).frame(height: 64)
                 } else {
                     PowerTrendPlot(points: chartPoints,
                         maximum: max(1, (monitor.history.compactMap { $0.power(state.chartMetric) }.max() ?? 1) * 1.15),
                         axisDates: trendAxisDates, dateFormat: trendDateFormat, accent: accent)
-                    .frame(height: 95)
+                    .frame(height: 64)
                     .id(state.chartMetric)
                     .transition(.opacity)
                     .animation(ChipBarMotion.optional(ChipBarMotion.selection,
@@ -338,14 +339,7 @@ struct Dashboard: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("刷新频率").font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                Picker("刷新频率", selection: $monitor.interval) {
-                    Text("1 秒").tag(1000)
-                    Text("2 秒").tag(2000)
-                    Text("5 秒").tag(5000)
-                    Text("10 秒").tag(10000)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                RefreshIntervalSelector(selection: $monitor.interval)
             }
 
             Divider()
