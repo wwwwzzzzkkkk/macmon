@@ -8,6 +8,9 @@ enum ChipBarMotion {
     static let tap = Animation.spring(response: 0.24, dampingFraction: 0.76)
     static let disclosure = Animation.spring(response: 0.35, dampingFraction: 0.88)
     static let selection = Animation.spring(response: 0.30, dampingFraction: 0.84)
+    // Layered application resource switch: the old list recedes and fades,
+    // while the next metric enters above it. Keep this under one-third second.
+    static let resourceStack = Animation.easeInOut(duration: 0.28)
     static let navigation = Animation.easeInOut(duration: 0.24)
 
     static func optional(_ animation: Animation, reduceMotion: Bool) -> Animation? {
