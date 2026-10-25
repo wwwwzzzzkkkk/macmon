@@ -238,14 +238,10 @@ import ChipBarCore
         } completionHandler: { settle() }
     }
 
-    /// Make the panel respond to System Details immediately. Previously this
-    /// waited 420 ms for the SwiftUI spring to finish and THEN ran another
-    /// 340 ms AppKit resize. That serialized the animations and felt laggy.
-    ///
-    /// On first expansion a full-height prediction is cheap and usually
-    /// screen-capped; after one cycle both actual heights are cached. The
-    /// destination is remeasured once the content spring settles, with a small
-    /// corrective animation only if required.
+    /// Do not animate an estimated height and then animate its correction.
+    /// The disclosure content takes its final layout immediately, without
+    /// a SwiftUI move transition. One main-runloop turn later we measure its
+    /// actual size and animate the panel to that destination exactly once.
     private func animateSystemDisclosure(expanding expanded: Bool) {
         guard dashboardMounted, panelRequestedVisible, !dashboardState.showSettings else { return }
         navigationTask?.cancel()
@@ -257,75 +253,60 @@ import ChipBarCore
         navigationViewportHeight = nil
         resetScrollForPage = false
 
-        if expanded {
-            systemCollapsedDocumentHeight = measuredHeight
-        } else {
-            systemExpandedDocumentHeight = measuredHeight
-        }
-        let target = SystemDisclosureSizing.targetHeight(
-            expanding: expanded,
-            currentHeight: measuredHeight,
-            previouslyCollapsed: systemCollapsedDocumentHeight,
-            previouslyExpanded: systemExpandedDocumentHeight,
-            maximumHeight: maximumHeight
-        )
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.navigationToken == token,
+                  self.dashboardMounted, self.panelRequestedVisible else { return }
+            self.hostingView.layoutSubtreeIfNeeded()
+            let natural = ceil(self.hostingView.fittingSize.height)
+            guard natural.isFinite, natural > 0 else {
+                self.navigationResizeInFlight = false
+                self.refresh(forceLayout: true)
+                return
+            }
+            if expanded { self.systemExpandedDocumentHeight = natural }
+            else { self.systemCollapsedDocumentHeight = natural }
+            let target = min(self.maximumHeight, max(250, natural))
 
-        // The scroll view needs a document at least as tall as its expanding
-        // viewport; otherwise it shows an empty bottom band until the next
-        // normal live-sample refresh.
-        let docHeight = max(hostingView.frame.height, target)
-        if docHeight > hostingView.frame.height {
-            hostingView.setFrameSize(NSSize(width: DashboardLayout.width, height: docHeight))
-        }
+            // Preserve the top scroll anchor while growing the document.
+            // Never use a screen-height guess or two consecutive frame
+            // animations: both used to cause a noticeable upward hop.
+            let clip = self.scrollView.contentView
+            let oldVisible = clip.bounds.height
+            let previousMax = max(0, self.hostingView.frame.height - oldVisible)
+            let oldOffset = self.hostingView.isFlipped ? clip.bounds.origin.y
+                : previousMax - clip.bounds.origin.y
+            let documentHeight = max(natural, self.panel.frame.height, target)
+            if self.hostingView.frame.height != documentHeight {
+                self.hostingView.setFrameSize(NSSize(
+                    width: DashboardLayout.width, height: documentHeight))
+                let newMax = max(0, documentHeight - oldVisible)
+                let offset = min(newMax, max(0, oldOffset))
+                clip.scroll(to: NSPoint(x: 0, y: self.hostingView.isFlipped
+                    ? offset : newMax - offset))
+                self.scrollView.reflectScrolledClipView(clip)
+            }
 
-        let finish: () -> Void = { [weak self] in
-            Task { @MainActor in
-                guard let self, self.navigationToken == token,
-                      self.panelRequestedVisible, self.dashboardMounted else { return }
-                self.hostingView.layoutSubtreeIfNeeded()
-                let natural = ceil(self.hostingView.fittingSize.height)
-                guard natural.isFinite, natural > 0 else {
+            let finish: () -> Void = { [weak self] in
+                Task { @MainActor in
+                    guard let self, self.navigationToken == token else { return }
                     self.navigationResizeInFlight = false
                     self.refresh(forceLayout: true)
-                    return
+                    self.panel.invalidateShadow()
                 }
-                if expanded { self.systemExpandedDocumentHeight = natural }
-                else { self.systemCollapsedDocumentHeight = natural }
-                let exact = min(self.maximumHeight, max(250, natural))
-                let complete: () -> Void = { [weak self] in
-                    Task { @MainActor in
-                        guard let self, self.navigationToken == token else { return }
-                        self.navigationResizeInFlight = false
-                        self.refresh(forceLayout: true)
-                        self.panel.invalidateShadow()
-                    }
-                }
-                guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-                      abs(self.panel.frame.height - exact) >= 2,
-                      let exactFrame = self.panelFrame(size:
-                          NSSize(width: DashboardLayout.width, height: exact)) else {
-                    complete()
-                    return
-                }
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.17
-                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                    self.panel.animator().setFrame(exactFrame, display: true)
-                } completionHandler: { complete() }
             }
+            guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                  abs(self.panel.frame.height - target) >= 1,
+                  let destination = self.panelFrame(size: NSSize(
+                      width: DashboardLayout.width, height: target)) else {
+                finish()
+                return
+            }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = DashboardMotion.navigationResize
+                context.timingFunction = DashboardMotion.navigationSpringCurve
+                self.panel.animator().setFrame(destination, display: true)
+            } completionHandler: { finish() }
         }
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-              let targetFrame = panelFrame(size:
-                  NSSize(width: DashboardLayout.width, height: target)),
-              abs(panel.frame.height - target) >= 2 else {
-            finish()
-            return
-        }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = DashboardMotion.navigationResize
-            context.timingFunction = DashboardMotion.navigationSpringCurve
-            panel.animator().setFrame(targetFrame, display: true)
-        } completionHandler: { finish() }
     }
 
     private func animateDisclosure(applications: Bool, ssd: Bool) {
