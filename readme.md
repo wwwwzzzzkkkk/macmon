@@ -7,11 +7,11 @@
 
   原生 macOS 菜单栏监控工具 · 紧凑 Liquid Glass 面板 · 无需为基础功率监控授予管理员权限
 
-  [![ChipBar Release](https://img.shields.io/badge/ChipBar-v2.0.2-167f9f?style=flat-square)](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.2)
+  [![ChipBar Release](https://img.shields.io/badge/ChipBar-v2.0.3-167f9f?style=flat-square)](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.3)
   ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-555?style=flat-square)
   ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-555?style=flat-square)
 
-  **[下载最新版](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.2)** · **[功能与使用手册](apps/ChipBar/README.md)** · **[问题反馈](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+  **[下载最新版](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.3)** · **[功能与使用手册](apps/ChipBar/README.md)** · **[问题反馈](https://github.com/wwwwzzzzkkkk/macmon/issues)**
 </div>
 
 ---
@@ -45,7 +45,7 @@
 
 **方式一：下载应用**（Apple Silicon，macOS 13 或更高）
 
-前往 **[ChipBar 最新正式版本](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.2)**，下载 `ChipBar-macOS-arm64.zip`，解压后将 `ChipBar.app` 拖到“应用程序”，退出旧版后启动新版。ChipBar 使用独立安装的 [macmon](https://github.com/vladkens/macmon) 采集芯片指标。
+前往 **[ChipBar 最新正式版本](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.3)**，下载 `ChipBar-macOS-arm64.zip`，解压后将 `ChipBar.app` 拖到“应用程序”，退出旧版后启动新版。ChipBar 使用独立安装的 [macmon](https://github.com/vladkens/macmon) 采集芯片指标。
 
 **方式二：Homebrew（推荐，自动安装 macmon 依赖）**
 
