@@ -41,6 +41,12 @@ struct SSDSection: View {
             }.padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
                 .task(id: ssd.readings.map(\.id).joined(separator: ",")) {
                     guard !ssd.readings.isEmpty else { return }
+                    // Disk Arbitration and IOKit scans belong after the
+                    // window spring, not in the first frames of expansion.
+                    // Cancel automatically if the section is collapsed.
+                    do { try await Task.sleep(for: .milliseconds(560)) }
+                    catch { return }
+                    guard !Task.isCancelled else { return }
                     await activity.watch(ids: ssd.readings.map(\.id))
                 }
         }
