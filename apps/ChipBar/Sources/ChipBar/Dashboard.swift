@@ -202,6 +202,13 @@ struct Dashboard: View {
 
     }
 
+    /// Keep RAM capacity outside the shared ring box while leaving the
+    /// memory usage percentage and macOS pressure-colored stroke unchanged.
+    private var memoryCapacitySummary: String {
+        guard monitor.connected, let memory = monitor.sample?.memory else { return "内存 —" }
+        return String(format: "内存 %.1f/%.1f GB", memory.usedGiB, memory.totalGiB)
+    }
+
     @ViewBuilder private var hero: some View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("芯片合计功率").font(.subheadline).foregroundStyle(.secondary)
@@ -209,7 +216,15 @@ struct Dashboard: View {
                     AnimatedMetricValue(value: monitor.connected ? monitor.sample?.total : nil, decimals: 1)
                         .font(.system(size: 36, weight: .medium, design: .rounded)).monospacedDigit()
                     Text("W").font(.title3).foregroundStyle(.secondary)
-                    Spacer()
+                    Spacer(minLength: 4)
+                    Text(memoryCapacitySummary)
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .layoutPriority(-1)
+                        .help("系统内存已用容量 / 总容量")
                     Image(systemName: "bolt.fill").font(.title).foregroundStyle(accent.opacity(0.6))
                 }
                 Text("CPU + GPU + ANE · 非整机插座输入功率")
@@ -245,10 +260,7 @@ struct Dashboard: View {
             MetricRing(title: "内存占用",
                        percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
                        tint: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
-                       status: monitor.memoryPressure.title,
-                       detail: (monitor.connected ? monitor.sample?.memory : nil).map {
-                           String(format: "%.1f / %.1f GB", $0.usedGiB, $0.totalGiB)
-                       })
+                       status: monitor.memoryPressure.title)
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 7)
