@@ -1,9 +1,9 @@
 # ChipBar · Apple Silicon 菜单栏监控
 
-> **ChipBar v2.0.0** · macOS 13+ · Apple Silicon（arm64） · SwiftUI + AppKit  
+> **ChipBar v2.0.2** · macOS 13+ · Apple Silicon（arm64） · SwiftUI + AppKit  
 > 在一个 370 pt 的原生菜单栏面板中，查看功率、温度、CPU/GPU 活跃度、系统内存、应用排行和可选的外置 SSD 状态。
 
-**[返回产品主页](../../README.md)** · **[下载正式版](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.0)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+**[返回产品主页](../../README.md)** · **[下载正式版](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.2)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
 
 ## 产品截图
 
@@ -37,7 +37,7 @@ ChipBar 专为希望**在工作时随时了解 Mac 资源状态**的用户设计
 
 - **CPU 活跃度 / GPU 活跃度**：各以紧凑的 0–100% 圆环呈现，数字与弧线同步动画；不把功率 W 当作百分比。
 - **逐逻辑核心 CPU 利用率**：圆环下方显示每个逻辑核心的忙碌比例柱图，悬停查看当前百分比。仅在面板可见、未暂停时按所选间隔更新，不把编号当作性能核／能效核类型。
-- **系统 RAM**：内存圆环中央显示已用百分比，下方显示已用／总容量；环线颜色直接对应 macOS 内存压力（正常绿、偏高黄、紧张红，未知为中性色），已用比例高不等于内存压力高。原独立内存行已移除。
+- **系统 RAM**：内存圆环中央显示已用百分比；已用／总容量移至顶部芯片合计功率旁边的小号文字；环线颜色直接对应 macOS 内存压力（正常绿、偏高黄、紧张红，未知为中性色），已用比例高不等于内存压力高。原独立内存行已移除。
 - **CPU / GPU 温度**：显示 macmon 能提供的温度，无法读取时明确标为不可用。
 - **风扇转速**：显示有效的 RPM，多个风扇的值按实际读数展示。
 
