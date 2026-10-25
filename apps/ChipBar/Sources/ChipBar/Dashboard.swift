@@ -115,6 +115,7 @@ struct Dashboard: View {
             ApplicationUsageSection(monitor: monitor, state: state)
             trend
             systemMemory
+            StorageCapacitySection()
             Button {
                 state.showSystemDetails = true
             } label: {
@@ -123,7 +124,7 @@ struct Dashboard: View {
                         .foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("系统详情").font(.subheadline.weight(.medium))
-                        Text("内置储存 · 风扇 · 外接 SSD")
+                        Text("风扇 · SSD 温度 · SMART")
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 5)
@@ -161,8 +162,7 @@ struct Dashboard: View {
             }
             .padding(.vertical, 4)
 
-            Text("设备状态").font(.caption.weight(.medium)).foregroundStyle(.secondary)
-            InternalStorageSection()
+            Text("硬件状态").font(.caption.weight(.medium)).foregroundStyle(.secondary)
             fanOverview
             if monitor.ssd.enabled {
                 SSDSection(ssd: monitor.ssd, state: state)
@@ -176,7 +176,7 @@ struct Dashboard: View {
                 .padding(11)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
             }
-            Text("储存容量约每 30 秒更新，SSD 温度视设备与 SMART 支持情况而定。")
+            Text("内置及外接磁盘容量请直接查看主页「储存空间」。SSD 温度和 SMART 信息取决于设备支持情况。")
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
