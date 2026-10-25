@@ -261,12 +261,15 @@ struct Dashboard: View {
         HStack(spacing: 8) {
             PowerMetricCard(title: "CPU", power: monitor.sample?.cpu,
                             connected: monitor.connected, icon: "cpu",
-                            temperature: monitor.sample?.cpuTemperature, showsTemperature: true)
+                            temperature: monitor.sample?.cpuTemperature, showsTemperature: true,
+                            recentPowers: monitor.history.suffix(24).compactMap { $0.power(.cpu) })
             PowerMetricCard(title: "GPU", power: monitor.sample?.gpu,
                             connected: monitor.connected, icon: "square.stack.3d.up",
-                            temperature: monitor.sample?.gpuTemperature, showsTemperature: true)
+                            temperature: monitor.sample?.gpuTemperature, showsTemperature: true,
+                            recentPowers: monitor.history.suffix(24).compactMap { $0.power(.gpu) })
             PowerMetricCard(title: "ANE", power: monitor.sample?.ane,
-                            connected: monitor.connected, icon: "sparkles")
+                            connected: monitor.connected, icon: "sparkles",
+                            recentPowers: monitor.history.suffix(24).compactMap { $0.power(.ane) })
         }
     }
 
