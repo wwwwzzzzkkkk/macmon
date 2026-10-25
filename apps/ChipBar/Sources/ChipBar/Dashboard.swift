@@ -110,7 +110,6 @@ struct Dashboard: View {
             header
             hero
             powerCards
-            utilizationOverview
             CPUCoreUsageSection(samplingInterval: monitor.interval,
                                 active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
             ApplicationUsageSection(monitor: monitor, state: state)
@@ -233,38 +232,30 @@ struct Dashboard: View {
 
     }
 
+    /// Three matching cards keep wattage primary and the bounded occupancy
+    /// gauges in equally sized top-trailing slots. No second ring row.
     @ViewBuilder private var powerCards: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             PowerMetricCard(title: "CPU", power: monitor.sample?.cpu,
                             connected: monitor.connected, icon: "cpu",
+                            ringTitle: "CPU 占用", ringCaption: "占用",
+                            utilization: monitor.sample?.cpuUtilization, ringTint: accent,
                             temperature: monitor.sample?.cpuTemperature, showsTemperature: true,
                             recentPowers: monitor.history.suffix(24).compactMap { $0.power(.cpu) })
             PowerMetricCard(title: "GPU", power: monitor.sample?.gpu,
                             connected: monitor.connected, icon: "square.stack.3d.up",
+                            ringTitle: "GPU 占用", ringCaption: "占用",
+                            utilization: monitor.sample?.gpuUtilization, ringTint: accent.opacity(0.78),
                             temperature: monitor.sample?.gpuTemperature, showsTemperature: true,
                             recentPowers: monitor.history.suffix(24).compactMap { $0.power(.gpu) })
             PowerMetricCard(title: "ANE", power: monitor.sample?.ane,
                             connected: monitor.connected, icon: "sparkles",
+                            ringTitle: "内存占用", ringCaption: "内存",
+                            utilization: monitor.sample?.memory?.usedPercent,
+                            ringTint: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
+                            ringStatus: monitor.memoryPressure.title,
                             recentPowers: monitor.history.suffix(24).compactMap { $0.ane })
         }
-    }
-
-    /// Percentage-based rings, unlike power values which have no universal
-    /// 100% wattage. One restrained accent family preserves Liquid Glass contrast.
-    private var utilizationOverview: some View {
-        HStack(alignment: .top, spacing: 8) {
-            MetricRing(title: "CPU 占用", percentage: monitor.connected ? monitor.sample?.cpuUtilization : nil,
-                       tint: accent)
-            MetricRing(title: "GPU 占用", percentage: monitor.connected ? monitor.sample?.gpuUtilization : nil,
-                       tint: accent.opacity(0.78))
-            MetricRing(title: "内存占用",
-                       percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
-                       tint: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
-                       status: monitor.memoryPressure.title)
-        }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 7)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder private var trend: some View {
