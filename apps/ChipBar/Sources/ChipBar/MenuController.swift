@@ -139,13 +139,15 @@ import ChipBarCore
         // before the panel is presented, so it cannot queue stale navigation.
         disclosureSubscription = dashboardState.$showApplications.combineLatest(dashboardState.$showSSDDetails)
             .dropFirst()
-            .sink { [weak self] _ in self?.animateDisclosure() }
+            .sink { [weak self] apps, ssd in
+                self?.animateDisclosure(applications: apps, ssd: ssd)
+            }
         settingsNavigationSubscription = dashboardState.$showSettings
             .dropFirst()
             .sink { [weak self] _ in self?.navigateSettings() }
         systemDisclosureSubscription = dashboardState.$showSystemDetails
             .dropFirst()
-            .sink { [weak self] _ in self?.animateSystemDisclosure() }
+            .sink { [weak self] expanded in self?.animateSystemDisclosure(expanding: expanded) }
     }
 
     private func navigateSettings(resetScroll: Bool = true) {
@@ -227,7 +229,7 @@ import ChipBarCore
     /// screen-capped; after one cycle both actual heights are cached. The
     /// destination is remeasured once the content spring settles, with a small
     /// corrective animation only if required.
-    private func animateSystemDisclosure() {
+    private func animateSystemDisclosure(expanding expanded: Bool) {
         guard dashboardMounted, panelRequestedVisible, !dashboardState.showSettings else { return }
         navigationTask?.cancel()
         navigationTask = nil
@@ -238,7 +240,6 @@ import ChipBarCore
         navigationViewportHeight = nil
         resetScrollForPage = false
 
-        let expanded = dashboardState.showSystemDetails
         if expanded {
             systemCollapsedDocumentHeight = measuredHeight
         } else {
@@ -310,9 +311,9 @@ import ChipBarCore
         } completionHandler: { finish() }
     }
 
-    private func animateDisclosure() {
-        let target = (applications: dashboardState.showApplications ? 1.0 : 0.0,
-                      ssd: dashboardState.showSSDDetails ? 1.0 : 0.0)
+    private func animateDisclosure(applications: Bool, ssd: Bool) {
+        let target = (applications: applications ? 1.0 : 0.0,
+                      ssd: ssd ? 1.0 : 0.0)
         let start = currentDisclosureValues()
         guard dashboardMounted, panelRequestedVisible, !dashboardState.showSettings,
               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
