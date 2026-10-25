@@ -13,12 +13,12 @@ import ChipBarCore
                                                 name: "External System",
                                                 total: 1_000_000_000_000,
                                                 available: 350_000_000_000, apfs: true))
-        let internal = try #require(DiskVolumeSpace(id: "/System/Volumes/Data",
+        let systemVolume = try #require(DiskVolumeSpace(id: "/System/Volumes/Data",
                                                   name: "Internal",
                                                   total: 512_000_000_000,
                                                   available: 90_000_000_000, apfs: true))
         let snapshot = DiskActivitySnapshot(
-            volumes: ["disk5": [data, system], "disk0": [internal]],
+            volumes: ["disk5": [data, system], "disk0": [systemVolume]],
             connected: ["disk5", "disk0"],
             external: ["disk5"]
         )
