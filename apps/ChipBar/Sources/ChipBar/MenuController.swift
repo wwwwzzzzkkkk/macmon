@@ -384,6 +384,26 @@ import ChipBarCore
         }
     }
 
+    /// Lock the AppKit glass and its SwiftUI content to one effective
+    /// system appearance for the entire menu-panel session. NSPanel may
+    /// acquire/relinquish key focus when a Picker is opened; that should not
+    /// temporarily repaint one page dark and the next page light.
+    private func synchronizeAppearanceForOpen() {
+        let requested: NSAppearance.Name
+        if CommandLine.arguments.contains("--light") {
+            requested = .aqua
+        } else if CommandLine.arguments.contains("--dark") {
+            requested = .darkAqua
+        } else {
+            let match = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+            requested = match == .darkAqua ? .darkAqua : .aqua
+        }
+        guard let appearance = NSAppearance(named: requested) else { return }
+        panel.appearance = appearance
+        panelMaterial.appearance = appearance
+        hostingView.appearance = appearance
+    }
+
     @objc private func togglePanel() {
         recordMouseQA("buttonAction")
         let shouldOpen = mouseDownTarget ?? !panelRequestedVisible
@@ -393,6 +413,7 @@ import ChipBarCore
         if !shouldOpen { hidePanel(); return }
         guard let (rect, screen) = anchor() else { return }
         maximumHeight = max(250, min(rect.minY - 6, screen.visibleFrame.maxY - 6) - screen.visibleFrame.minY - 8)
+        synchronizeAppearanceForOpen()
         // Restore the initial dashboard on EVERY opening, including a rapid
         // close -> reopen while the NSPanel fade-out is still in progress.
         layoutCoordinator.cancelPending()
