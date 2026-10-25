@@ -68,20 +68,18 @@ struct Dashboard: View {
         _state = StateObject(wrappedValue: state ?? DashboardState(showSettings: showSettings))
     }
 
+    private var showsDeviceAndSettings: Bool {
+        state.showSettings || state.showSystemDetails
+    }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
-            if state.showSettings {
+            if showsDeviceAndSettings {
                 settingsScreen
                     .transition(reduceMotion ? .opacity :
                         .asymmetric(
                             insertion: .offset(x: 18).combined(with: .opacity),
                             removal: .offset(x: 18).combined(with: .opacity)))
-            } else if state.showSystemDetails {
-                systemDetailScreen
-                    .transition(reduceMotion ? .opacity :
-                        .asymmetric(
-                            insertion: .offset(x: 16).combined(with: .opacity),
-                            removal: .offset(x: 16).combined(with: .opacity)))
             } else {
                 monitoringScreen
                     .transition(reduceMotion ? .opacity :
@@ -100,10 +98,11 @@ struct Dashboard: View {
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .buttonStyle(ChipBarPressStyle())
+        // One navigation state and one animation transaction: having a second
+        // animation for the old System page could briefly restyle the material
+        // during Settings transitions.
         .animation(ChipBarMotion.optional(ChipBarMotion.navigation, reduceMotion: reduceMotion),
-                   value: state.showSettings)
-        .animation(ChipBarMotion.optional(ChipBarMotion.navigation, reduceMotion: reduceMotion),
-                   value: state.showSystemDetails)
+                   value: showsDeviceAndSettings)
     }
 
     private var monitoringScreen: some View {
@@ -116,27 +115,6 @@ struct Dashboard: View {
             trend
             systemMemory
             StorageCapacitySection()
-            Button {
-                state.showSystemDetails = true
-            } label: {
-                HStack(spacing: 9) {
-                    Image(systemName: "internaldrive")
-                        .foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("系统详情").font(.subheadline.weight(.medium))
-                        Text("风扇 · SSD 温度 · SMART")
-                            .font(.caption2).foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 5)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                }
-                .contentShape(Rectangle())
-                .padding(10)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
-            }
-            .buttonStyle(ChipBarPressStyle())
-            .accessibilityLabel("打开系统详情页面")
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
             footer
@@ -144,31 +122,24 @@ struct Dashboard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var systemDetailScreen: some View {
+    /// The only secondary page: system facts, hardware details and settings.
+    /// Home remains compact, with internal/external storage space bars.
+    private var settingsScreen: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Button { state.showSystemDetails = false } label: {
-                    Label("返回", systemImage: "chevron.left")
-                        .font(.subheadline.weight(.medium))
-                }
-                .buttonStyle(ChipBarPressStyle())
-                .accessibilityLabel("返回监控主页")
+            settingsNavigation
+            MacHardwareInformationSection(
+                chip: monitor.sample?.chip ?? monitor.hardware)
+            HStack {
+                Label("硬件状态", systemImage: "cpu")
+                    .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text("系统详情").font(.headline)
-                Spacer()
-                Image(systemName: "internaldrive")
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
             }
-            .padding(.vertical, 4)
-
-            Text("硬件状态").font(.caption.weight(.medium)).foregroundStyle(.secondary)
             fanOverview
             if monitor.ssd.enabled {
                 SSDSection(ssd: monitor.ssd, state: state)
             } else {
-                HStack(spacing: 9) {
-                    Label("外接 SSD", systemImage: "externaldrive")
+                HStack(spacing: 8) {
+                    Label("外接 SSD 状态", systemImage: "externaldrive")
                     Spacer()
                     Text("监控未启用").foregroundStyle(.secondary)
                 }
@@ -176,16 +147,6 @@ struct Dashboard: View {
                 .padding(11)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
             }
-            Text("内置及外接磁盘容量请直接查看主页「储存空间」。SSD 温度和 SMART 信息取决于设备支持情况。")
-                .font(.caption2).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var settingsScreen: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            settingsNavigation
             settingsPanel
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -194,7 +155,8 @@ struct Dashboard: View {
     private var settingsNavigation: some View {
         HStack(spacing: 10) {
             Button {
-                state.showSettings = false
+                if state.showSettings { state.showSettings = false }
+                else { state.showSystemDetails = false }
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "chevron.left").font(.caption.weight(.semibold))
@@ -206,7 +168,7 @@ struct Dashboard: View {
             .accessibilityLabel("返回监控面板")
 
             Spacer()
-            Text("设置").font(.headline)
+            Text("设备与设置").font(.headline)
             Spacer()
             Image(systemName: "gearshape")
                 .foregroundStyle(.secondary)
@@ -490,11 +452,11 @@ struct Dashboard: View {
             HStack {
                 Button { state.showSettings = true } label: {
                     HStack(spacing: 6) {
-                        Label("设置", systemImage: "slider.horizontal.3")
+                        Label("设备与设置", systemImage: "slider.horizontal.3")
                         Image(systemName: "chevron.right").font(.caption2)
                     }
                 }
-                .accessibilityLabel("打开设置页面")
+                .accessibilityLabel("打开设备信息与设置页面")
                 Spacer()
                 Button(monitor.paused ? "继续" : "暂停") { monitor.togglePause() }
                 Button("退出") { monitor.stop(forQuit: true); NSApplication.shared.terminate(nil) }
