@@ -28,22 +28,46 @@ struct PowerMetricCard: View {
     let power: Double?
     let connected: Bool
     let icon: String
+    /// Only CPU/GPU cards have a temperature. ANE keeps the same height.
+    var temperature: Double? = nil
+    var showsTemperature = false
+
+    private var temperatureText: String {
+        guard connected, let temperature, temperature.isFinite else { return "—°C" }
+        return String(format: "%.1f°C", temperature)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(title, systemImage: icon)
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
                 AnimatedMetricValue(value: connected ? power : nil)
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
-                Text("W").font(.caption2).foregroundStyle(.secondary)
+                    .layoutPriority(1)
+                Text("W")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                if showsTemperature {
+                    Spacer(minLength: 1)
+                    Text(temperatureText)
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                        .help("\(title) 温度：\(temperatureText)")
+                }
             }
+            .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(9)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title) 功率 \(connected && power != nil ? String(format: "%.1f", power!) : "不可用") W"
+                            + (showsTemperature ? "，温度 \(temperatureText)" : ""))
     }
 }
 
