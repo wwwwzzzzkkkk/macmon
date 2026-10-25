@@ -269,7 +269,7 @@ struct Dashboard: View {
                             recentPowers: monitor.history.suffix(24).compactMap { $0.power(.gpu) })
             PowerMetricCard(title: "ANE", power: monitor.sample?.ane,
                             connected: monitor.connected, icon: "sparkles",
-                            recentPowers: monitor.history.suffix(24).compactMap { $0.power(.ane) })
+                            recentPowers: monitor.history.suffix(24).compactMap { $0.ane })
         }
     }
 
