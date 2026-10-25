@@ -57,55 +57,55 @@ struct PowerMetricCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 6) {
             // Left: name / wattage / temperature. Right: an equal-height ring.
             // Separate columns prevent the gauge from covering CPU/GPU titles.
-            HStack(alignment: .center, spacing: 4) {
-                VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .center, spacing: 5) {
+                VStack(alignment: .leading, spacing: 4) {
                     Label(title, systemImage: icon)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                        .frame(height: 13, alignment: .leading)
+                        .frame(height: 14, alignment: .leading)
 
                     HStack(alignment: .firstTextBaseline, spacing: 1) {
                         AnimatedMetricValue(value: connected ? power : nil)
-                            .font(.system(size: 19, weight: .semibold, design: .rounded))
+                            .font(.system(size: 21, weight: .semibold, design: .rounded))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.63)
+                            .minimumScaleFactor(0.7)
                             .layoutPriority(1)
                         Text("W")
-                            .font(.system(size: 9, weight: .medium, design: .rounded))
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
                             .foregroundStyle(.secondary)
                     }
-                    .frame(height: 23, alignment: .leading)
+                    .frame(height: 27, alignment: .leading)
 
                     Text(showsTemperature ? temperatureText : " ")
-                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                        .frame(height: 11, alignment: .leading)
+                        .frame(height: 12, alignment: .leading)
                         .opacity(showsTemperature ? 1 : 0)
                         .help(showsTemperature ? "\(title) 温度：\(temperatureText)" : "")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(height: 56, alignment: .center)
+                .frame(height: 62, alignment: .center)
 
                 MetricRing(title: ringTitle, caption: ringCaption,
                            percentage: connected ? utilization : nil,
                            tint: ringTint, status: ringStatus)
             }
-            .frame(height: 56)
+            .frame(height: 62)
 
             PowerSparkline(values: recentPowers)
-                .frame(height: 14)
+                .frame(height: 17)
                 .accessibilityHidden(true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(8)
+        .padding(9)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title) 功率 \(powerDescription)，\(ringTitle) \(usageDescription)" +
