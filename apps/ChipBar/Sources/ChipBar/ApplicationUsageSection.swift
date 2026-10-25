@@ -118,6 +118,9 @@ struct ApplicationUsageSection: View {
                                 }
                             }
                             .frame(height: 2)
+                            // Rank number (15pt) + HStack spacing (7pt):
+                            // start the usage track at the icon's left edge.
+                            .padding(.leading, 22)
                             .accessibilityHidden(true)
                         }
                         .frame(height: 28)
