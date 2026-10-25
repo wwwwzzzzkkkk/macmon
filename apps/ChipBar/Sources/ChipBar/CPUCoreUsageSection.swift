@@ -5,6 +5,28 @@ struct CPUCoreUsageSection: View {
     let active: Bool
     @StateObject private var model = CPUCoreLoadModel.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let topology = CPUCoreTopology.current
+
+    private var coreSummary: String {
+        let names = topology.levels.map { "\($0.shortTitle) \($0.count)" }
+        return names.isEmpty
+            ? (model.hasSample ? "\(model.values.count) 个逻辑核心" : "正在采样…")
+            : names.joined(separator: " · ")
+    }
+
+    private func coreShortName(_ id: Int) -> String {
+        switch topology.namesByLogicalID[id] {
+        case "超级核": return "超"
+        case "性能核": return "大"
+        case "能效核": return "能"
+        default: return "\(id + 1)"
+        }
+    }
+
+    private func fullCoreName(_ id: Int) -> String {
+        topology.namesByLogicalID[id] ?? "类型未确认"
+    }
+
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -12,7 +34,7 @@ struct CPUCoreUsageSection: View {
                 Label("CPU 各核心占用", systemImage: "cpu")
                     .font(.caption.weight(.medium))
                 Spacer()
-                Text(model.hasSample ? "\(model.values.count) 个逻辑核心" : "正在采样…")
+                Text(coreSummary)
                     .font(.caption2).foregroundStyle(.secondary)
             }
             HStack(alignment: .bottom, spacing: 2) {
@@ -33,13 +55,15 @@ struct CPUCoreUsageSection: View {
                                 .frame(maxWidth: 9)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                             }.frame(height: 30)
-                            Text("\(index + 1)").font(.system(size: 8, weight: .medium))
+                            Text(coreShortName(index))
+                                .font(.system(size: 8, weight: .medium))
                                 .foregroundStyle(.secondary).lineLimit(1)
+                                .help("逻辑核心 \(index + 1) · \(fullCoreName(index))")
                         }
                         .frame(maxWidth: .infinity)
-                        .help("逻辑核心 \(index + 1)：\(Int(percent.rounded()))%")
+                        .help("逻辑核心 \(index + 1) · \(fullCoreName(index))：\(Int(percent.rounded()))%")
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("逻辑核心 \(index + 1)")
+                        .accessibilityLabel("逻辑核心 \(index + 1) · \(fullCoreName(index))")
                         .accessibilityValue("\(Int(percent.rounded()))%")
                     }
                 }
