@@ -76,6 +76,12 @@ struct Dashboard: View {
                         .asymmetric(
                             insertion: .offset(x: 18).combined(with: .opacity),
                             removal: .offset(x: 18).combined(with: .opacity)))
+            } else if state.showSystemDetails {
+                systemDetailScreen
+                    .transition(reduceMotion ? .opacity :
+                        .asymmetric(
+                            insertion: .offset(x: 16).combined(with: .opacity),
+                            removal: .offset(x: 16).combined(with: .opacity)))
             } else {
                 monitoringScreen
                     .transition(reduceMotion ? .opacity :
@@ -96,6 +102,8 @@ struct Dashboard: View {
         .buttonStyle(ChipBarPressStyle())
         .animation(ChipBarMotion.optional(ChipBarMotion.navigation, reduceMotion: reduceMotion),
                    value: state.showSettings)
+        .animation(ChipBarMotion.optional(ChipBarMotion.navigation, reduceMotion: reduceMotion),
+                   value: state.showSystemDetails)
     }
 
     private var monitoringScreen: some View {
@@ -107,28 +115,72 @@ struct Dashboard: View {
             ApplicationUsageSection(monitor: monitor, state: state)
             trend
             systemMemory
-            ChipBarSectionToggle(title: "系统详情", systemImage: "square.stack.3d.up",
-                                 expanded: state.showSystemDetails) {
-                // Animate the chevron and NSPanel height, but do not animate
-                // SwiftUI's intrinsic document height at the same time.
-                // Competing layout springs previously shifted the full view.
-                withTransaction(Transaction(animation: nil)) {
-                    state.showSystemDetails.toggle()
+            Button {
+                state.showSystemDetails = true
+            } label: {
+                HStack(spacing: 9) {
+                    Image(systemName: "internaldrive")
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("系统详情").font(.subheadline.weight(.medium))
+                        Text("内置储存 · 风扇 · 外接 SSD")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 5)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 }
+                .contentShape(Rectangle())
+                .padding(10)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
             }
-            if state.showSystemDetails {
-                VStack(alignment: .leading, spacing: 9) {
-                    InternalStorageSection()
-                    fanOverview
-                    SSDSection(ssd: monitor.ssd, state: state)
-                }
-                // Keep content in its final position; the glass viewport
-                // handles expansion. No top-offset transition / vertical hop.
-                .transition(.opacity)
-            }
+            .buttonStyle(ChipBarPressStyle())
+            .accessibilityLabel("打开系统详情页面")
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
             footer
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var systemDetailScreen: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Button { state.showSystemDetails = false } label: {
+                    Label("返回", systemImage: "chevron.left")
+                        .font(.subheadline.weight(.medium))
+                }
+                .buttonStyle(ChipBarPressStyle())
+                .accessibilityLabel("返回监控主页")
+                Spacer()
+                Text("系统详情").font(.headline)
+                Spacer()
+                Image(systemName: "internaldrive")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 4)
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text("内置储存").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                InternalStorageSection()
+            }
+            fanOverview
+            if monitor.ssd.enabled {
+                SSDSection(ssd: monitor.ssd, state: state)
+            } else {
+                HStack(spacing: 9) {
+                    Label("外接 SSD", systemImage: "externaldrive")
+                    Spacer()
+                    Text("监控未启用").foregroundStyle(.secondary)
+                }
+                .font(.subheadline)
+                .padding(11)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
+            }
+            Text("储存容量约每 30 秒更新，SSD 温度视设备与 SMART 支持情况而定。")
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
