@@ -6,6 +6,10 @@ struct MetricRing: View {
     let title: String
     let percentage: Double?
     let tint: Color
+    /// Optional memory pressure status and RAM usage, shown in the compact
+    /// ring itself instead of an additional full-width memory row.
+    var status: String? = nil
+    var detail: String? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -41,10 +45,27 @@ struct MetricRing: View {
             }
             .frame(width: 52, height: 52)
             .accessibilityHidden(true)
+            if let status {
+                Text(status)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+            }
+            if let detail {
+                Text(detail)
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .help(detail)
+            }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .top)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title)：\(percentage.map { String(format: "%.0f%%", $0) } ?? "不可用")")
+        .accessibilityLabel("\(title)：\(percentage.map { String(format: "%.0f%%", $0) } ?? "不可用")" +
+                            (status.map { "，内存压力\($0)" } ?? "") +
+                            (detail.map { "，\($0)" } ?? ""))
     }
 }
 
