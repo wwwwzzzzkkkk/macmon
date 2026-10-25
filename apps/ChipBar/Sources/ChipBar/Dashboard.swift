@@ -109,8 +109,10 @@ struct Dashboard: View {
             systemMemory
             ChipBarSectionToggle(title: "系统详情", systemImage: "square.stack.3d.up",
                                  expanded: state.showSystemDetails) {
-                withAnimation(ChipBarMotion.optional(ChipBarMotion.disclosure,
-                                                     reduceMotion: reduceMotion)) {
+                // Animate the chevron and NSPanel height, but do not animate
+                // SwiftUI's intrinsic document height at the same time.
+                // Competing layout springs previously shifted the full view.
+                withTransaction(Transaction(animation: nil)) {
                     state.showSystemDetails.toggle()
                 }
             }
@@ -120,9 +122,9 @@ struct Dashboard: View {
                     fanOverview
                     SSDSection(ssd: monitor.ssd, state: state)
                 }
-                .transition(reduceMotion ? .opacity :
-                    .asymmetric(insertion: .opacity.combined(with: .move(edge: .top)),
-                                removal: .opacity.combined(with: .move(edge: .top))))
+                // Keep content in its final position; the glass viewport
+                // handles expansion. No top-offset transition / vertical hop.
+                .transition(.opacity)
             }
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
