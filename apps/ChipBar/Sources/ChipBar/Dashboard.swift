@@ -115,7 +115,6 @@ struct Dashboard: View {
                                 active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
             ApplicationUsageSection(monitor: monitor, state: state)
             trend
-            systemMemory
             StorageCapacitySection()
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
@@ -243,8 +242,13 @@ struct Dashboard: View {
                        tint: accent)
             MetricRing(title: "GPU 占用", percentage: monitor.connected ? monitor.sample?.gpuUtilization : nil,
                        tint: accent.opacity(0.78))
-            MetricRing(title: "内存", percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
-                       tint: accent.opacity(0.60))
+            MetricRing(title: "内存占用",
+                       percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
+                       tint: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
+                       status: monitor.memoryPressure.title,
+                       detail: (monitor.connected ? monitor.sample?.memory : nil).map {
+                           String(format: "%.1f / %.1f GB", $0.usedGiB, $0.totalGiB)
+                       })
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 7)
@@ -285,22 +289,6 @@ struct Dashboard: View {
                 }.font(.caption2).foregroundStyle(.secondary)
             }
 
-    }
-
-    @ViewBuilder private var systemMemory: some View {
-        HStack {
-            Label("内存", systemImage: "memorychip")
-            Spacer(minLength: 8)
-            if let memory = monitor.connected ? monitor.sample?.memory : nil {
-                Text(String(format: "%.1f / %.1f GB · %.0f%%", memory.usedGiB, memory.totalGiB, memory.usedPercent))
-                    .lineLimit(1).minimumScaleFactor(0.85)
-            } else {
-                Text("不可用").foregroundStyle(.secondary)
-            }
-            MemoryPressureBadge(level: monitor.memoryPressure)
-        }
-        .font(.subheadline).monospacedDigit()
-        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder private var errorPanel: some View {
@@ -499,32 +487,3 @@ struct Dashboard: View {
     }
 }
 
-private struct MemoryPressureBadge: View {
-    let level: MemoryPressureLevel
-
-    private let colors: [Color] = [.green, .yellow, .red]
-    private var activeIndex: Int? {
-        switch level {
-        case .normal: return 0
-        case .warning: return 1
-        case .critical: return 2
-        case .unknown: return nil
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 5) {
-            HStack(spacing: 2) {
-                ForEach(colors.indices, id: \.self) { index in
-                    Capsule().fill(index == activeIndex ? colors[index] : colors[index].opacity(0.22))
-                        .frame(width: 7, height: 4)
-                }
-            }
-            Text(level.title).font(.caption2.weight(.medium)).foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 7).padding(.vertical, 5)
-        .background(.quaternary, in: Capsule())
-        .accessibilityLabel("系统内存压力：\(level.title)")
-        .help("系统内存压力：\(level.title)")
-    }
-}
