@@ -35,7 +35,7 @@ actor DiskActivitySampler {
     private var lastCapacity: Double = -.infinity
     private var identities: [String: UInt64] = [:]
 
-    func sampleAll() -> DiskActivitySnapshot {
+    func sampleAll(includeVolumes: Bool = false) -> DiskActivitySnapshot {
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOMedia"), &iterator) == KERN_SUCCESS else { return DiskActivitySnapshot() }
         defer { IOObjectRelease(iterator) }
@@ -49,7 +49,7 @@ actor DiskActivitySampler {
             defer { IOObjectRelease(parent) }
             if IOObjectConformsTo(parent, "IOBlockStorageDriver") != 0 { ids.append(id) }
         }
-        return sample(ids: ids.sorted(), externalOnly: false, includeVolumes: false)
+        return sample(ids: ids.sorted(), externalOnly: false, includeVolumes: includeVolumes)
     }
 
     func sample(ids: [String], externalOnly: Bool = true, includeVolumes: Bool = true) -> DiskActivitySnapshot {
