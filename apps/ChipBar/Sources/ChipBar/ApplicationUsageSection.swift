@@ -80,8 +80,7 @@ struct ApplicationUsageSection: View {
             if !rows.isEmpty {
                 VStack(spacing: 0) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        VStack(spacing: 2) {
-                            HStack(spacing: 7) {
+                        HStack(spacing: 7) {
                                 Text("\(index + 1)").monospacedDigit()
                                     .foregroundStyle(.secondary)
                                     .frame(width: 15)
@@ -106,23 +105,7 @@ struct ApplicationUsageSection: View {
                                     .monospacedDigit()
                                     .foregroundStyle(.primary)
                             }
-                            .font(.caption)
-                            .frame(height: 21)
-                            GeometryReader { geometry in
-                                ZStack(alignment: .leading) {
-                                    Capsule().fill(Color.primary.opacity(0.055))
-                                    Capsule().fill(Color.accentColor.opacity(0.55))
-                                        .frame(width: geometry.size.width * min(1, max(0,
-                                            (value(row, metric: metric) ?? 0) /
-                                            max(value(rows[0], metric: metric) ?? 1, 0.0001))))
-                                }
-                            }
-                            .frame(height: 2)
-                            // Rank number (15pt) + HStack spacing (7pt):
-                            // start the usage track at the icon's left edge.
-                            .padding(.leading, 22)
-                            .accessibilityHidden(true)
-                        }
+                        .font(.caption)
                         .frame(height: 28)
                         .opacity(index < 3 ? 1 : state.applicationsExpansion)
                         .accessibilityElement(children: .combine)
