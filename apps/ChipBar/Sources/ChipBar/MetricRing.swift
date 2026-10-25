@@ -57,7 +57,7 @@ struct MetricRing: View {
                 .help([status, detail].compactMap { $0 }.joined(separator: " · "))
         }
         .frame(maxWidth: .infinity, alignment: .top)
-        .frame(height: 84, alignment: .top)
+        .frame(height: 90, alignment: .top)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title)：\(percentage.map { String(format: "%.0f%%", $0) } ?? "不可用")" +
                             (status.map { "，内存压力\($0)" } ?? "") +
