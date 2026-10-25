@@ -237,7 +237,7 @@ struct Dashboard: View {
     /// Percentage-based rings, unlike power values which have no universal
     /// 100% wattage. One restrained accent family preserves Liquid Glass contrast.
     private var utilizationOverview: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             MetricRing(title: "CPU 占用", percentage: monitor.connected ? monitor.sample?.cpuUtilization : nil,
                        tint: accent)
             MetricRing(title: "GPU 占用", percentage: monitor.connected ? monitor.sample?.gpuUtilization : nil,
