@@ -16,6 +16,15 @@ Keep original two-line status-bar design, signature watts typography and restrai
 4. **Motion stability** — preserve the existing animated settings navigation and AppKit window-height easing; wait for the new section spring to settle before measuring, prevent jumping to the top for system disclosure, and preserve scroll offsets.
 5. **Automated checks** — unit coverage for sample bursts, scroll deferral and cancelling stale resize requests; existing UI QA checks settings round-trip, disclosure frame integrity and interrupted navigation.
 
+## Home storage capacity grouping and icon-aligned application tracks
+
+- **Home Storage overview:** Built-in macOS boot storage and all *mounted external disk volumes* show availability, used amount, total filesystem capacity and a thin used-space progress track in **one common card**. Capacity is visible immediately on Home, not gated behind System Details or SSD details.
+- **Reliable data without SMART:** Internal storage uses macOS APFS Data capacity with internal-device verification. External capacity comes from IOKit + Disk Arbitration rather than from optional `smartctl`, so turning off SSD temperature monitoring does not hide storage space. Both caches refresh around every 30 seconds while visible. Readings do not require administrator rights.
+- **APFS shared space:** Shared APFS volumes on the same physical disk with identical reported capacities are displayed only once; never add those filesystem totals together. If independent external volumes exist, show a separate track for each. If none is mounted, indicate that instead of guessing a capacity.
+- **Secondary System Details:** Reserved for fans, SSD temperature, disk I/O speed and optional SMART sensors / health. Duplicate capacity labels and redundant volume scans have been removed.
+- **Application rank track alignment:** each usage strip begins exactly at the left edge of the 15pt application icon after the 15pt rank number and 7pt HStack spacing. No change to data sampling or layered CPU/GPU/memory/ANE transitions.
+- **Validation:** core formatting, macOS volume access and APFS grouping tests; CI build plus actual Mac mini visual check. Disk utility's capacity figures can differ from APFS purgeable space or system storage categories.
+
 ## New 2.0 UX preview — system page and layered app switch
 
 This iteration implements the user-approved Stats-inspired information hierarchy while retaining ChipBar's own 370-pt Liquid Glass style and monitoring semantics:
