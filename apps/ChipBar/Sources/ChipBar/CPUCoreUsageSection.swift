@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CPUCoreUsageSection: View {
     let samplingInterval: Int
+    let active: Bool
     @StateObject private var model = CPUCoreLoadModel.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -46,6 +47,9 @@ struct CPUCoreUsageSection: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 9)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
-        .task(id: samplingInterval) { await model.watch(intervalMillis: samplingInterval) }
+        .task(id: "\(samplingInterval)-\(active)") {
+            guard active else { return }
+            await model.watch(intervalMillis: samplingInterval)
+        }
     }
 }
