@@ -16,6 +16,19 @@ Keep original two-line status-bar design, signature watts typography and restrai
 4. **Motion stability** — preserve the existing animated settings navigation and AppKit window-height easing; wait for the new section spring to settle before measuring, prevent jumping to the top for system disclosure, and preserve scroll offsets.
 5. **Automated checks** — unit coverage for sample bursts, scroll deferral and cancelling stale resize requests; existing UI QA checks settings round-trip, disclosure frame integrity and interrupted navigation.
 
+## New 2.0 UX preview — system page and layered app switch
+
+This iteration implements the user-approved Stats-inspired information hierarchy while retaining ChipBar's own 370-pt Liquid Glass style and monitoring semantics:
+
+- **Home** — CPU/GPU/ANE power cards now include slim, bounded micro-sparklines sourced from actual recent power samples; utilization rings, application activity, main 10-minute trend, memory pressure, and a compact chevron navigation card remain visible.
+- **System Details** — no longer grows a disclosure under the Home page. A dedicated page with a native Back button contains built-in storage, fan and enabled external SSD status (including optional SMART details). Uses the **same fixed AppKit viewport height** as Home, so switching pages does not trigger a separate NSPanel resize or vertical jump.
+- **Settings** — same fixed-size navigation behavior and native inertial scrolling, with independent navigation crossfade. The clip view resets to its top when changing pages; history and user preferences are preserved.
+- **CPU/GPU/Memory/ANE** — each metric has an independently keyed ranking view with the *correct metric data*. Switching triggers a 280 ms layered transition: the outgoing list recedes to 94% and fades behind, while the incoming list appears above from a 14-point upward offset with a slight scale. The segmented choice retains its spring-moving selection highlight. Reduced Motion disables the spatial transition.
+- **Ranked applications** — real app icons are cached (not decoded every power sample), name/number retain consistent geometry, and small per-metric normalized value tracks highlight relative use. Ranking viewport stays fixed at 3/5 row heights so sampling and metric changes do not resize the glass popup.
+- **Performance** — curves are limited to the last 24 samples with a single Path per card; no extra system polling. Existing shared sampling and scroll-quiet layout coordination remain intact.
+
+This is a **developer preview**, not stable. Real M5 Pro high-refresh-rate evaluation remains necessary, particularly rapid back-and-forth metric switching, Settings/Home/System navigation, process icon first loading and full-height trackpad scrolling. All sample rates and monitoring data source semantics are unchanged.
+
 ## M5 Pro user testing: confirmed and follow-up corrections
 
 The user has checked all six baseline interaction criteria on the first 2.0 preview: quick Settings/Back cycling, smooth System Details frame movement, native trackpad scrolling, updates during scroll, animated rings synchronized with numbers, and dark/light/Reduce Motion compatibility.
