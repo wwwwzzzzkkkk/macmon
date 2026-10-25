@@ -31,6 +31,7 @@ struct PowerMetricCard: View {
     /// Only CPU/GPU cards have a temperature. ANE keeps the same height.
     var temperature: Double? = nil
     var showsTemperature = false
+    var recentPowers: [Double] = []
 
     private var temperatureText: String {
         guard connected, let temperature, temperature.isFinite else { return "—°C" }
@@ -61,6 +62,9 @@ struct PowerMetricCard: View {
                 }
             }
             .lineLimit(1)
+            PowerSparkline(values: recentPowers)
+                .frame(height: 14)
+                .accessibilityHidden(true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(9)
@@ -68,6 +72,32 @@ struct PowerMetricCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title) 功率 \(connected && power != nil ? String(format: "%.1f", power!) : "不可用") W"
                             + (showsTemperature ? "，温度 \(temperatureText)" : ""))
+    }
+}
+
+/// Very small bounded history, without Chart / per-point view allocation.
+struct PowerSparkline: View {
+    let values: [Double]
+
+    var body: some View {
+        GeometryReader { geometry in
+            let points = values.suffix(24).filter { $0.isFinite && $0 >= 0 }
+            if points.count >= 2 {
+                let smallest = points.min() ?? 0
+                let biggest = points.max() ?? 1
+                let range = max(0.4, biggest - smallest)
+                Path { path in
+                    for (index, number) in points.enumerated() {
+                        let x = geometry.size.width * CGFloat(index) / CGFloat(points.count - 1)
+                        let y = geometry.size.height * (1 - CGFloat((number - smallest) / range))
+                        if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                        else { path.addLine(to: CGPoint(x: x, y: y)) }
+                    }
+                }
+                .stroke(Color.accentColor.opacity(0.65),
+                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+            }
+        }
     }
 }
 
