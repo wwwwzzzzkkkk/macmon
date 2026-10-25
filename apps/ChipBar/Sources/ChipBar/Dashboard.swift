@@ -111,7 +111,8 @@ struct Dashboard: View {
             hero
             powerCards
             utilizationOverview
-            CPUCoreUsageSection(samplingInterval: monitor.interval)
+            CPUCoreUsageSection(samplingInterval: monitor.interval,
+                                active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
             ApplicationUsageSection(monitor: monitor, state: state)
             trend
             systemMemory
