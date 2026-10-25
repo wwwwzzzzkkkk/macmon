@@ -167,11 +167,11 @@ actor DiskActivitySampler {
 
 @MainActor final class DiskActivityModel: ObservableObject {
     @Published private(set) var snapshot: DiskActivitySnapshot?
-    func watch(ids: [String]) async {
+    func watch(ids: [String], includeVolumes: Bool = true) async {
         snapshot = nil
         let sampler = DiskActivitySampler()
         while !Task.isCancelled {
-            let next = await sampler.sample(ids: ids)
+            let next = await sampler.sample(ids: ids, includeVolumes: includeVolumes)
             guard !Task.isCancelled else { return }
             snapshot = next
             do { try await Task.sleep(nanoseconds: 2_000_000_000) } catch { return }
