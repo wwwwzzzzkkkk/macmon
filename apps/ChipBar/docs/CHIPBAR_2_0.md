@@ -16,6 +16,15 @@ Keep original two-line status-bar design, signature watts typography and restrai
 4. **Motion stability** — preserve the existing animated settings navigation and AppKit window-height easing; wait for the new section spring to settle before measuring, prevent jumping to the top for system disclosure, and preserve scroll offsets.
 5. **Automated checks** — unit coverage for sample bursts, scroll deferral and cancelling stale resize requests; existing UI QA checks settings round-trip, disclosure frame integrity and interrupted navigation.
 
+## Unified Device & Settings page, and minimal application ranking
+
+- Replace separate **System Details** and **Settings** destinations with a single **设备与设置** page accessible from the Home footer. The old `--system-details` automation alias displays the same page; the normal app uses only one visible secondary destination.
+- Display nonprivileged **Mac model identifier** (from `hw.model`), **Apple chip name** (from the existing macmon sample), **macOS version**, **installed physical RAM**, and **CPU core count**. Do not infer a marketing model name from an unverified identifier and do not request a serial number or extra permission.
+- Keep the hardware section (fans, optional external SSD temperature/I/O/SMART) above the existing settings controls. All internal/external capacity bars remain on Home.
+- The secondary page is still inside the same native-glass NSPanel viewport. AppKit's glass, NSHostingView and NSPanel now share one **effective light/dark appearance during each panel session**, so a focus change while opening a settings Picker does not allow the SwiftUI content to briefly disagree with the material. A future OS-level theme change is applied the next time the panel opens; do not force an appearance solely for the navigation state.
+- Remove **all per-app percentage bars** from CPU/GPU/Memory/ANE rankings. Icons, index, names, values and 280 ms layered switch animations remain, with a fixed row height and no new samples.
+- Test updated Swift data model and first-page reset, then validate live dark/light navigation and rapid switching on the target Mac mini. Ad-hoc CI signing and previously noted OS permission limits are unchanged.
+
 ## Home storage capacity grouping and icon-aligned application tracks
 
 - **Home Storage overview:** Built-in macOS boot storage and all *mounted external disk volumes* show availability, used amount, total filesystem capacity and a thin used-space progress track in **one common card**. Capacity is visible immediately on Home, not gated behind System Details or SSD details.
