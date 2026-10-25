@@ -16,6 +16,14 @@ Keep original two-line status-bar design, signature watts typography and restrai
 4. **Motion stability** — preserve the existing animated settings navigation and AppKit window-height easing; wait for the new section spring to settle before measuring, prevent jumping to the top for system disclosure, and preserve scroll offsets.
 5. **Automated checks** — unit coverage for sample bursts, scroll deferral and cancelling stale resize requests; existing UI QA checks settings round-trip, disclosure frame integrity and interrupted navigation.
 
+## Stats-inspired per-logical-core CPU overview and refresh-control appearance
+
+- **Native per-core CPU activity:** query `host_processor_info(PROCESSOR_CPU_LOAD_INFO)` from a low-priority Swift actor; compare cumulative USER/SYSTEM/NICE/IDLE ticks over successive samples, wrap-safe using 32-bit differences. Each column is one *logical* CPU, numbered 1..N. Do not infer E/P-core types from enumeration order.
+- **Sampling and lifecycle:** CPU-only Mach sampling respects the selected 1/2/5/10-second interval, pauses whenever the monitoring panel is hidden or the power collector is paused/asleep, and requires no subprocess, sudo, Accessibility, Screen Recording or Apple private APIs. Maintain one shared model across quick page transitions, restarting with fresh tick baseline where appropriate.
+- **Compact UI:** CPU/GPU/memory rings shrink from 70pt to 52pt, utilizing 5pt strokes and smaller center labels. The main power trend shrinks from 95pt to 64pt. A fixed-height horizontal vertical-bar chart directly below the rings displays every logical core and shows exact rounded percent on hover and VoiceOver. Real-time samples animate bar fill but never alter chart height or the main glass panel geometry.
+- **Refresh-rate entry flicker:** replace the native segmented `Picker` (`NSSegmentedControl` under macOS) with a plain SwiftUI-only 4-way segmented button row using stable material-neutral fills (`Color.primary.opacity`), an animated selection track and Reduce Motion support. The original control's momentary dark fill on navigating into Device & Settings should therefore no longer occur. Light/dark navigation needs physical-Mac verification.
+- **Regression tests:** CPU tick independent-load computation, wrap-around, zero-elapsed samples, changing CPU counts, and on-device unprivileged Mach reading. Source inspiration: Stats' `Modules/CPU/readers.swift`; no Stats implementation or assets copied.
+
 ## Unified Device & Settings page, and minimal application ranking
 
 - Replace separate **System Details** and **Settings** destinations with a single **设备与设置** page accessible from the Home footer. The old `--system-details` automation alias displays the same page; the normal app uses only one visible secondary destination.
