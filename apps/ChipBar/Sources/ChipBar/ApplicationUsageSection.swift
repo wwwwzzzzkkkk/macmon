@@ -20,20 +20,24 @@ struct ApplicationUsageSection: View {
                 disclosureButton
             }
             ApplicationMetricSelector(selection: $state.applicationMetric)
-            // Animate only when the *selected resource* changes. Incoming
-            // rankings crossfade inside a fixed-height viewport, so a new
-            // process sample does not relayout the panel or jump the scroller.
+            // Changing metrics creates a separate view identity: the old
+            // metric keeps its own numbers as it recedes behind the new page.
+            // Incoming rankings float DOWN from above, not up from below.
+            // The viewport never changes height while switching resources.
             ZStack(alignment: .topLeading) {
-                ranking
+                ranking(for: state.applicationMetric)
                     .id(state.applicationMetric)
                     .transition(reduceMotion ? .opacity :
                         .asymmetric(
-                            insertion: .opacity.combined(with: .offset(y: 5)),
-                            removal: .opacity.combined(with: .offset(y: -4))))
+                            insertion: .opacity
+                                .combined(with: .offset(y: -14))
+                                .combined(with: .scale(scale: 1.015, anchor: .top)),
+                            removal: .opacity
+                                .combined(with: .scale(scale: 0.94, anchor: .center))))
             }
             .frame(height: 84 + 56 * state.applicationsExpansion, alignment: .topLeading)
             .clipped()
-            .animation(ChipBarMotion.optional(ChipBarMotion.selection,
+            .animation(ChipBarMotion.optional(ChipBarMotion.resourceStack,
                                               reduceMotion: reduceMotion), value: state.applicationMetric)
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topLeading) {
@@ -68,48 +72,80 @@ struct ApplicationUsageSection: View {
             .accessibilityLabel(state.showApplications ? "收起为前三名应用" : "查看前五名应用及指标说明")
     }
 
-    @ViewBuilder private var ranking: some View {
+    @ViewBuilder private func ranking(for metric: ApplicationResource) -> some View {
         if monitor.paused || monitor.sleeping {
             message("应用占用采样已暂停", symbol: "pause.circle")
         } else if let snapshot = activity.snapshot {
-            let rows = rankedRows(snapshot)
+            let rows = rankedRows(snapshot, metric: metric)
             if !rows.isEmpty {
                 VStack(spacing: 0) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        HStack(spacing: 8) {
-                            Text("\(index + 1)").monospacedDigit()
-                                .foregroundStyle(.secondary).frame(width: 16).accessibilityHidden(true)
-                            Text(row.name).lineLimit(1).truncationMode(.middle)
-                                .help("\(row.name) · 合并 \(row.processCount) 个进程；只统计可读取的计数器")
-                            Spacer(minLength: 6)
-                            Text(formatted(row)).monospacedDigit()
-                                .foregroundStyle(.primary)
-                        }.font(.callout).frame(height: 28)
+                        VStack(spacing: 2) {
+                            HStack(spacing: 7) {
+                                Text("\(index + 1)").monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 15)
+                                    .accessibilityHidden(true)
+                                if let path = row.appPath {
+                                    Image(nsImage: ApplicationIconCache.icon(for: path))
+                                        .resizable()
+                                        .interpolation(.high)
+                                        .frame(width: 15, height: 15)
+                                        .accessibilityHidden(true)
+                                } else {
+                                    Image(systemName: "app")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 15, height: 15)
+                                        .accessibilityHidden(true)
+                                }
+                                Text(row.name).lineLimit(1).truncationMode(.middle)
+                                    .help("\(row.name) · 合并 \(row.processCount) 个进程；只统计可读取的计数器")
+                                Spacer(minLength: 5)
+                                Text(formatted(row, metric: metric))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.primary)
+                            }
+                            .font(.caption)
+                            .frame(height: 21)
+                            GeometryReader { geometry in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color.primary.opacity(0.055))
+                                    Capsule().fill(Color.accentColor.opacity(0.55))
+                                        .frame(width: geometry.size.width * min(1, max(0,
+                                            (value(row, metric: metric) ?? 0) /
+                                            max(value(rows[0], metric: metric) ?? 1, 0.0001))))
+                                }
+                            }
+                            .frame(height: 2)
+                            .accessibilityHidden(true)
+                        }
+                        .frame(height: 28)
                         .opacity(index < 3 ? 1 : state.applicationsExpansion)
                         .accessibilityElement(children: .combine)
                         .accessibilityHidden(!state.showApplications && index >= 3)
                     }
                 }
             } else {
-                message(emptyMessage(snapshot), symbol: "chart.bar.xaxis")
+                message(emptyMessage(snapshot, metric: metric), symbol: "chart.bar.xaxis")
             }
         } else {
             message("正在读取应用占用…", symbol: "clock")
         }
     }
 
-    private func rankedRows(_ snapshot: ActivitySnapshot) -> [ApplicationActivityRow] {
+    private func rankedRows(_ snapshot: ActivitySnapshot, metric: ApplicationResource) -> [ApplicationActivityRow] {
         Array(snapshot.rows.filter {
-            (value($0) ?? -1) > (state.applicationMetric == .ane || state.applicationMetric == .memory ? 0 : -1)
+            (value($0, metric: metric) ?? -1) > (metric == .ane || metric == .memory ? 0 : -1)
         }
             .sorted {
-                let lhs = value($0) ?? 0, rhs = value($1) ?? 0
+                let lhs = value($0, metric: metric) ?? 0, rhs = value($1, metric: metric) ?? 0
                 return lhs == rhs ? $0.id < $1.id : lhs > rhs
             }.prefix(5))
     }
 
-    private func value(_ row: ApplicationActivityRow) -> Double? {
-        switch state.applicationMetric {
+    private func value(_ row: ApplicationActivityRow, metric: ApplicationResource) -> Double? {
+        switch metric {
         case .cpu: return row.cpuPercent
         case .gpu: return row.gpuPercent
         case .memory: return ApplicationMemoryDisplay.validatedBytes(row.physicalBytes).map(Double.init)
@@ -117,9 +153,9 @@ struct ApplicationUsageSection: View {
         }
     }
 
-    private func formatted(_ row: ApplicationActivityRow) -> String {
-        guard let number = value(row) else { return "—" }
-        switch state.applicationMetric {
+    private func formatted(_ row: ApplicationActivityRow, metric: ApplicationResource) -> String {
+        guard let number = value(row, metric: metric) else { return "—" }
+        switch metric {
         case .cpu, .gpu: return String(format: "%.1f%%", number)
         case .memory:
             return ApplicationMemoryDisplay.text(bytes: row.physicalBytes,
@@ -146,8 +182,8 @@ struct ApplicationUsageSection: View {
         return "\(detail) · 每 \(max(2, monitor.interval / 1000)) 秒更新"
     }
 
-    private func emptyMessage(_ snapshot: ActivitySnapshot) -> String {
-        switch state.applicationMetric {
+    private func emptyMessage(_ snapshot: ActivitySnapshot, metric: ApplicationResource) -> String {
+        switch metric {
         case .cpu: return snapshot.readableCPUCount > 0 ? "正在建立 CPU 采样基线…" : "当前无法读取进程 CPU 计数器"
         case .gpu: return snapshot.gpuClientCount > 0 ? "正在建立 GPU 采样基线…" : "当前驱动未提供应用 GPU 时间"
         case .memory: return snapshot.readableMemoryCount > 0 ? "当前未观察到非零应用内存读数" : "当前无法读取应用内存"
