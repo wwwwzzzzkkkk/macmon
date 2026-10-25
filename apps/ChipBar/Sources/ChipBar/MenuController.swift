@@ -766,7 +766,7 @@ import ChipBarCore
         if CommandLine.arguments.contains("--light") { panel.appearance = NSAppearance(named: .aqua) }
         if CommandLine.arguments.contains("--dark") { panel.appearance = NSAppearance(named: .darkAqua) }
         guard monitor.connected else { failVerification("UI verification needs live macmon data.") }
-        if (CommandLine.arguments.contains("--disclosure-only") || CommandLine.arguments.contains("--ssd-disclosure-only") || CommandLine.arguments.contains("--scroll-only")) { menuTracking = true }
+        if (CommandLine.arguments.contains("--disclosure-only") || CommandLine.arguments.contains("--ssd-disclosure-only") || CommandLine.arguments.contains("--system-disclosure-only") || CommandLine.arguments.contains("--scroll-only")) { menuTracking = true }
         let previousApplication = NSWorkspace.shared.frontmostApplication?.processIdentifier
         statusItem.button?.performClick(nil)
         if CommandLine.arguments.contains("--scroll-only") {
@@ -775,7 +775,7 @@ import ChipBarCore
             Task { @MainActor in await self.verifySettingsScrolling(directory: directory) }
             return
         }
-        if (CommandLine.arguments.contains("--disclosure-only") || CommandLine.arguments.contains("--ssd-disclosure-only")) {
+        if (CommandLine.arguments.contains("--disclosure-only") || CommandLine.arguments.contains("--ssd-disclosure-only") || CommandLine.arguments.contains("--system-disclosure-only")) {
             // A fixed preview viewport also works when the menu-bar host is hidden.
             maximumHeight = min(850, (panel.screen ?? NSScreen.main)?.visibleFrame.height ?? 850) - 16
             refresh(forceLayout: true)
@@ -863,8 +863,11 @@ import ChipBarCore
     /// Short visual check for content disclosure, without running menu stress checks.
     private func verifyDisclosures(directory: String, previousApplication: pid_t?) async {
         let ssdOnly = CommandLine.arguments.contains("--ssd-disclosure-only")
+        let systemOnly = CommandLine.arguments.contains("--system-disclosure-only")
         func toggleDetail() {
-            if ssdOnly { dashboardState.showSSDDetails.toggle() } else { dashboardState.toggleApplications() }
+            if systemOnly { dashboardState.showSystemDetails.toggle() }
+            else if ssdOnly { dashboardState.showSSDDetails.toggle() }
+            else { dashboardState.toggleApplications() }
         }
         do {
             try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
@@ -881,6 +884,7 @@ import ChipBarCore
                                "clipY": scrollView.contentView.bounds.origin.y, "flipped": hostingView.isFlipped,
                                "applicationsExpansion": dashboardState.applicationsExpansion,
                                "settingsScreen": dashboardState.showSettings,
+                               "systemDetails": dashboardState.showSystemDetails,
                                "ssdExpansion": dashboardState.ssdExpansion,
                                "ssdDetailsHeight": dashboardState.ssdDetailsHeight,
                                "scrollBorder": scrollView.borderType.rawValue,
@@ -896,9 +900,14 @@ import ChipBarCore
             toggleDetail()
             try await Task.sleep(nanoseconds: 90_000_000)
             try record("collapsing")
-            try await Task.sleep(nanoseconds: 260_000_000)
+            try await Task.sleep(nanoseconds: systemOnly ? 330_000_000 : 260_000_000)
             try record("collapsed-again")
-            if !ssdOnly {
+            if systemOnly, let firstTop = frames.first?["top"] as? CGFloat {
+                guard frames.allSatisfy({ abs(($0["top"] as? CGFloat ?? firstTop) - firstTop) < 1 }) else {
+                    failVerification("System details animation moved the top edge of the glass panel.")
+                }
+            }
+            if !ssdOnly && !systemOnly {
                 func verifyPage(_ settings: Bool) {
                     hostingView.layoutSubtreeIfNeeded()
                     let content = ceil(hostingView.fittingSize.height)
@@ -966,8 +975,8 @@ import ChipBarCore
         try? await Task.sleep(nanoseconds: 60_000_000)
         let openingAlpha = panel.alphaValue
         try? await Task.sleep(nanoseconds: 250_000_000)
-        guard panel.isVisible, dashboardMounted, dashboardState.showSettings, panel.alphaValue == 1 else {
-            failVerification("Panel reopening or settings preservation failed.")
+        guard panel.isVisible, dashboardMounted, !dashboardState.showSettings, panel.alphaValue == 1 else {
+            failVerification("Panel reopening did not restore its default home screen.")
         }
         // Close, then reopen while fade-out is still in flight.
         togglePanel()
