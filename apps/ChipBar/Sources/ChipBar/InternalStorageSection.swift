@@ -91,7 +91,14 @@ struct InternalStorageSection: View {
         }
         .padding(11)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
-        .task { await model.watch() }
+        .task {
+            // First APFS/Disk Arbitration read is delayed until the glass
+            // panel has finished its opening spring animation.
+            do { try await Task.sleep(for: .milliseconds(560)) }
+            catch { return }
+            guard !Task.isCancelled else { return }
+            await model.watch()
+        }
         .accessibilityElement(children: .combine)
     }
 }
