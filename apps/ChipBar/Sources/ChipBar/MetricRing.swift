@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// A bounded percentage indicator for utilization and memory only.
-/// Power readings are intentionally not normalised against an arbitrary wattage.
+/// Compact, bounded percentage gauge embedded in a power card's upper-right.
+/// Power readings are never normalised against an arbitrary wattage.
 struct MetricRing: View {
     let title: String
+    let caption: String
     let percentage: Double?
     let tint: Color
-    /// Memory pressure remains available to accessibility and hover, but
-    /// its color alone conveys the state in the visible ring layout.
+    /// Memory pressure is expressed by ring tint; its wording stays accessible.
     var status: String? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -17,41 +17,50 @@ struct MetricRing: View {
         return min(1, max(0, percentage / 100))
     }
 
+    private var percentageText: String {
+        guard let percentage, percentage.isFinite else { return "不可用" }
+        return String(format: "%.0f%%", fraction * 100)
+    }
+
     private var motion: Animation {
         reduceMotion ? .linear(duration: 0) : .spring(response: 0.55, dampingFraction: 0.84)
     }
 
     var body: some View {
-        VStack(spacing: 4) {
-            Text(title).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+        VStack(spacing: 3) {
             ZStack {
                 Circle()
-                    .stroke(Color.primary.opacity(0.10), lineWidth: 5)
+                    .stroke(Color.primary.opacity(0.10), lineWidth: 3.5)
                 Circle()
                     .trim(from: 0, to: CGFloat(fraction))
-                    .stroke(tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .stroke(tint, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(motion, value: fraction)
                 if percentage != nil, percentage?.isFinite == true {
                     AnimatedPercentage(value: fraction * 100)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .animation(motion, value: fraction)
                 } else {
-                    Text("—").font(.system(size: 14, weight: .medium, design: .rounded))
+                    Text("—")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: 52, height: 52)
+            .frame(width: 42, height: 42)
             .accessibilityHidden(true)
+
+            Text(caption)
+                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(height: 11)
         }
-        .frame(maxWidth: .infinity, alignment: .top)
-        // All three gauges share exactly the same compact height; no blank
-        // caption line is reserved for the memory-pressure wording.
-        .frame(height: 74, alignment: .top)
-        .help(status.map { "系统内存压力：\($0)" } ?? "")
+        .frame(width: 46, height: 56, alignment: .top)
+        .help("\(title)：\(percentageText)" +
+              (status.map { " · 内存压力：\($0)" } ?? ""))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title)：\(percentage.map { String(format: "%.0f%%", $0) } ?? "不可用")" +
+        .accessibilityLabel("\(title)：\(percentageText)" +
                             (status.map { "，内存压力\($0)" } ?? ""))
     }
 }
