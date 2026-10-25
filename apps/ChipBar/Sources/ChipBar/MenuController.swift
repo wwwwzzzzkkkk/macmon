@@ -164,9 +164,13 @@ import ChipBarCore
         navigationToken = token
         if settings { monitoringPageHeight = measuredHeight }
         else { settingsPageHeight = measuredHeight }
-        let predicted = settings ? (settingsPageHeight ?? maximumHeight)
-                                 : (monitoringPageHeight ?? measuredHeight)
-        let height = min(maximumHeight, max(250, predicted))
+        let height = DisclosurePanelSizing.navigationHeight(
+            enteringSettings: settings,
+            currentHeight: measuredHeight,
+            homeHeight: monitoringPageHeight,
+            settingsHeight: settingsPageHeight,
+            maximumHeight: maximumHeight
+        )
         navigationResizeInFlight = true
         navigationViewportHeight = nil
         resetScrollForPage = true
