@@ -244,13 +244,13 @@ import ChipBarCore
         } else {
             systemExpandedDocumentHeight = measuredHeight
         }
-        let predictedHeight: CGFloat
-        if expanded {
-            predictedHeight = min(maximumHeight, systemExpandedDocumentHeight ?? maximumHeight)
-        } else {
-            predictedHeight = min(maximumHeight, systemCollapsedDocumentHeight ?? measuredHeight)
-        }
-        let target = max(250, predictedHeight)
+        let target = SystemDisclosureSizing.targetHeight(
+            expanding: expanded,
+            currentHeight: measuredHeight,
+            previouslyCollapsed: systemCollapsedDocumentHeight,
+            previouslyExpanded: systemExpandedDocumentHeight,
+            maximumHeight: maximumHeight
+        )
 
         // The scroll view needs a document at least as tall as its expanding
         // viewport; otherwise it shows an empty bottom band until the next
