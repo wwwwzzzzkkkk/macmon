@@ -16,6 +16,21 @@ Keep original two-line status-bar design, signature watts typography and restrai
 4. **Motion stability** — preserve the existing animated settings navigation and AppKit window-height easing; wait for the new section spring to settle before measuring, prevent jumping to the top for system disclosure, and preserve scroll offsets.
 5. **Automated checks** — unit coverage for sample bursts, scroll deferral and cancelling stale resize requests; existing UI QA checks settings round-trip, disclosure frame integrity and interrupted navigation.
 
+## M5 Pro user testing: confirmed and follow-up corrections
+
+The user has checked all six baseline interaction criteria on the first 2.0 preview: quick Settings/Back cycling, smooth System Details frame movement, native trackpad scrolling, updates during scroll, animated rings synchronized with numbers, and dark/light/Reduce Motion compatibility.
+
+The next 2.0 preview preserves that tested motion baseline and addresses reported issues:
+
+- **Every open resets ephemeral UI:** always return to monitoring (not Settings), app top three in CPU mode, System Details closed, SSD subdetails closed and power trend set to chip total. Actual preferences and sampling history are **not erased**. Existing `--apps`, `--apps-gpu`, `--apps-ane`, `--ssd-details` and `--system-details` QA command flags still work.
+- **Hide system scroll indicator:** `NSScrollView.hasVerticalScroller = false`, while the native trackpad and momentum scrolling remain enabled. This avoids the bright white indicator obscuring the Liquid Glass edge.
+- **Animated app metric selection:** 4-way CPU/GPU/Memory/ANE indicator moves with a spring and presses respond immediately. Ranking contents crossfade within a fixed height, so switching tabs does not resize the window or jolt scroll position.
+- **Stable signing support:** by default GitHub builds still use ad-hoc signing. macOS can treat each rebuilt ad-hoc executable as a new code identity and ask for privacy permissions again; the program cannot and must not silently bypass the system prompt. Developers with a valid and persistent macOS code-signing certificate can use `CHIPBAR_CODESIGN_IDENTITY="Apple Development: ..." ./scripts/build.sh` to sign successive local builds with the same Team ID and bundle ID. This is **optional** and does not imply notarization or promise to eliminate all possible consent dialogs. Install/test the same app path, close old ChipBar instances first, and avoid changing the signing identity between builds. No accessibility/screen-capture privilege is requested by a normal ChipBar launch; synthetic mouse-automation QA explicitly needs existing event-posting permission.
+
+## Known limitation: GitHub preview signing
+
+The CI zip contains ad-hoc signed app code. Because its signed code identity can change with each CI run, TCC approvals may not carry over. Removing OS privacy prompts programmatically would be neither reliable nor appropriate. Use a consistent trusted signing identity for long-term iterative local testing, or accept OS prompts on a new CI build. If prompts continue on an unchanged build, capture the **exact prompt text and the executable requesting consent**, since they may originate from macOS, smartctl/macmon or an external path rather than ChipBar.
+
 ## Acceptance criteria for 2.0 stable
 
 - **Tap feedback:** each interactive button gives press-state feedback; radio/picker selection and disclosures have a transition; disabled or Reduce Motion states remain accessible.
