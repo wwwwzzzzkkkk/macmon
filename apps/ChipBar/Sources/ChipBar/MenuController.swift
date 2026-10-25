@@ -146,170 +146,41 @@ import ChipBarCore
             }
         settingsNavigationSubscription = dashboardState.$showSettings
             .dropFirst()
-            .sink { [weak self] entering in self?.navigateSettings(to: entering) }
+            .sink { [weak self] _ in self?.navigateBetweenPages() }
         systemDisclosureSubscription = dashboardState.$showSystemDetails
             .dropFirst()
-            .sink { [weak self] expanded in self?.animateSystemDisclosure(expanding: expanded) }
+            .sink { [weak self] _ in self?.navigateBetweenPages() }
     }
 
-    /// The page slide and AppKit frame transition run together.
-    /// Cache the natural home size before entering settings, so returning
-    /// never needs to wait for the old page to finish its slide.
-    private func navigateSettings(to settings: Bool) {
+    /// The same viewport is shared by Home, System Details, and Settings.
+    /// Page navigation changes only the SwiftUI content; AppKit never changes
+    /// the glass NSPanel frame mid-slide. This avoids two-stage fitting
+    /// corrections, vertical hops, and Liquid Glass frame compositing hitches.
+    private func navigateBetweenPages() {
         guard dashboardMounted, panelRequestedVisible else { return }
         navigationTask?.cancel()
-        navigationTask = nil
         layoutCoordinator.cancelPending()
         let token = UUID()
         navigationToken = token
-        if settings { monitoringPageHeight = measuredHeight }
-        else { settingsPageHeight = measuredHeight }
-        let height = DisclosurePanelSizing.navigationHeight(
-            enteringSettings: settings,
-            currentHeight: measuredHeight,
-            homeHeight: monitoringPageHeight,
-            settingsHeight: settingsPageHeight,
-            maximumHeight: maximumHeight
-        )
+        disclosureTransition = nil
+        // Pin the visible window height during all secondary page navigation.
+        // The pages scroll natively inside this unchanged viewport.
+        navigationViewportHeight = panel.frame.height
         navigationResizeInFlight = true
-        navigationViewportHeight = nil
         resetScrollForPage = true
-
-        // Align both screens to their first row before starting the
-        // synchronized page transition; do not visibly jump afterward.
         let clip = scrollView.contentView
-        let oldMaximum = max(0, hostingView.frame.height - clip.bounds.height)
-        clip.scroll(to: NSPoint(x: 0, y: hostingView.isFlipped ? 0 : oldMaximum))
+        let topY = hostingView.isFlipped ? CGFloat(0)
+            : max(0, hostingView.frame.height - clip.bounds.height)
+        clip.scroll(to: NSPoint(x: 0, y: topY))
         scrollView.reflectScrolledClipView(clip)
-
-        let settle: () -> Void = { [weak self] in
-            Task { @MainActor in
-                guard let self, self.navigationToken == token, self.dashboardMounted,
-                      self.panelRequestedVisible else { return }
-                self.hostingView.layoutSubtreeIfNeeded()
-                let natural = ceil(self.hostingView.fittingSize.height)
-                guard natural.isFinite, natural > 0 else {
-                    self.navigationResizeInFlight = false
-                    self.refresh(forceLayout: true)
-                    return
-                }
-                if settings { self.settingsPageHeight = natural }
-                else { self.monitoringPageHeight = natural }
-                let exact = min(self.maximumHeight, max(250, natural))
-                let finish: () -> Void = { [weak self] in
-                    Task { @MainActor in
-                        guard let self, self.navigationToken == token else { return }
-                        self.navigationResizeInFlight = false
-                        self.resetScrollForPage = true
-                        self.refresh(forceLayout: true)
-                        self.panel.invalidateShadow()
-                    }
-                }
-                // The return route should already have an exact cached height.
-                // A first settings visit can require one small correction.
-                guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-                      abs(self.panel.frame.height - exact) >= 2,
-                      let precise = self.panelFrame(size: NSSize(
-                          width: DashboardLayout.width, height: exact)) else {
-                    finish()
-                    return
-                }
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.16
-                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                    self.panel.animator().setFrame(precise, display: true)
-                } completionHandler: { finish() }
-            }
-        }
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-              abs(panel.frame.height - height) >= 1,
-              let destination = panelFrame(size: NSSize(
-                  width: DashboardLayout.width, height: height)) else {
-            // If the viewport is already screen capped, allow the 240ms page
-            // crossfade to complete before measuring its destination.
-            navigationTask = Task { @MainActor in
-                do { try await Task.sleep(for: .milliseconds(270)) } catch { return }
-                guard navigationToken == token else { return }
-                navigationTask = nil
-                settle()
-            }
-            return
-        }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = DashboardMotion.navigationResize
-            context.timingFunction = DashboardMotion.navigationSpringCurve
-            panel.animator().setFrame(destination, display: true)
-        } completionHandler: { settle() }
-    }
-
-    /// Do not animate an estimated height and then animate its correction.
-    /// The disclosure content takes its final layout immediately, without
-    /// a SwiftUI move transition. One main-runloop turn later we measure its
-    /// actual size and animate the panel to that destination exactly once.
-    private func animateSystemDisclosure(expanding expanded: Bool) {
-        guard dashboardMounted, panelRequestedVisible, !dashboardState.showSettings else { return }
-        navigationTask?.cancel()
-        navigationTask = nil
-        layoutCoordinator.cancelPending()
-        let token = UUID()
-        navigationToken = token
-        navigationResizeInFlight = true
-        navigationViewportHeight = nil
-        resetScrollForPage = false
-
-        DispatchQueue.main.async { [weak self] in
+        navigationTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(270)) }
+            catch { return }
             guard let self, self.navigationToken == token,
                   self.dashboardMounted, self.panelRequestedVisible else { return }
-            self.hostingView.layoutSubtreeIfNeeded()
-            let natural = ceil(self.hostingView.fittingSize.height)
-            guard natural.isFinite, natural > 0 else {
-                self.navigationResizeInFlight = false
-                self.refresh(forceLayout: true)
-                return
-            }
-            if expanded { self.systemExpandedDocumentHeight = natural }
-            else { self.systemCollapsedDocumentHeight = natural }
-            let target = min(self.maximumHeight, max(250, natural))
-
-            // Preserve the top scroll anchor while growing the document.
-            // Never use a screen-height guess or two consecutive frame
-            // animations: both used to cause a noticeable upward hop.
-            let clip = self.scrollView.contentView
-            let oldVisible = clip.bounds.height
-            let previousMax = max(0, self.hostingView.frame.height - oldVisible)
-            let oldOffset = self.hostingView.isFlipped ? clip.bounds.origin.y
-                : previousMax - clip.bounds.origin.y
-            let documentHeight = max(natural, self.panel.frame.height, target)
-            if self.hostingView.frame.height != documentHeight {
-                self.hostingView.setFrameSize(NSSize(
-                    width: DashboardLayout.width, height: documentHeight))
-                let newMax = max(0, documentHeight - oldVisible)
-                let offset = min(newMax, max(0, oldOffset))
-                clip.scroll(to: NSPoint(x: 0, y: self.hostingView.isFlipped
-                    ? offset : newMax - offset))
-                self.scrollView.reflectScrolledClipView(clip)
-            }
-
-            let finish: () -> Void = { [weak self] in
-                Task { @MainActor in
-                    guard let self, self.navigationToken == token else { return }
-                    self.navigationResizeInFlight = false
-                    self.refresh(forceLayout: true)
-                    self.panel.invalidateShadow()
-                }
-            }
-            guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-                  abs(self.panel.frame.height - target) >= 1,
-                  let destination = self.panelFrame(size: NSSize(
-                      width: DashboardLayout.width, height: target)) else {
-                finish()
-                return
-            }
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = DashboardMotion.navigationResize
-                context.timingFunction = DashboardMotion.navigationSpringCurve
-                self.panel.animator().setFrame(destination, display: true)
-            } completionHandler: { finish() }
+            self.navigationTask = nil
+            self.navigationResizeInFlight = false
+            self.refresh(forceLayout: true)
         }
     }
 
@@ -318,11 +189,11 @@ import ChipBarCore
                       ssd: ssd ? 1.0 : 0.0)
         let start = currentDisclosureValues()
         guard dashboardMounted, panelRequestedVisible, !dashboardState.showSettings,
+              !dashboardState.showSystemDetails,
               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
             disclosureTransition = nil
             dashboardState.applicationsExpansion = target.applications
             dashboardState.ssdExpansion = target.ssd
-            navigationViewportHeight = nil
             if dashboardMounted {
                 hostingView.needsLayout = true
                 refresh()
@@ -330,7 +201,6 @@ import ChipBarCore
             }
             return
         }
-        navigationViewportHeight = nil
         let token = UUID()
         disclosureTransition = DisclosureTransition(start: start, target: target,
             began: ProcessInfo.processInfo.systemUptime, token: token)
@@ -345,6 +215,7 @@ import ChipBarCore
             dashboardState.applicationsExpansion = target.applications
             dashboardState.ssdExpansion = target.ssd
         }
+        if navigationViewportHeight != nil { navigationViewportHeight = targetHeight }
         if let frame = panelFrame(size: NSSize(width: panel.frame.width, height: targetHeight)) {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = DashboardMotion.duration
