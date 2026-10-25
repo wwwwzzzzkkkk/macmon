@@ -58,46 +58,54 @@ struct PowerMetricCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .top, spacing: 2) {
-                Label(title, systemImage: icon)
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Spacer(minLength: 0)
+            // Left: name / wattage / temperature. Right: an equal-height ring.
+            // Separate columns prevent the gauge from covering CPU/GPU titles.
+            HStack(alignment: .center, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Label(title, systemImage: icon)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(height: 13, alignment: .leading)
+
+                    HStack(alignment: .firstTextBaseline, spacing: 1) {
+                        AnimatedMetricValue(value: connected ? power : nil)
+                            .font(.system(size: 19, weight: .semibold, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.63)
+                            .layoutPriority(1)
+                        Text("W")
+                            .font(.system(size: 9, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(height: 23, alignment: .leading)
+
+                    Text(showsTemperature ? temperatureText : " ")
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(height: 11, alignment: .leading)
+                        .opacity(showsTemperature ? 1 : 0)
+                        .help(showsTemperature ? "\(title) 温度：\(temperatureText)" : "")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: 56, alignment: .center)
+
                 MetricRing(title: ringTitle, caption: ringCaption,
                            percentage: connected ? utilization : nil,
                            tint: ringTint, status: ringStatus)
             }
-            .frame(height: 56, alignment: .top)
-
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                AnimatedMetricValue(value: connected ? power : nil)
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .layoutPriority(1)
-                Text("W")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(height: 26, alignment: .leading)
-
-            Text(showsTemperature ? temperatureText : " ")
-                .font(.system(size: 9, weight: .medium, design: .rounded))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .lineLimit(1)
-                .frame(height: 11, alignment: .leading)
-                .opacity(showsTemperature ? 1 : 0)
-                .help(showsTemperature ? "\(title) 温度：\(temperatureText)" : "")
+            .frame(height: 56)
 
             PowerSparkline(values: recentPowers)
                 .frame(height: 14)
                 .accessibilityHidden(true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
+        .padding(8)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title) 功率 \(powerDescription)，\(ringTitle) \(usageDescription)" +

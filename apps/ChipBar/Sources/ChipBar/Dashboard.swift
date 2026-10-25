@@ -238,13 +238,13 @@ struct Dashboard: View {
         HStack(alignment: .top, spacing: 8) {
             PowerMetricCard(title: "CPU", power: monitor.sample?.cpu,
                             connected: monitor.connected, icon: "cpu",
-                            ringTitle: "CPU 占用", ringCaption: "占用",
+                            ringTitle: "CPU 占用", ringCaption: "",
                             utilization: monitor.sample?.cpuUtilization, ringTint: accent,
                             temperature: monitor.sample?.cpuTemperature, showsTemperature: true,
                             recentPowers: monitor.history.suffix(24).compactMap { $0.power(.cpu) })
             PowerMetricCard(title: "GPU", power: monitor.sample?.gpu,
                             connected: monitor.connected, icon: "square.stack.3d.up",
-                            ringTitle: "GPU 占用", ringCaption: "占用",
+                            ringTitle: "GPU 占用", ringCaption: "",
                             utilization: monitor.sample?.gpuUtilization, ringTint: accent.opacity(0.78),
                             temperature: monitor.sample?.gpuTemperature, showsTemperature: true,
                             recentPowers: monitor.history.suffix(24).compactMap { $0.power(.gpu) })
