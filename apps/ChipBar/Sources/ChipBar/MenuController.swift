@@ -131,14 +131,16 @@ import ChipBarCore
                                         dashboardState.$ssdDetailsHeight.dropFirst().map { _ in () })
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.layoutCoordinator.request() }
+        // Synchronous main-thread state delivery: resetForOpening() happens
+        // before the panel is presented, so it cannot queue stale navigation.
         disclosureSubscription = dashboardState.$showApplications.combineLatest(dashboardState.$showSSDDetails)
-            .dropFirst().receive(on: DispatchQueue.main)
+            .dropFirst()
             .sink { [weak self] _ in self?.animateDisclosure() }
         settingsNavigationSubscription = dashboardState.$showSettings
-            .dropFirst().receive(on: DispatchQueue.main)
+            .dropFirst()
             .sink { [weak self] _ in self?.navigateSettings() }
         systemDisclosureSubscription = dashboardState.$showSystemDetails
-            .dropFirst().receive(on: DispatchQueue.main)
+            .dropFirst()
             .sink { [weak self] _ in self?.navigateSettings(resetScroll: false) }
     }
 
@@ -216,7 +218,7 @@ import ChipBarCore
         let target = (applications: dashboardState.showApplications ? 1.0 : 0.0,
                       ssd: dashboardState.showSSDDetails ? 1.0 : 0.0)
         let start = currentDisclosureValues()
-        guard dashboardMounted, !dashboardState.showSettings,
+        guard dashboardMounted, panelRequestedVisible, !dashboardState.showSettings,
               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
             disclosureTransition = nil
             dashboardState.applicationsExpansion = target.applications
