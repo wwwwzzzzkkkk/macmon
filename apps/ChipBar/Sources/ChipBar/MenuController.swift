@@ -706,7 +706,7 @@ import ChipBarCore
             try await Task.sleep(nanoseconds: 800_000_000)
             refresh()
             let maxOffset = max(0, hostingView.frame.height - scrollView.contentView.bounds.height)
-            guard dashboardState.showSettings, navigationViewportHeight == nil else {
+            guard dashboardState.showSettings, navigationViewportHeight != nil else {
                 failVerification("Settings navigation did not settle.")
             }
             let expectedTop: CGFloat = hostingView.isFlipped ? 0 : maxOffset
@@ -773,26 +773,30 @@ import ChipBarCore
             try record("collapsing")
             try await Task.sleep(nanoseconds: systemOnly ? 330_000_000 : 260_000_000)
             try record("collapsed-again")
-            if systemOnly, let firstTop = frames.first?["top"] as? CGFloat {
-                guard frames.allSatisfy({ abs(($0["top"] as? CGFloat ?? firstTop) - firstTop) < 1 }) else {
-                    failVerification("System details animation moved the top edge of the glass panel.")
+            if systemOnly, let firstTop = frames.first?["top"] as? CGFloat,
+               let firstHeight = frames.first?["height"] as? CGFloat {
+                guard frames.allSatisfy({
+                    abs(($0["top"] as? CGFloat ?? firstTop) - firstTop) < 1 &&
+                    abs(($0["height"] as? CGFloat ?? firstHeight) - firstHeight) < 1
+                }) else {
+                    failVerification("System page navigation resized or moved the shared glass window.")
                 }
             }
             if !ssdOnly && !systemOnly {
                 func verifyPage(_ settings: Bool) {
                     hostingView.layoutSubtreeIfNeeded()
                     let content = ceil(hostingView.fittingSize.height)
-                    let expected = min(content, maximumHeight)
                     let scrollHeight = scrollView.contentView.bounds.height
+                    let originalHeight = frames.first?["height"] as? CGFloat ?? panel.frame.height
                     guard dashboardState.showSettings == settings,
-                          navigationViewportHeight == nil, navigationTask == nil,
+                          navigationViewportHeight != nil, navigationTask == nil,
                           !navigationResizeInFlight,
                           panel.isVisible, panel.alphaValue == 1,
-                          abs(panel.frame.height - expected) < 2,
+                          abs(panel.frame.height - originalHeight) < 2,
                           abs(scrollHeight - panel.frame.height) < 2,
-                          hostingView.frame.height >= scrollHeight - 2,
+                          hostingView.frame.height >= max(content, scrollHeight) - 2,
                           abs(panel.frame.width - DashboardLayout.width) < 1 else {
-                        failVerification("Page transition left a stale viewport or truncated document.")
+                        failVerification("Page transition resized fixed viewport or left truncated content.")
                     }
                 }
                 dashboardState.toggleSettings()
