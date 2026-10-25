@@ -161,10 +161,8 @@ struct Dashboard: View {
             }
             .padding(.vertical, 4)
 
-            VStack(alignment: .leading, spacing: 7) {
-                Text("内置储存").font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                InternalStorageSection()
-            }
+            Text("设备状态").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+            InternalStorageSection()
             fanOverview
             if monitor.ssd.enabled {
                 SSDSection(ssd: monitor.ssd, state: state)
