@@ -175,6 +175,12 @@ private enum ChipBarUpdateInstaller {
     private var release: ChipBarUpdateRelease?
     private var preparedDirectory: URL?
 
+    init() {
+        if let previous = ChipBarUpdateHelper.lastFailure(), !previous.isEmpty {
+            status = "上次升级未完成：\(previous)"
+        }
+    }
+
     private var installedVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
     }
@@ -247,7 +253,7 @@ private enum ChipBarUpdateInstaller {
                 }.value
                 preparedDirectory = prepared.directory
                 status = "正在替换旧版本并重新启动…"
-                replaceAndRestart(prepared)
+                replaceAndRestart(prepared, version: version)
             } catch {
                 busy = false
                 status = "更新失败：\(error.localizedDescription)。原有版本未更改。"
@@ -255,53 +261,40 @@ private enum ChipBarUpdateInstaller {
         }
     }
 
-    private func replaceAndRestart(_ prepared: PreparedChipBarUpdate) {
-        let manager = FileManager.default
-        let installed = Bundle.main.bundleURL.standardizedFileURL
-        let backup = installed.deletingLastPathComponent()
-            .appendingPathComponent(".chipbar-backup-\(UUID().uuidString).app")
-        do {
-            try manager.moveItem(at: installed, to: backup)
-            do {
-                try manager.moveItem(at: prepared.application, to: installed)
-            } catch {
-                try manager.moveItem(at: backup, to: installed)
-                throw error
-            }
-        } catch {
+    private func replaceAndRestart(_ prepared: PreparedChipBarUpdate, version: String) {
+        guard let executable = Bundle.main.executableURL else {
             busy = false
-            status = "替换失败：\(error.localizedDescription)。请确认安装目录可写入。"
-            try? manager.removeItem(at: prepared.directory)
+            status = "安装失败：无法找到当前应用的可执行文件。"
+            try? FileManager.default.removeItem(at: prepared.directory)
             preparedDirectory = nil
             return
         }
 
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = false
-        configuration.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: installed, configuration: configuration) { [weak self] running, error in
-            Task { @MainActor in
-                guard let self else { return }
-                if running != nil && error == nil {
-                    try? manager.removeItem(at: backup)
-                    try? manager.removeItem(at: prepared.directory)
-                    self.preparedDirectory = nil
-                    NSApplication.shared.terminate(nil)
-                } else {
-                    // Keep the previous app and settings if launch fails.
-                    let unusable = prepared.directory.appendingPathComponent("failed.app")
-                    do {
-                        try manager.moveItem(at: installed, to: unusable)
-                        try manager.moveItem(at: backup, to: installed)
-                        try? manager.removeItem(at: prepared.directory)
-                        self.status = "新版启动失败，已恢复旧版本：\(error?.localizedDescription ?? "无法启动")"
-                    } catch {
-                        self.status = "新版启动失败，旧版备份保留在 \(backup.path)。\(error.localizedDescription)"
-                    }
-                    self.preparedDirectory = nil
-                    self.busy = false
-                }
-            }
+        // Start a second process BEFORE quitting this instance. That helper
+        // waits until the original app has fully terminated, then performs
+        // the replace + relaunch. LaunchServices cannot mistakenly reuse the
+        // still-running old app while it's being replaced.
+        let worker = Process()
+        worker.executableURL = executable
+        worker.arguments = [
+            ChipBarUpdateHelper.launchFlag,
+            String(ProcessInfo.processInfo.processIdentifier),
+            prepared.directory.path,
+            Bundle.main.bundleURL.standardizedFileURL.path,
+            version
+        ]
+        worker.standardInput = FileHandle.nullDevice
+        worker.standardOutput = FileHandle.nullDevice
+        worker.standardError = FileHandle.nullDevice
+        do {
+            try worker.run()
+            status = "已校验安装包，正在退出旧版并安装 \(version)…"
+            NSApplication.shared.terminate(nil)
+        } catch {
+            busy = false
+            status = "无法启动安装辅助进程：\(error.localizedDescription)。旧版本未改变。"
+            try? FileManager.default.removeItem(at: prepared.directory)
+            preparedDirectory = nil
         }
     }
 
