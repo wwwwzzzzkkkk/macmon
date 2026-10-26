@@ -16,6 +16,12 @@ struct MenuSnapshot: Equatable {
     private var generation = 0
     private var last: MenuSnapshot?
 
+    /// Live chip samples already publish changes through Monitor. Only net/disk
+    /// counters require their own periodic acquisition and display clock.
+    static func needsPeriodicSources(_ items: Set<MenuContent>) -> Bool {
+        items.contains(.network) || items.contains(.disk) || items.contains(.externalDisk)
+    }
+
     init(read: @escaping () async -> MenuSnapshot, render: @escaping (MenuSnapshot) -> Void) {
         self.read = read; self.render = render
     }
