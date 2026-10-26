@@ -58,6 +58,7 @@ final class DashboardState: ObservableObject {
 struct Dashboard: View {
     @ObservedObject var monitor: Monitor
     @StateObject private var state: DashboardState
+    @StateObject private var updater = ChipBarUpdater()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
     private let appIcon = Bundle.main.url(forResource: "AppIcon", withExtension: "icns")
@@ -391,6 +392,32 @@ struct Dashboard: View {
 
             Divider()
             SSDSettings(ssd: monitor.ssd)
+
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Label("应用更新", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    if updater.busy { ProgressView().controlSize(.small) }
+                    Button("检查更新") { updater.check() }
+                        .font(.caption)
+                        .disabled(updater.busy)
+                }
+                Text(updater.status)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let version = updater.availableVersion {
+                    Button {
+                        updater.install()
+                    } label: {
+                        Label("下载并安装 ChipBar \\(version)", systemImage: "arrow.down.app")
+                    }
+                    .font(.caption.weight(.medium))
+                    .disabled(updater.busy)
+                }
+            }
 
             Text("默认自动发现 macmon 与 smartctl；已保存的兼容配置继续生效。功率为芯片读数，不代表整机插座输入功率。")
                 .font(.caption2).foregroundStyle(.secondary)
