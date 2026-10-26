@@ -138,9 +138,13 @@ import ChipBarCore
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                // Live metrics drive power/SSD labels without a second idle
-                // timer. The diffing driver avoids redundant AppKit redraws.
-                self.menuRefresh.display(self.monitor.menuSnapshot)
+                // Keep network/disk counter frames atomic: their polling
+                // driver renders only after all asynchronous sources finish.
+                // For chip-only menus, published samples update the labels
+                // directly without scheduling a second idle timer.
+                if !MenuRefreshDriver.needsPeriodicSources(self.monitor.menuItems) {
+                    self.menuRefresh.display(self.monitor.menuSnapshot)
+                }
                 // Hidden panels must not queue layout measurements at every
                 // background macmon sample.
                 guard self.dashboardMounted && self.panelRequestedVisible else { return }
