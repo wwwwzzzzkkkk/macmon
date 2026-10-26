@@ -12,6 +12,8 @@ struct ActivitySnapshot: Sendable {
     let readableMemoryCount: Int
     let approximateMemoryCount: Int
     let gpuClientCount: Int
+    /// Whether IOKit GPU user-client counters were sampled this round.
+    let gpuSampled: Bool
     let neuralSupported: Bool
 }
 
@@ -70,7 +72,7 @@ actor ApplicationActivitySampler {
         secondsPerTick = Double(timebase.numer) / Double(timebase.denom) / 1_000_000_000
     }
 
-    func sample() -> ActivitySnapshot {
+    func sample(includeGPU: Bool = true) -> ActivitySnapshot {
         autoreleasepool {
             let capacity = max(256, Int(proc_listallpids(nil, 0)) + 128)
             var pids = [Int32](repeating: 0, count: capacity)
@@ -132,12 +134,13 @@ actor ApplicationActivitySampler {
             metadata = nextMetadata
             let activePaths = Set(nextMetadata.values.compactMap(\.path))
             bundles = bundles.filter { activePaths.contains($0.key) }
-            let clients = readGPUClients()
+            // A recursive IOKit walk is only needed for the GPU ranking.
+            let clients = includeGPU ? readGPUClients() : []
             let sampledAt = ProcessInfo.processInfo.systemUptime
             let rows = accumulator.update(processes: processes, clients: clients, time: sampledAt)
             return ActivitySnapshot(sampledAt: sampledAt, rows: rows, processCount: processes.count, readableCPUCount: readable,
                 readableMemoryCount: readableMemory, approximateMemoryCount: approximateMemory,
-                gpuClientCount: clients.count, neuralSupported: neuralSupported)
+                gpuClientCount: clients.count, gpuSampled: includeGPU, neuralSupported: neuralSupported)
         }
     }
 
@@ -208,16 +211,19 @@ actor ApplicationActivitySampler {
     @Published private(set) var snapshot: ActivitySnapshot?
     private let sampler = ApplicationActivitySampler()
     private var inFlightSample: Task<ActivitySnapshot, Never>?
+    private var inFlightToken = UUID()
 
-    func watch(interval: Int) async {
+    func watch(interval: Int, includeGPU: Bool) async {
         var sampleNext = snapshot.map {
-            !ApplicationActivityCachePolicy.isFresh(sampledAt: $0.sampledAt, now: ProcessInfo.processInfo.systemUptime)
+            !ApplicationActivityCachePolicy.isFresh(sampledAt: $0.sampledAt,
+                                                   now: ProcessInfo.processInfo.systemUptime)
+                || (includeGPU && !$0.gpuSampled)
         } ?? true
         while !Task.isCancelled {
             if sampleNext {
-                let result = await sampleOnce()
-                snapshot = result
+                let result = await sampleOnce(includeGPU: includeGPU)
                 guard !Task.isCancelled else { return }
+                snapshot = result
             }
             sampleNext = true
             do { try await Task.sleep(nanoseconds: UInt64(max(2000, interval)) * 1_000_000) }
@@ -225,13 +231,22 @@ actor ApplicationActivitySampler {
         }
     }
 
-    private func sampleOnce() async -> ActivitySnapshot {
-        if let inFlightSample { return await inFlightSample.value }
+    private func sampleOnce(includeGPU: Bool) async -> ActivitySnapshot {
+        if let inFlightSample {
+            let existing = await inFlightSample.value
+            // A GPU-tab switch may overlap a CPU-only scan; do not reuse
+            // incomplete GPU readings after the selector changes.
+            if !includeGPU || existing.gpuSampled { return existing }
+        }
         let sampler = self.sampler
-        let task = Task.detached(priority: .utility) { await sampler.sample() }
+        let token = UUID()
+        inFlightToken = token
+        let task = Task.detached(priority: .utility) {
+            await sampler.sample(includeGPU: includeGPU)
+        }
         inFlightSample = task
         let result = await task.value
-        inFlightSample = nil
+        if inFlightToken == token { inFlightSample = nil }
         return result
     }
 }
