@@ -50,6 +50,7 @@ enum ChipBarUpdateHelper {
                     throw ChipBarUpdateFailure.cannotReplace("新版本未能启动")
                 }
                 try? FileManager.default.removeItem(at: backup)
+                clearPreviousFailure()
                 try? FileManager.default.removeItem(at: root)
                 return 0
             } catch {
@@ -129,19 +130,24 @@ enum ChipBarUpdateHelper {
         return false
     }
 
+    private static var previousFailureURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/ChipBar/last-update-error.txt")
+    }
+
+    private static func clearPreviousFailure() {
+        try? FileManager.default.removeItem(at: previousFailureURL)
+    }
+
     private static func recordFailure(_ reason: String) {
         let manager = FileManager.default
-        let folder = manager.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/ChipBar", isDirectory: true)
-        try? manager.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? manager.createDirectory(at: previousFailureURL.deletingLastPathComponent(),
+                                     withIntermediateDirectories: true)
         let message = "\(Date()): \(reason)"
-        try? message.write(to: folder.appendingPathComponent("last-update-error.txt"),
-                           atomically: true, encoding: .utf8)
+        try? message.write(to: previousFailureURL, atomically: true, encoding: .utf8)
     }
 
     static func lastFailure() -> String? {
-        let file = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/ChipBar/last-update-error.txt")
-        return try? String(contentsOf: file, encoding: .utf8)
+        try? String(contentsOf: previousFailureURL, encoding: .utf8)
     }
 }
