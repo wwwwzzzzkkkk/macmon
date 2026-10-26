@@ -34,6 +34,44 @@ struct ChipBarUpdaterTests {
         #expect(release.asset(named: ChipBarUpdateRelease.checksumName) != nil)
     }
 
+    @Test func replacementPreservesPreviousAppUntilRelaunch() throws {
+        let manager = FileManager.default
+        let root = manager.temporaryDirectory.appendingPathComponent(
+            "chipbar-updater-unit-\(UUID().uuidString)", isDirectory: true)
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: root) }
+        let installed = root.appendingPathComponent("ChipBar.app")
+        let staged = root.appendingPathComponent("new/ChipBar.app")
+        let backup = root.appendingPathComponent("Previous-ChipBar.app")
+        try manager.createDirectory(at: installed, withIntermediateDirectories: true)
+        try manager.createDirectory(at: staged, withIntermediateDirectories: true)
+        try "old".write(to: installed.appendingPathComponent("build"), atomically: true, encoding: .utf8)
+        try "new".write(to: staged.appendingPathComponent("build"), atomically: true, encoding: .utf8)
+
+        try ChipBarUpdateHelper.swap(prepared: staged, installed: installed, backup: backup)
+        #expect(try String(contentsOf: installed.appendingPathComponent("build"), encoding: .utf8) == "new")
+        #expect(try String(contentsOf: backup.appendingPathComponent("build"), encoding: .utf8) == "old")
+    }
+
+    @Test func failedReplacementRestoresOriginalApp() throws {
+        let manager = FileManager.default
+        let root = manager.temporaryDirectory.appendingPathComponent(
+            "chipbar-rollback-unit-\(UUID().uuidString)", isDirectory: true)
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: root) }
+        let installed = root.appendingPathComponent("ChipBar.app")
+        let missing = root.appendingPathComponent("missing/ChipBar.app")
+        let backup = root.appendingPathComponent("Previous-ChipBar.app")
+        try manager.createDirectory(at: installed, withIntermediateDirectories: true)
+        try "old".write(to: installed.appendingPathComponent("build"), atomically: true, encoding: .utf8)
+
+        #expect(throws: Error.self) {
+            try ChipBarUpdateHelper.swap(prepared: missing, installed: installed, backup: backup)
+        }
+        #expect(try String(contentsOf: installed.appendingPathComponent("build"), encoding: .utf8) == "old")
+        #expect(!manager.fileExists(atPath: backup.path))
+    }
+
     @Test func checksumMustMatchExactlyNamedZip() {
         let digest = String(repeating: "a", count: 64)
         #expect(ChipBarUpdateRelease.archiveDigest(from:

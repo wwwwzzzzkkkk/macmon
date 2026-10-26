@@ -58,7 +58,7 @@ final class DashboardState: ObservableObject {
 struct Dashboard: View {
     @ObservedObject var monitor: Monitor
     @StateObject private var state: DashboardState
-    @StateObject private var updater = ChipBarUpdater()
+    @StateObject private var updater = ChipBarUpdater.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
     private let appIcon = Bundle.main.url(forResource: "AppIcon", withExtension: "icns")

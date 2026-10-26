@@ -43,6 +43,10 @@ import ChipBarCore
 @main enum Launch {
     @MainActor static func main() {
         let args = CommandLine.arguments
+        if let index = args.firstIndex(of: ChipBarUpdateHelper.launchFlag) {
+            let status = ChipBarUpdateHelper.run(Array(args.dropFirst(index + 1)))
+            exit(status)
+        }
         if args.contains("--diagnose-io") {
             Task.detached(priority: .utility) {
                 let sampler = DiskActivitySampler()
