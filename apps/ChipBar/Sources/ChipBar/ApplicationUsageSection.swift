@@ -53,9 +53,10 @@ struct ApplicationUsageSection: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(state.showApplications ? explanation : shortExplanation)
         }
-        .task(id: "\(monitor.paused)-\(monitor.sleeping)-\(monitor.interval)") {
+        .task(id: "\(monitor.paused)-\(monitor.sleeping)-\(monitor.interval)-\(state.applicationMetric == .gpu)") {
             guard !monitor.paused, !monitor.sleeping else { return }
-            await activity.watch(interval: monitor.interval)
+            await activity.watch(interval: monitor.interval,
+                                 includeGPU: state.applicationMetric == .gpu)
         }
     }
 
