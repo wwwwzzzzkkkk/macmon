@@ -412,7 +412,7 @@ struct Dashboard: View {
                     Button {
                         updater.install()
                     } label: {
-                        Label("下载并安装 ChipBar \\(version)", systemImage: "arrow.down.app")
+                        Label("下载并安装 ChipBar \(version)", systemImage: "arrow.down.app")
                     }
                     .font(.caption.weight(.medium))
                     .disabled(updater.busy)
