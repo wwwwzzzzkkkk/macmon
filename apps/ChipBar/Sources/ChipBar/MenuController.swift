@@ -136,7 +136,16 @@ import ChipBarCore
         subscription = Publishers.Merge(monitor.objectWillChange.map { _ in () },
                                         dashboardState.$ssdDetailsHeight.dropFirst().map { _ in () })
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.layoutCoordinator.request() }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                // Live metrics drive power/SSD labels without a second idle
+                // timer. The diffing driver avoids redundant AppKit redraws.
+                self.menuRefresh.display(self.monitor.menuSnapshot)
+                // Hidden panels must not queue layout measurements at every
+                // background macmon sample.
+                guard self.dashboardMounted && self.panelRequestedVisible else { return }
+                self.layoutCoordinator.request()
+            }
         // Synchronous main-thread state delivery: resetForOpening() happens
         // before the panel is presented, so it cannot queue stale navigation.
         disclosureSubscription = dashboardState.$showApplications.combineLatest(dashboardState.$showSSDDetails)
@@ -313,7 +322,11 @@ import ChipBarCore
 
     private func configureMenuRefresh() {
         menuRefresh.display(monitor.menuSnapshot)
-        menuRefresh.start(every: Double(monitor.interval) / 1000, active: !monitor.paused && !monitor.sleeping)
+        // CPU/GPU/ANE data arrives via Monitor's published samples. Only
+        // network and disk rates need a second, separately sampled clock.
+        let needsCounters = MenuRefreshDriver.needsPeriodicSources(monitor.menuItems)
+        menuRefresh.start(every: Double(monitor.interval) / 1000,
+                          active: !monitor.paused && !monitor.sleeping && needsCounters)
     }
 
     private func renderMenu(_ snapshot: MenuSnapshot) {
