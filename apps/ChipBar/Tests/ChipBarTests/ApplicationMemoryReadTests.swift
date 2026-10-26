@@ -1,5 +1,6 @@
 import Darwin
 import Testing
+import ChipBarCore
 @testable import ChipBar
 
 struct ApplicationMemoryReadTests {
@@ -50,6 +51,31 @@ struct ApplicationMemoryReadTests {
         let reading = ProcessMemoryReader.read(pid: -1, initialFootprint: nil)
         #expect(reading.bytes == nil)
         #expect(!reading.approximate)
+    }
+
+    @Test func cpuMemoryAndANERankingsSkipExpensiveGPUWalk() async {
+        let snapshot = await ApplicationActivitySampler().sample(includeGPU: false)
+        #expect(!snapshot.gpuSampled)
+        #expect(snapshot.gpuClientCount == 0)
+        #expect(snapshot.rows.allSatisfy { $0.gpuPercent == nil })
+        #expect(snapshot.readableCPUCount > 0)
+        #expect(snapshot.readableMemoryCount > 0)
+    }
+
+    @Test func switchingToGPUForcesFreshRegistryScan() {
+        let now: TimeInterval = 100
+        let rows: [ChipBarCore.ApplicationActivityRow] = []
+        let cpuOnly = ActivitySnapshot(sampledAt: now, rows: rows, processCount: 0,
+            readableCPUCount: 0, readableMemoryCount: 0, approximateMemoryCount: 0,
+            gpuClientCount: 0, gpuSampled: false, neuralSupported: false)
+        #expect(!ApplicationActivitySamplingPolicy.needsRefresh(cpuOnly, includeGPU: false, now: now))
+        #expect(ApplicationActivitySamplingPolicy.needsRefresh(cpuOnly, includeGPU: true, now: now))
+
+        let gpuReady = ActivitySnapshot(sampledAt: now, rows: rows, processCount: 0,
+            readableCPUCount: 0, readableMemoryCount: 0, approximateMemoryCount: 0,
+            gpuClientCount: 0, gpuSampled: true, neuralSupported: false)
+        #expect(!ApplicationActivitySamplingPolicy.needsRefresh(gpuReady, includeGPU: true, now: now))
+        #expect(ApplicationActivitySamplingPolicy.needsRefresh(gpuReady, includeGPU: true, now: now + 11))
     }
 
     @Test func liveApplicationScanContainsNonzeroMemory() async {
