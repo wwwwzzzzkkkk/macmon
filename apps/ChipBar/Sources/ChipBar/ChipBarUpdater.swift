@@ -21,8 +21,7 @@ struct ChipBarVersion: Comparable, Equatable {
     }
 
     static func < (lhs: Self, rhs: Self) -> Bool {
-        (lhs.major, lhs.minor, lhs.patch).lexicographicallyPrecedes(
-            (rhs.major, rhs.minor, rhs.patch))
+        (lhs.major, lhs.minor, lhs.patch) < (rhs.major, rhs.minor, rhs.patch)
     }
 }
 
@@ -230,11 +229,15 @@ private enum ChipBarUpdateInstaller {
                       let expectedDigest = ChipBarUpdateRelease.archiveDigest(from: manifest)
                 else { throw ChipBarUpdateFailure.invalidPackage("缺少有效 SHA256SUMS") }
 
-                let (archiveURL, response) = try await URLSession.shared.download(
+                let (zipData, response) = try await URLSession.shared.data(
                     from: archive.browser_download_url)
-                guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-                    throw ChipBarUpdateFailure.invalidResponse
-                }
+                guard (response as? HTTPURLResponse)?.statusCode == 200,
+                      zipData.count == archive.size, zipData.count <= 100_000_000
+                else { throw ChipBarUpdateFailure.invalidResponse }
+                let archiveURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("chipbar-download-\(UUID().uuidString).zip")
+                try zipData.write(to: archiveURL, options: .atomic)
+                defer { try? FileManager.default.removeItem(at: archiveURL) }
                 status = "正在检查应用签名并准备安装…"
                 let target = Bundle.main.bundleURL
                 let prepared = try await Task.detached(priority: .userInitiated) {
