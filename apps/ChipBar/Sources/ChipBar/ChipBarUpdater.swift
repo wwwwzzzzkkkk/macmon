@@ -168,6 +168,7 @@ private enum ChipBarUpdateInstaller {
 }
 
 @MainActor final class ChipBarUpdater: ObservableObject {
+    static let shared = ChipBarUpdater()
     @Published private(set) var status = "检查是否有可用的新版本。"
     @Published private(set) var availableVersion: String?
     @Published private(set) var busy = false
