@@ -59,6 +59,14 @@ import ChipBarCore
         #expect(frames == [paused])
     }
 
+    @Test func onlyNetworkAndDiskReadoutsRequireAdditionalPolling() {
+        #expect(!MenuRefreshDriver.needsPeriodicSources([.logo, .power]))
+        #expect(!MenuRefreshDriver.needsPeriodicSources([.logo, .power, .memory, .fans]))
+        #expect(MenuRefreshDriver.needsPeriodicSources([.network]))
+        #expect(MenuRefreshDriver.needsPeriodicSources([.power, .disk]))
+        #expect(MenuRefreshDriver.needsPeriodicSources([.externalDisk]))
+    }
+
     @Test func identicalSnapshotsDoNotRenderAgain() {
         var renders = 0
         let first = frame("1W", "↓1K/s")
