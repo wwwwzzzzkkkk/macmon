@@ -17,6 +17,17 @@ struct ActivitySnapshot: Sendable {
     let neuralSupported: Bool
 }
 
+/// Keep GPU-tab changes responsive without rescanning the full registry on
+/// every CPU, memory or ANE update.
+enum ApplicationActivitySamplingPolicy {
+    static func needsRefresh(_ snapshot: ActivitySnapshot?, includeGPU: Bool,
+                             now: TimeInterval) -> Bool {
+        guard let snapshot else { return true }
+        return !ApplicationActivityCachePolicy.isFresh(sampledAt: snapshot.sampledAt, now: now)
+            || (includeGPU && !snapshot.gpuSampled)
+    }
+}
+
 /// Memory footprint is preferred (Activity Monitor-compatible), but on some
 /// macOS versions libproc reports a successful query with a zero footprint.
 /// A second V4 query, then a resident-size fallback, prevents false 0.0 MB.
@@ -214,11 +225,8 @@ actor ApplicationActivitySampler {
     private var inFlightToken = UUID()
 
     func watch(interval: Int, includeGPU: Bool) async {
-        var sampleNext = snapshot.map {
-            !ApplicationActivityCachePolicy.isFresh(sampledAt: $0.sampledAt,
-                                                   now: ProcessInfo.processInfo.systemUptime)
-                || (includeGPU && !$0.gpuSampled)
-        } ?? true
+        var sampleNext = ApplicationActivitySamplingPolicy.needsRefresh(
+            snapshot, includeGPU: includeGPU, now: ProcessInfo.processInfo.systemUptime)
         while !Task.isCancelled {
             if sampleNext {
                 let result = await sampleOnce(includeGPU: includeGPU)
