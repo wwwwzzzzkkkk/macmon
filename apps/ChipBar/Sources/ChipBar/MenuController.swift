@@ -29,6 +29,7 @@ import ChipBarCore
     private var mouseReleaseCleanup: Task<Void, Never>?
     private var panelMaterial: PanelMaterialView!
     private var subscription: AnyCancellable?
+    private var layoutSubscription: AnyCancellable?
     private lazy var layoutCoordinator = PanelLayoutCoordinator { [weak self] in
         self?.refresh()
     }
@@ -133,23 +134,39 @@ import ChipBarCore
         ]).debounce(for: .milliseconds(30), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.configureMenuRefresh() }
         refresh()
-        subscription = Publishers.Merge(monitor.objectWillChange.map { _ in () },
-                                        dashboardState.$ssdDetailsHeight.dropFirst().map { _ in () })
+        subscription = monitor.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                // Keep network/disk counter frames atomic: their polling
-                // driver renders only after all asynchronous sources finish.
-                // For chip-only menus, published samples update the labels
-                // directly without scheduling a second idle timer.
+                // Keep network/disk frames atomic: they are rendered by their
+                // acquisition driver after all asynchronous reads complete.
                 if !MenuRefreshDriver.needsPeriodicSources(self.monitor.menuItems) {
                     self.menuRefresh.display(self.monitor.menuSnapshot)
                 }
-                // Hidden panels must not queue layout measurements at every
-                // background macmon sample.
-                guard self.dashboardMounted && self.panelRequestedVisible else { return }
-                self.layoutCoordinator.request()
             }
+
+        // Power samples, sparkline history and animation frames do not change
+        // the panel's intrinsic height. Recomputing NSHostingView.fittingSize
+        // on every hardware sample was redundant (and expensive on glass).
+        // Refit only when content may actually add/remove or wrap a section.
+        layoutSubscription = Publishers.MergeMany([
+            monitor.$status.dropFirst().removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            monitor.$error.dropFirst().removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            monitor.$connected.dropFirst().removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            monitor.$paused.dropFirst().removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            monitor.$sleeping.dropFirst().removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            monitor.ssd.$enabled.dropFirst().removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            monitor.ssd.$status.dropFirst().removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            monitor.ssd.$readings.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            dashboardState.$ssdDetailsHeight.dropFirst().map { _ in () }.eraseToAnyPublisher()
+        ])
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] _ in
+            guard let self, self.dashboardMounted && self.panelRequestedVisible else { return }
+            // Existing coordinator coalesces requests without adding any
+            // delay to disclosure, glass or spring animation timing.
+            self.layoutCoordinator.request()
+        }
         // Synchronous main-thread state delivery: resetForOpening() happens
         // before the panel is presented, so it cannot queue stale navigation.
         disclosureSubscription = dashboardState.$showApplications.combineLatest(dashboardState.$showSSDDetails)
