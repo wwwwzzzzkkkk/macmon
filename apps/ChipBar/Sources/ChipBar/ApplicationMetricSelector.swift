@@ -50,8 +50,9 @@ struct ApplicationMetricSelector: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
         }
-        .animation(ChipBarMotion.optional(ChipBarMotion.selection, reduceMotion: reduceMotion),
-                   value: selection)
+        // The tap already supplies one spring transaction to the matched
+        // highlight. A second implicit animation on the whole selector
+        // reanimated its text and could cause an extra hop after rapid taps.
         .accessibilityElement(children: .contain)
         .accessibilityLabel("应用占用指标")
     }

@@ -1,13 +1,14 @@
 import SwiftUI
 import QuartzCore
 
-/// A single motion language for ChipBar 2.0.
+/// A consistent, critically damped motion language. Interactive spring
+/// animations stay interruptible without overshooting when clicked rapidly.
 /// Short, interrupted gestures should not stack expensive layout animations.
 /// Respect Reduce Motion throughout the dashboard.
 enum ChipBarMotion {
-    static let tap = Animation.spring(response: 0.24, dampingFraction: 0.76)
-    static let disclosure = Animation.spring(response: 0.35, dampingFraction: 0.88)
-    static let selection = Animation.spring(response: 0.30, dampingFraction: 0.84)
+    static let tap = Animation.spring(response: 0.24, dampingFraction: 1.0)
+    static let disclosure = Animation.spring(response: 0.35, dampingFraction: 1.0)
+    static let selection = Animation.spring(response: 0.30, dampingFraction: 1.0)
     // Layered application resource switch: the old list recedes and fades,
     // while the next metric enters above it. Keep this under one-third second.
     static let resourceStack = Animation.easeInOut(duration: 0.28)
@@ -28,7 +29,7 @@ struct ChipBarPressStyle: ButtonStyle {
             .contentShape(Rectangle())
             .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 0.965 : 1))
             .opacity(configuration.isPressed && !reduceMotion ? 0.78 : 1)
-            .animation(ChipBarMotion.optional(.spring(response: 0.22, dampingFraction: 0.72),
+            .animation(ChipBarMotion.optional(.spring(response: 0.22, dampingFraction: 1.0),
                                               reduceMotion: reduceMotion),
                        value: configuration.isPressed)
     }

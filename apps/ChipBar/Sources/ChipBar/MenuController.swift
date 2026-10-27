@@ -54,6 +54,7 @@ import ChipBarCore
         let start: (applications: Double, ssd: Double)
         let target: (applications: Double, ssd: Double)
         let began: TimeInterval
+        let collapsedDocumentHeight: CGFloat
         let token: UUID
     }
     private var disclosureTransition: DisclosureTransition?
@@ -203,14 +204,45 @@ import ChipBarCore
         // Reset the new page only after the navigation animation finishes.
         resetScrollForPage = true
         navigationTask = Task { @MainActor [weak self] in
+            // SwiftUI commits the destination after this callback. Prepare
+            // its document height and top offset before the page slide ends,
+            // not in the last frame (which caused Settings/Back to jump).
+            await Task.yield()
+            guard let self, self.navigationToken == token,
+                  self.dashboardMounted, self.panelRequestedVisible,
+                  !Task.isCancelled else { return }
+            self.prepareNavigationDocument()
             do { try await Task.sleep(for: .milliseconds(270)) }
             catch { return }
-            guard let self, self.navigationToken == token,
+            guard self.navigationToken == token,
                   self.dashboardMounted, self.panelRequestedVisible else { return }
             self.navigationTask = nil
             self.navigationResizeInFlight = false
             self.refresh(forceLayout: true)
         }
+    }
+
+    /// The viewport remains fixed throughout the horizontal page transition.
+    /// Prepare the incoming page's *scrollable document* at the start, so its
+    /// content never snaps from an old page's bottom offset at completion.
+    private func prepareNavigationDocument() {
+        guard dashboardMounted, panelRequestedVisible,
+              let viewportHeight = navigationViewportHeight else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        hostingView.layoutSubtreeIfNeeded()
+        let height = ceil(hostingView.fittingSize.height)
+        guard height.isFinite, height > 0 else { return }
+        measuredHeight = height
+        let documentHeight = max(viewportHeight, height)
+        let documentSize = NSSize(width: DashboardLayout.width, height: documentHeight)
+        if hostingView.frame.size != documentSize { hostingView.setFrameSize(documentSize) }
+        let maximumOffset = max(0, documentHeight - viewportHeight)
+        let topY = hostingView.isFlipped ? 0 : maximumOffset
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: topY))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        resetScrollForPage = false
     }
 
     private func animateDisclosure(applications: Bool, ssd: Bool) {
@@ -237,21 +269,47 @@ import ChipBarCore
             }
             return
         }
+        let collapsedHeight = disclosureTransition?.collapsedDocumentHeight
+            ?? DisclosurePanelSizing.collapsedDocumentHeight(
+                measuredHeight: measuredHeight,
+                applications: dashboardState.applicationsExpansion,
+                ssd: dashboardState.ssdExpansion,
+                ssdDetailsHeight: dashboardState.ssdDetailsHeight)
+        let targetDocumentHeight = DisclosurePanelSizing.expandedDocumentHeight(
+            collapsedHeight: collapsedHeight,
+            applications: target.applications, ssd: target.ssd,
+            ssdDetailsHeight: dashboardState.ssdDetailsHeight)
+        let targetHeight = min(maximumHeight, targetDocumentHeight)
         let token = UUID()
         disclosureTransition = DisclosureTransition(start: start, target: target,
-            began: ProcessInfo.processInfo.systemUptime, token: token)
-        let heightDelta = CGFloat(target.applications - start.applications) * 104
-            + CGFloat(target.ssd - start.ssd) * dashboardState.ssdDetailsHeight
-        let targetHeight = DisclosurePanelSizing.targetHeight(
-            documentHeight: measuredHeight,
-            contentHeightDelta: heightDelta,
-            maximumHeight: maximumHeight
-        )
+            began: ProcessInfo.processInfo.systemUptime,
+            collapsedDocumentHeight: collapsedHeight, token: token)
         withAnimation(.timingCurve(0.42, 0, 0.58, 1, duration: DashboardMotion.duration)) {
             dashboardState.applicationsExpansion = target.applications
             dashboardState.ssdExpansion = target.ssd
         }
         if navigationViewportHeight != nil { navigationViewportHeight = targetHeight }
+        // Grow the scroll document ahead of the glass window so the additional
+        // application rows never get clipped, then compact it only after the
+        // window has settled. This also avoids a second resize at completion.
+        let documentSize = NSSize(width: DashboardLayout.width,
+            height: max(hostingView.frame.height, targetDocumentHeight))
+        if hostingView.frame.size != documentSize {
+            let clip = scrollView.contentView
+            let viewport = clip.bounds.height
+            let oldMaximum = max(0, hostingView.frame.height - viewport)
+            let oldTop = hostingView.isFlipped
+                ? clip.bounds.origin.y : oldMaximum - clip.bounds.origin.y
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            hostingView.setFrameSize(documentSize)
+            let newMaximum = max(0, documentSize.height - viewport)
+            let clampedTop = min(newMaximum, max(0, oldTop))
+            clip.scroll(to: NSPoint(x: 0,
+                y: hostingView.isFlipped ? clampedTop : newMaximum - clampedTop))
+            scrollView.reflectScrolledClipView(clip)
+            CATransaction.commit()
+        }
         if let frame = panelFrame(size: NSSize(width: panel.frame.width, height: targetHeight)) {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = DashboardMotion.duration
@@ -276,7 +334,7 @@ import ChipBarCore
             return (dashboardState.applicationsExpansion, dashboardState.ssdExpansion)
         }
         let t = min(1, max(0, (ProcessInfo.processInfo.systemUptime - transition.began) / DashboardMotion.duration))
-        let eased = t * t * (3 - 2 * t)
+        let eased = DisclosurePanelSizing.easeInOutProgress(t)
         return (
             transition.start.applications + (transition.target.applications - transition.start.applications) * eased,
             transition.start.ssd + (transition.target.ssd - transition.start.ssd) * eased
