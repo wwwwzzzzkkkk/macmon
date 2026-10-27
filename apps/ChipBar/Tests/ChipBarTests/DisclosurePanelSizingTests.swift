@@ -27,6 +27,38 @@ struct DisclosurePanelSizingTests {
         ) == 750)
     }
 
+    @Test func reversingMoreAlwaysReturnsToStableCollapsedHeight() {
+        let collapsed: CGFloat = 602
+        let opened = DisclosurePanelSizing.expandedDocumentHeight(
+            collapsedHeight: collapsed, applications: 1, ssd: 0, ssdDetailsHeight: 0)
+        #expect(opened == 706)
+        let recovered = DisclosurePanelSizing.collapsedDocumentHeight(
+            measuredHeight: opened, applications: 1, ssd: 0, ssdDetailsHeight: 0)
+        #expect(recovered == collapsed)
+        // The window may still be at 660 during interruption. Its current
+        // presentation height must never be used as a new content baseline.
+        let close = DisclosurePanelSizing.expandedDocumentHeight(
+            collapsedHeight: recovered, applications: 0, ssd: 0, ssdDetailsHeight: 0)
+        #expect(close == collapsed)
+        let reopen = DisclosurePanelSizing.expandedDocumentHeight(
+            collapsedHeight: recovered, applications: 1, ssd: 0, ssdDetailsHeight: 0)
+        #expect(reopen == opened)
+    }
+
+    @Test func overlappingSSDAndApplicationExpansionsKeepIndependentHeightContributions() {
+        let initial: CGFloat = 600
+        let ssd: CGFloat = 188
+        let both = DisclosurePanelSizing.expandedDocumentHeight(
+            collapsedHeight: initial, applications: 1, ssd: 1, ssdDetailsHeight: ssd)
+        #expect(both == 892)
+        let base = DisclosurePanelSizing.collapsedDocumentHeight(
+            measuredHeight: both, applications: 1, ssd: 1, ssdDetailsHeight: ssd)
+        #expect(base == initial)
+        let onlySSD = DisclosurePanelSizing.expandedDocumentHeight(
+            collapsedHeight: base, applications: 0, ssd: 1, ssdDetailsHeight: ssd)
+        #expect(onlySSD == 788)
+    }
+
     @Test func collapseUsesFullDocumentHeightWhenExpandedWindowWasScreenCapped() {
         // The expanded document is 1,000 pt tall, but the visible panel was
         // capped at 800 pt. Closing a 300 pt section should target 700 pt.
