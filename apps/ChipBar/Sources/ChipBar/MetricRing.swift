@@ -23,7 +23,7 @@ struct MetricRing: View {
     }
 
     private var motion: Animation {
-        reduceMotion ? .linear(duration: 0) : .spring(response: 0.55, dampingFraction: 0.84)
+        reduceMotion ? .linear(duration: 0) : .spring(response: 0.55, dampingFraction: 1.0)
     }
 
     var body: some View {
