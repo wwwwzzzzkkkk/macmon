@@ -27,6 +27,17 @@ struct DisclosurePanelSizingTests {
         ) == 750)
     }
 
+    @Test func interruptionProgressMatchesWindowEaseInOut() {
+        #expect(DisclosurePanelSizing.easeInOutProgress(-1) == 0)
+        #expect(DisclosurePanelSizing.easeInOutProgress(0) == 0)
+        #expect(abs(DisclosurePanelSizing.easeInOutProgress(0.5) - 0.5) < 0.001)
+        #expect(DisclosurePanelSizing.easeInOutProgress(1) == 1)
+        #expect(DisclosurePanelSizing.easeInOutProgress(2) == 1)
+        let quarter = DisclosurePanelSizing.easeInOutProgress(0.25)
+        #expect(quarter > 0.12 && quarter < 0.14)
+        #expect(abs(DisclosurePanelSizing.easeInOutProgress(0.75) - (1 - quarter)) < 0.001)
+    }
+
     @Test func reversingMoreAlwaysReturnsToStableCollapsedHeight() {
         let collapsed: CGFloat = 602
         let opened = DisclosurePanelSizing.expandedDocumentHeight(
