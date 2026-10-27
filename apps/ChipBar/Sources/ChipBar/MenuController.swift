@@ -295,7 +295,20 @@ import ChipBarCore
         let documentSize = NSSize(width: DashboardLayout.width,
             height: max(hostingView.frame.height, targetDocumentHeight))
         if hostingView.frame.size != documentSize {
+            let clip = scrollView.contentView
+            let viewport = clip.bounds.height
+            let oldMaximum = max(0, hostingView.frame.height - viewport)
+            let oldTop = hostingView.isFlipped
+                ? clip.bounds.origin.y : oldMaximum - clip.bounds.origin.y
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             hostingView.setFrameSize(documentSize)
+            let newMaximum = max(0, documentSize.height - viewport)
+            let clampedTop = min(newMaximum, max(0, oldTop))
+            clip.scroll(to: NSPoint(x: 0,
+                y: hostingView.isFlipped ? clampedTop : newMaximum - clampedTop))
+            scrollView.reflectScrolledClipView(clip)
+            CATransaction.commit()
         }
         if let frame = panelFrame(size: NSSize(width: panel.frame.width, height: targetHeight)) {
             NSAnimationContext.runAnimationGroup { context in
