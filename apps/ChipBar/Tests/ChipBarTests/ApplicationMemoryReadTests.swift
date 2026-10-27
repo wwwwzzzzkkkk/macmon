@@ -1,4 +1,5 @@
 import Darwin
+import Foundation
 import Testing
 import ChipBarCore
 @testable import ChipBar
