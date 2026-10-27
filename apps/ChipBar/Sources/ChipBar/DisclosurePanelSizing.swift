@@ -14,6 +14,25 @@ enum DisclosurePanelSizing {
         return min(maximumHeight, max(250, proposal))
     }
 
+    /// Match the actual AppKit and SwiftUI cubic ease-in-out curve when a
+    /// disclosure is interrupted halfway through; smoothstep is subtly
+    /// different and can create a 2–4 pt positional hitch on reversal.
+    static func easeInOutProgress(_ time: Double) -> Double {
+        let x = max(0, min(1, time))
+        if x == 0 || x == 1 { return x }
+        var u = x
+        for _ in 0..<6 {
+            let inv = 1 - u
+            let curveX = 3 * inv * inv * u * 0.42
+                + 3 * inv * u * u * 0.58 + u * u * u
+            let derivative = 3 * inv * inv * 0.42
+                + 6 * inv * u * (0.58 - 0.42) + 3 * u * u * 0.42
+            guard derivative > 0.0001 else { break }
+            u = max(0, min(1, u - (curveX - x) / derivative))
+        }
+        return 3 * (1 - u) * u * u + u * u * u
+    }
+
     /// Recover the stable fully-collapsed document height from the last
     /// settled layout. While a panel animation is in progress, keep reusing
     /// that baseline: measuredHeight intentionally does not track each frame.
