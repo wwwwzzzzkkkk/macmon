@@ -160,9 +160,11 @@ import ChipBarCore
             monitor.ssd.$readings.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             dashboardState.$ssdDetailsHeight.dropFirst().map { _ in () }.eraseToAnyPublisher()
         ])
-        .debounce(for: .milliseconds(60), scheduler: DispatchQueue.main)
+        .receive(on: DispatchQueue.main)
         .sink { [weak self] _ in
             guard let self, self.dashboardMounted && self.panelRequestedVisible else { return }
+            // Existing coordinator coalesces requests without adding any
+            // delay to disclosure, glass or spring animation timing.
             self.layoutCoordinator.request()
         }
         // Synchronous main-thread state delivery: resetForOpening() happens
