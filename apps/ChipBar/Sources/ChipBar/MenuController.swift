@@ -321,7 +321,7 @@ import ChipBarCore
             return (dashboardState.applicationsExpansion, dashboardState.ssdExpansion)
         }
         let t = min(1, max(0, (ProcessInfo.processInfo.systemUptime - transition.began) / DashboardMotion.duration))
-        let eased = t * t * (3 - 2 * t)
+        let eased = DisclosurePanelSizing.easeInOutProgress(t)
         return (
             transition.start.applications + (transition.target.applications - transition.start.applications) * eased,
             transition.start.ssd + (transition.target.ssd - transition.start.ssd) * eased
