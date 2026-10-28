@@ -356,18 +356,17 @@ struct Dashboard: View {
                                 Text(menuTitle(item)).font(.caption2.weight(.medium)).lineLimit(1)
                                     .minimumScaleFactor(0.8)
                                 Spacer(minLength: 0)
-                                if enabled {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.caption2)
-                                }
+                                ChipBarMiniSwitch(enabled: enabled, compact: true)
                             }
                             .foregroundStyle(enabled ? Color.primary : Color.secondary)
-                            .padding(.horizontal, 9).frame(height: 37)
-                            .background(enabled ? accent.opacity(0.14) : Color.primary.opacity(0.04),
-                                        in: RoundedRectangle(cornerRadius: 9))
+                            .padding(.horizontal, 9)
+                            .frame(height: 39)
+                            .background(Color.primary.opacity(enabled ? 0.09 : 0.035),
+                                        in: RoundedRectangle(cornerRadius: 10))
                             .overlay {
-                                RoundedRectangle(cornerRadius: 9)
-                                    .strokeBorder(enabled ? accent.opacity(0.38) : Color.primary.opacity(0.07))
+                                RoundedRectangle(cornerRadius: 10)
+                                    .strokeBorder(Color.primary.opacity(enabled ? 0.18 : 0.07),
+                                                  lineWidth: 0.7)
                             }
                         }
                         .buttonStyle(ChipBarPressStyle())
@@ -378,15 +377,13 @@ struct Dashboard: View {
                     }
                 }
                 if monitor.menuItems.contains(.power) {
-                    Picker("菜单栏功率", selection: $monitor.menuMetric) {
-                        ForEach(PowerMetric.allCases) { Text($0.title).tag($0) }
-                    }.font(.caption)
+                    ChipBarPowerSelection(selection: $monitor.menuMetric)
                 }
                 if monitor.ssd.enabled {
                     Toggle("显示 SSD 温度", isOn: Binding(
                         get: { monitor.ssd.showInMenu },
                         set: { monitor.ssd.showInMenu = $0 }))
-                        .font(.caption)
+                        .toggleStyle(ChipBarGlassToggleStyle())
                 }
             }
 
