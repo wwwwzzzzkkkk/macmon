@@ -12,7 +12,8 @@ defaults:
     working-directory: apps/ChipBar
 jobs:
   verify:
-    runs-on: macos-15
+    # Apple Silicon GitHub-hosted runner; avoids stalled macOS 15 job allocation.
+    runs-on: macos-26
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
