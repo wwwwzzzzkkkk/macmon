@@ -101,6 +101,7 @@ struct SSDSettings: View {
         VStack(alignment: .leading, spacing: 8) {
             Divider()
             Toggle("监控外接 NVMe SSD", isOn: $ssd.enabled)
+                .toggleStyle(ChipBarGlassToggleStyle())
             if ssd.enabled {
                 Text("多盘显示最高综合温度；各盘详情见面板。每轮结束后等待 30 秒，不保存历史。")
                     .font(.caption2).foregroundStyle(.secondary)
