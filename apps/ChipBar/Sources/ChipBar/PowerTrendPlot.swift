@@ -1,4 +1,5 @@
 import SwiftUI
+import ChipBarCore
 
 /// A bounded path rebuilt from the current history. Avoid retaining a chart mark
 /// and axis identity graph for each new timestamp during long sampling sessions.
@@ -11,8 +12,7 @@ struct PowerTrendPlot: View {
 
     let points: [Point]
     let maximum: Double
-    let axisDates: [Date]
-    let dateFormat: Date.FormatStyle
+    let timeline: TrendTimeWindow
     let accent: Color
 
     var body: some View {
@@ -54,9 +54,11 @@ struct PowerTrendPlot: View {
                 }.accessibilityHidden(true)
             }
             HStack(spacing: 0) {
-                ForEach(Array(axisDates.enumerated()), id: \.offset) { index, date in
+                ForEach(Array(timeline.ticks.enumerated()), id: \.offset) { index, date in
                     if index > 0 { Spacer(minLength: 0) }
-                    Text(date, format: dateFormat).fixedSize(horizontal: true, vertical: false)
+                    Text(TrendTimeWindow.clockLabel(date))
+                        .monospacedDigit()
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }.padding(.leading, 34).font(.caption2).foregroundStyle(.secondary)
         }
@@ -70,10 +72,8 @@ struct PowerTrendPlot: View {
     }
 
     private func position(_ point: Point, size: CGSize) -> CGPoint {
-        let start = axisDates.first ?? point.date
-        let duration = (axisDates.last ?? start).timeIntervalSince(start)
-        let fraction = duration > 0 ? point.date.timeIntervalSince(start) / duration : 0.5
-        return CGPoint(x: size.width * min(1, max(0, fraction)),
+        let fraction = timeline.fraction(for: point.date) ?? 0
+        return CGPoint(x: size.width * fraction,
                        y: size.height * (1 - min(1, max(0, point.power / maximum))))
     }
 
