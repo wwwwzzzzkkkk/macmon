@@ -14,7 +14,8 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: chipbar-stable-release
+  # Separate from stalled legacy macOS 15 release jobs. Tag creation stays immutable.
+  group: chipbar-stable-release-macos26
   cancel-in-progress: false
 defaults:
   run:
