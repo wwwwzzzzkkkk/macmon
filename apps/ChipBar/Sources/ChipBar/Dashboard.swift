@@ -278,7 +278,7 @@ struct Dashboard: View {
                 } else {
                     PowerTrendPlot(points: chartPoints,
                         maximum: max(1, (monitor.history.compactMap { $0.power(state.chartMetric) }.max() ?? 1) * 1.15),
-                        axisDates: trendAxisDates, dateFormat: trendDateFormat, accent: accent)
+                        timeline: trendTimeline, accent: accent)
                     .frame(height: 64)
                     .id(state.chartMetric)
                     .transition(.opacity)
@@ -474,15 +474,11 @@ struct Dashboard: View {
             }
     }
 
-    private var trendAxisDates: [Date] {
-        guard let first = monitor.history.first?.date, let last = monitor.history.last?.date else { return [] }
-        guard last > first else { return [first] }
-        return [first, first.addingTimeInterval(last.timeIntervalSince(first) / 2), last]
-    }
-
-    private var trendDateFormat: Date.FormatStyle {
-        let duration = (monitor.history.last?.date ?? Date()).timeIntervalSince(monitor.history.first?.date ?? Date())
-        return duration >= 120 ? .dateTime.hour().minute() : .dateTime.minute().second()
+    /// Pin the x-axis to a real 10-minute window ending at the latest
+    /// received sample. On startup, a few data points occupy only the most
+    /// recent part of the plot instead of stretching to its entire width.
+    private var trendTimeline: TrendTimeWindow {
+        TrendTimeWindow(endingAt: monitor.history.last?.date ?? Date())
     }
 
     private var average: Double? {
@@ -492,10 +488,15 @@ struct Dashboard: View {
 
     // Do not draw a line across sleep, restart or missing metric gaps.
     private var chartPoints: [PowerTrendPlot.Point] {
+        let timeline = trendTimeline
         var segment = 0
         var previous: Sample?
         var points: [PowerTrendPlot.Point] = []
         for sample in monitor.history {
+            guard timeline.fraction(for: sample.date) != nil else {
+                previous = nil
+                continue
+            }
             if let previous, sample.date.timeIntervalSince(previous.date) > Double(monitor.interval) / 1000 * 2.5 || previous.power(state.chartMetric) == nil {
                 segment += 1
             }
