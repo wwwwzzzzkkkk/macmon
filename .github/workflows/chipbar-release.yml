@@ -17,7 +17,7 @@ concurrency:
   # Separate from stalled legacy macOS 15 release jobs. Tag creation stays immutable.
   # Per-commit group prevents orphaned queue entries blocking future verified releases.
   # The immutable version tag still prevents duplicate or mismatched archives.
-  group: chipbar-stable-release-\${{ github.sha }}
+  group: chipbar-stable-release-${{ github.sha }}
   cancel-in-progress: false
 defaults:
   run:
