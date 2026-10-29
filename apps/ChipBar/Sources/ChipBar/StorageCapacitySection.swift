@@ -80,7 +80,7 @@ struct StorageCapacitySection: View {
         guard let activity = freshActivity else { return (nil, nil) }
         let values = activity.rates.filter {
             activity.connected.contains($0.key) && !activity.external.contains($0.key)
-        }.map(\.value)
+        }.map { $0.value }
         guard !values.isEmpty else { return (nil, nil) }
         return (values.reduce(0) { $0 + $1.readMB },
                 values.reduce(0) { $0 + $1.writeMB })
