@@ -206,7 +206,7 @@ struct Dashboard: View {
     /// memory usage percentage and macOS pressure-colored stroke unchanged.
     private var memoryCapacitySummary: String {
         guard monitor.connected, let memory = monitor.sample?.memory else { return "内存 —" }
-        return String(format: "内存 %.1f/%.1f GB", memory.usedGiB, memory.totalGiB)
+        return String(format: "%.1f / %.1f GB", memory.usedGiB, memory.totalGiB)
     }
 
     /// One and only one power history chart: the headline and real rolling
