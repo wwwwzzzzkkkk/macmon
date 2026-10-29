@@ -26,7 +26,7 @@ func color(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> CGColo
     CGColor(colorSpace: rgb, components: [r, g, b, a])!
 }
 
-let area = CGRect(x: 0, y: 0, width: width, height: height)
+let area = CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height))
 let rounded = CGPath(roundedRect: area.insetBy(dx: 18, dy: 18),
                      cornerWidth: 226, cornerHeight: 226, transform: nil)
 ctx.addPath(rounded)
