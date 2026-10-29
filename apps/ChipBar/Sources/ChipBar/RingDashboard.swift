@@ -38,7 +38,6 @@ struct DashboardRunway: View {
                         RunwayPercentage(value: fraction * 100)
                             .font(.system(size: 21, weight: .semibold, design: .rounded))
                             .monospacedDigit()
-                            .contentTransition(.numericText())
                             .animation(reduceMotion ? nil :
                                 .spring(response: 0.55, dampingFraction: 1.0), value: fraction)
                     } else {
