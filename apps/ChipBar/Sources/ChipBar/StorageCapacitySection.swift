@@ -66,42 +66,50 @@ struct StorageCapacitySection: View {
     @StateObject private var internalStorage = InternalStorageModel.shared
     @StateObject private var externalStorage = ExternalStorageCapacityModel.shared
 
+    private let columns: [GridItem] = [
+        GridItem(.flexible(), spacing: 8),
+        GridItem(.flexible(), spacing: 8)
+    ]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("储存空间", systemImage: "internaldrive")
-                .font(.subheadline.weight(.medium))
+            HStack {
+                Label("储存空间", systemImage: "internaldrive")
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text("可用容量")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
-            VStack(alignment: .leading, spacing: 11) {
-                StorageVolumeRow(title: "内置储存", symbol: "internaldrive",
-                                 total: internalStorage.capacity?.totalBytes,
-                                 available: internalStorage.capacity?.availableBytes,
-                                 placeholder: internalStorage.sampled ? "不可用" : "读取中…")
-
-                Divider().opacity(0.55)
+            LazyVGrid(columns: columns, spacing: 8) {
+                StorageVolumeCard(
+                    title: "Macintosh HD",
+                    symbol: "internaldrive",
+                    total: internalStorage.capacity?.totalBytes,
+                    available: internalStorage.capacity?.availableBytes,
+                    placeholder: internalStorage.sampled ? "不可用" : "读取中…")
 
                 if !externalStorage.sampled {
-                    StorageVolumeRow(title: "外接储存", symbol: "externaldrive",
-                                     total: nil, available: nil, placeholder: "读取中…")
+                    StorageVolumeCard(title: "外接储存", symbol: "externaldrive",
+                                      total: nil, available: nil, placeholder: "读取中…")
                 } else if externalStorage.volumes.isEmpty {
-                    StorageVolumeRow(title: "外接储存", symbol: "externaldrive",
-                                     total: nil, available: nil, placeholder: "未检测到已挂载磁盘")
+                    StorageVolumeCard(title: "外接储存", symbol: "externaldrive",
+                                      total: nil, available: nil, placeholder: "未接入磁盘")
                 } else {
                     ForEach(externalStorage.volumes) { item in
-                        StorageVolumeRow(
+                        StorageVolumeCard(
                             title: item.volume.name.isEmpty ? "外接储存" : item.volume.name,
                             symbol: "externaldrive",
                             total: item.volume.total,
                             available: item.volume.available,
-                            subtitle: item.volume.apfs ? "外接 SSD / 磁盘 · APFS 共享空间" : "外接 SSD / 磁盘",
-                            placeholder: "暂不可用")
+                            placeholder: "不可用")
                     }
                 }
             }
-            .padding(11)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
         }
         .task {
-            // Avoid expensive first reads in the first frame of the glass popup.
+            // Retain the existing non-blocking 30-second capacity sources.
             do { try await Task.sleep(for: .milliseconds(320)) }
             catch { return }
             await internalStorage.watch()
@@ -114,75 +122,104 @@ struct StorageCapacitySection: View {
     }
 }
 
-/// Fixed-height mini capacity bar. All capacity values are file-system values
-/// from macOS; an empty value is shown as unavailable, never fabricated.
-private struct StorageVolumeRow: View {
+/// Clean volume summary: one readable available-space number and a restrained
+/// usage runway. No repeated full-width capacity bars or redundant subtitles.
+/// Capacity values are macOS file-system values, never invented telemetry.
+private struct StorageVolumeCard: View {
     let title: String
     let symbol: String
     let total: Int64?
     let available: Int64?
-    var subtitle: String? = nil
     let placeholder: String
 
-    private var valid: (total: Int64, available: Int64)? {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
+
+    private var capacity: (total: Int64, available: Int64)? {
         guard let total, let available, total > 0,
-              available >= 0, available <= total else { return nil }
+              available >= 0 && available <= total else { return nil }
         return (total, available)
     }
 
-    private func bytes(_ n: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: n, countStyle: .decimal)
+    private func formatted(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .decimal)
+    }
+
+    private var usedFraction: Double {
+        guard let capacity else { return 0 }
+        return 1 - Double(capacity.available) / Double(capacity.total)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 7) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: symbol)
-                    .frame(width: 15)
-                    .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(.caption.weight(.medium))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    if let subtitle {
-                        Text(subtitle)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 4)
-                if let value = valid {
-                    Text("可用 \(bytes(value.available))")
-                        .font(.caption.weight(.medium))
+                    .font(.system(size: 12))
+                    .foregroundStyle(accent)
+                    .frame(width: 17)
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+            }
+
+            if let capacity {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(formatted(capacity.available))
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                } else {
-                    Text(placeholder)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Spacer(minLength: 0)
                 }
+                Text("总计 \(formatted(capacity.total))")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            } else {
+                Text(placeholder)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(height: 26, alignment: .leading)
+                Text("容量暂不可用")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
             }
 
-            CapacityProgressTrack(usedFraction:
-                valid.map { 1 - Double($0.available) / Double($0.total) })
-
-            if let value = valid {
-                HStack {
-                    Text("已使用 \(bytes(value.total - value.available))")
-                    Spacer()
-                    Text("总容量 \(bytes(value.total))")
+            HStack(spacing: 7) {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.primary.opacity(0.10))
+                        Capsule().fill(accent.opacity(0.82))
+                            .frame(width: geometry.size.width * usedFraction)
+                    }
                 }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                .frame(height: 5)
+                .animation(reduceMotion ? nil : ChipBarMotion.disclosure, value: usedFraction)
+
+                Text(capacity.map { String(format: "%.0f%%", usedFraction * 100) } ?? "—")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, alignment: .trailing)
             }
         }
-        .accessibilityElement(children: .combine)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 96, alignment: .top)
+        .padding(11)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
+        .overlay {
+            RoundedRectangle(cornerRadius: 13)
+                .strokeBorder(Color.primary.opacity(0.055), lineWidth: 0.6)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title)，" +
+            (capacity.map { "可用 \(formatted($0.available))，总计 \(formatted($0.total))，已用 \(Int((usedFraction * 100).rounded()))%" } ?? placeholder))
     }
 }
