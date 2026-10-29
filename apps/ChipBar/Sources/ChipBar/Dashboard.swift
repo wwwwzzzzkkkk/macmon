@@ -113,9 +113,9 @@ struct Dashboard: View {
             powerCards
             CPUCoreUsageSection(samplingInterval: monitor.interval,
                                 active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
-            ApplicationUsageSection(monitor: monitor, state: state)
-            trend
+            DashboardANEStrip(power: monitor.sample?.ane, connected: monitor.connected)
             StorageCapacitySection()
+            ApplicationUsageSection(monitor: monitor, state: state)
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
             footer
@@ -209,90 +209,115 @@ struct Dashboard: View {
         return String(format: "内存 %.1f/%.1f GB", memory.usedGiB, memory.totalGiB)
     }
 
+    /// One and only one power history chart: the headline and real rolling
+    /// 10-minute graph form the dashboard's single information focal point.
     @ViewBuilder private var hero: some View {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("芯片合计功率").font(.subheadline).foregroundStyle(.secondary)
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    AnimatedMetricValue(value: monitor.connected ? monitor.sample?.total : nil, decimals: 1)
-                        .font(.system(size: 36, weight: .medium, design: .rounded)).monospacedDigit()
-                    Text("W").font(.title3).foregroundStyle(.secondary)
-                    Spacer(minLength: 4)
-                    Text(memoryCapacitySummary)
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("芯片总功率")
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .layoutPriority(-1)
-                        .help("系统内存已用容量 / 总容量")
-                    Image(systemName: "bolt.fill").font(.title).foregroundStyle(accent.opacity(0.6))
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        AnimatedMetricValue(value: monitor.connected ? monitor.sample?.total : nil)
+                            .font(.system(size: 32, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                        Text("W")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("CPU + GPU + ANE")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
                 }
-                Text("CPU + GPU + ANE · 非整机插座输入功率")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+                .frame(width: 142, alignment: .leading)
 
-    }
-
-    /// Three matching cards keep wattage primary and the bounded occupancy
-    /// gauges in equally sized top-trailing slots. No second ring row.
-    @ViewBuilder private var powerCards: some View {
-        HStack(alignment: .top, spacing: 8) {
-            PowerMetricCard(title: "CPU", power: monitor.sample?.cpu,
-                            connected: monitor.connected, icon: "cpu",
-                            ringTitle: "CPU 占用", ringCaption: "",
-                            utilization: monitor.sample?.cpuUtilization, ringTint: accent,
-                            temperature: monitor.sample?.cpuTemperature, showsTemperature: true,
-                            recentPowers: monitor.history.suffix(24).compactMap { $0.power(.cpu) })
-            PowerMetricCard(title: "GPU", power: monitor.sample?.gpu,
-                            connected: monitor.connected, icon: "square.stack.3d.up",
-                            ringTitle: "GPU 占用", ringCaption: "",
-                            utilization: monitor.sample?.gpuUtilization, ringTint: accent.opacity(0.78),
-                            temperature: monitor.sample?.gpuTemperature, showsTemperature: true,
-                            recentPowers: monitor.history.suffix(24).compactMap { $0.power(.gpu) })
-            PowerMetricCard(title: "ANE", power: monitor.sample?.ane,
-                            connected: monitor.connected, icon: "sparkles",
-                            ringTitle: "内存占用", ringCaption: "内存",
-                            utilization: monitor.sample?.memory?.usedPercent,
-                            ringTint: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
-                            ringStatus: monitor.memoryPressure.title,
-                            recentPowers: monitor.history.suffix(24).compactMap { $0.ane })
-        }
-    }
-
-    @ViewBuilder private var trend: some View {
-            VStack(alignment: .leading, spacing: 7) {
-                HStack {
-                    Text("功率趋势").font(.subheadline.weight(.medium))
-                    Spacer()
-                    Picker("趋势指标", selection: $state.chartMetric) {
-                        ForEach(PowerMetric.allCases) { Text($0.title).tag($0) }
-                    }.labelsHidden().pickerStyle(.menu).fixedSize()
-                        .animation(ChipBarMotion.optional(ChipBarMotion.selection,
-                                                        reduceMotion: reduceMotion),
-                                   value: state.chartMetric)
-                }
-                if monitor.history.compactMap({ $0.power(state.chartMetric) }).isEmpty {
-                    Text("等待有效采样后显示趋势")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity).frame(height: 64)
+                if monitor.history.compactMap({ $0.power(.total) }).isEmpty {
+                    Text("等待功率采样")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 65)
                 } else {
-                    PowerTrendPlot(points: chartPoints,
-                        maximum: max(1, (monitor.history.compactMap { $0.power(state.chartMetric) }.max() ?? 1) * 1.15),
+                    PowerTrendPlot(points: totalChartPoints,
+                        maximum: max(1, (monitor.history.compactMap { $0.power(.total) }.max() ?? 1) * 1.15),
                         timeline: trendTimeline, accent: accent)
-                    .frame(height: 64)
-                    .id(state.chartMetric)
-                    .transition(.opacity)
-                    .animation(ChipBarMotion.optional(ChipBarMotion.selection,
-                                                      reduceMotion: reduceMotion),
-                               value: state.chartMetric)
+                        .frame(height: 65)
                 }
-                HStack {
-                    Text("最近 10 分钟 · W")
-                    Spacer()
-                    Text("均值 \(value(average)) W")
-                }.font(.caption2).foregroundStyle(.secondary)
             }
+            HStack(spacing: 8) {
+                Text("最近 10 分钟")
+                Spacer()
+                Text("均值 \(value(totalAverage)) W")
+            }
+            .font(.system(size: 9))
+            .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+    }
 
+    private var totalAverage: Double? {
+        let values = monitor.history.compactMap { $0.total }
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    @ViewBuilder private var powerCards: some View {
+        HStack(alignment: .top, spacing: 7) {
+            DashboardRunway(
+                title: "CPU", percentage: monitor.connected ? monitor.sample?.cpuUtilization : nil,
+                color: accent,
+                subtitle: wattage(monitor.connected ? monitor.sample?.cpu : nil),
+                detail: temperatureSummary(monitor.connected ? monitor.sample?.cpuTemperature : nil))
+            DashboardRunway(
+                title: "GPU", percentage: monitor.connected ? monitor.sample?.gpuUtilization : nil,
+                color: accent.opacity(0.78),
+                subtitle: wattage(monitor.connected ? monitor.sample?.gpu : nil),
+                detail: temperatureSummary(monitor.connected ? monitor.sample?.gpuTemperature : nil))
+            DashboardRunway(
+                title: "内存", percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
+                color: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
+                subtitle: monitor.connected ? memoryCapacitySummary : "内存 —",
+                detail: "压力 · \(monitor.memoryPressure.title)",
+                pressureStatus: monitor.memoryPressure.title)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 12)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func wattage(_ power: Double?) -> String {
+        guard let power, power.isFinite else { return "— W" }
+        return String(format: "%.1f W", power)
+    }
+
+    private func temperatureSummary(_ temperature: Double?) -> String {
+        guard let temperature, temperature.isFinite else { return "温度不可用" }
+        return String(format: "%.1f°C", temperature)
+    }
+
+    private var totalChartPoints: [PowerTrendPlot.Point] {
+        let timeline = trendTimeline
+        var previous: Sample?
+        var segment = 0
+        var output: [PowerTrendPlot.Point] = []
+        for sample in monitor.history {
+            guard timeline.fraction(for: sample.date) != nil else {
+                previous = nil
+                continue
+            }
+            if let previous,
+               sample.date.timeIntervalSince(previous.date) > Double(monitor.interval) / 1000 * 2.5 ||
+               previous.total == nil {
+                segment += 1
+            }
+            if let power = sample.total {
+                output.append(.init(date: sample.date, power: power, segment: segment))
+            }
+            previous = sample
+        }
+        return output
     }
 
     @ViewBuilder private var errorPanel: some View {
@@ -479,33 +504,6 @@ struct Dashboard: View {
     /// recent part of the plot instead of stretching to its entire width.
     private var trendTimeline: TrendTimeWindow {
         TrendTimeWindow(endingAt: monitor.history.last?.date ?? Date())
-    }
-
-    private var average: Double? {
-        let values = monitor.history.compactMap { $0.power(state.chartMetric) }
-        return values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
-    }
-
-    // Do not draw a line across sleep, restart or missing metric gaps.
-    private var chartPoints: [PowerTrendPlot.Point] {
-        let timeline = trendTimeline
-        var segment = 0
-        var previous: Sample?
-        var points: [PowerTrendPlot.Point] = []
-        for sample in monitor.history {
-            guard timeline.fraction(for: sample.date) != nil else {
-                previous = nil
-                continue
-            }
-            if let previous, sample.date.timeIntervalSince(previous.date) > Double(monitor.interval) / 1000 * 2.5 || previous.power(state.chartMetric) == nil {
-                segment += 1
-            }
-            if let power = sample.power(state.chartMetric) {
-                points.append(PowerTrendPlot.Point(date: sample.date, power: power, segment: segment))
-            }
-            previous = sample
-        }
-        return points
     }
 
     private func value(_ number: Double?) -> String { number.map { String(format: "%.1f", $0) } ?? "—" }
