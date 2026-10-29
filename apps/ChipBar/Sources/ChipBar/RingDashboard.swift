@@ -51,12 +51,13 @@ struct DashboardRunway: View {
             .accessibilityHidden(true)
 
             Text(subtitle)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .foregroundStyle(.primary)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .frame(height: 17)
+                // All three cards reserve an identical slot for wattage/RAM.
+                .frame(height: 16, alignment: .center)
             Text(detail)
                 .font(.system(size: 9, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)

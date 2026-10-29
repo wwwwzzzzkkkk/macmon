@@ -207,33 +207,41 @@ private struct StorageVolumeCard: View {
         }
     }
 
-    @ViewBuilder private var capacityReadout: some View {
-        if let capacity {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(formatted(capacity.available))
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+    // A single fixed-height group prevents the normal/placeholder branches
+    // from acquiring different VStack spacing and uneven bottom padding.
+    private var capacityReadout: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let capacity {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(formatted(capacity.available))
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Spacer(minLength: 0)
+                }
+                .frame(height: 21, alignment: .leading)
+                Text("总计 \(formatted(capacity.total))")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Spacer(minLength: 0)
+                    .minimumScaleFactor(0.8)
+                    .frame(height: 13, alignment: .leading)
+            } else {
+                Text(placeholder)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(height: 21, alignment: .leading)
+                Text("容量暂不可用")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .frame(height: 13, alignment: .leading)
             }
-            Text("总计 \(formatted(capacity.total))")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        } else {
-            Text(placeholder)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .frame(height: 26, alignment: .leading)
-            Text("容量暂不可用")
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
         }
+        .frame(height: 36, alignment: .center)
     }
 
     private var capacityRunway: some View {
@@ -287,13 +295,15 @@ private struct StorageVolumeCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            cardHeader
+        VStack(alignment: .leading, spacing: 5) {
+            cardHeader.frame(height: 16, alignment: .center)
             capacityReadout
-            usageLine
+            usageLine.frame(height: 12, alignment: .center)
             diskSpeedLine
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // 16 + 36 + 12 + 13 + 3*5 = 92 pt. The remaining 4 pt is
+        // distributed equally above and below, including empty-data states.
         .frame(height: 96, alignment: .center)
         .padding(10)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))

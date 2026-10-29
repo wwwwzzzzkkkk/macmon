@@ -1,6 +1,18 @@
 import SwiftUI
 import ChipBarCore
 
+/// Chart axes, gridlines and samples share one inset coordinate system.
+/// Centering the top tick at y=0 previously let its glyph rise above the plot,
+/// so a top-aligned headline still appeared vertically misaligned.
+enum PowerTrendGeometry {
+    static let yLabelInset: CGFloat = 6
+
+    static func y(fraction: CGFloat, height: CGFloat) -> CGFloat {
+        let inset = min(yLabelInset, max(0, height / 2))
+        return inset + (max(0, height - inset * 2) * fraction)
+    }
+}
+
 /// A bounded path rebuilt from the current history. Avoid retaining a chart mark
 /// and axis identity graph for each new timestamp during long sampling sessions.
 struct PowerTrendPlot: View {
@@ -23,14 +35,17 @@ struct PowerTrendPlot: View {
                         Text(index == 2 ? "0" : tick(maximum * Double(2 - index) / 2))
                             .font(.caption2).foregroundStyle(.secondary)
                             .frame(width: 27, alignment: .trailing)
-                            .position(x: 13.5, y: geometry.size.height * Double(index) / 2)
+                            .position(x: 13.5, y: PowerTrendGeometry.y(
+                                fraction: CGFloat(index) / 2,
+                                height: geometry.size.height))
                     }
                 }.frame(width: 27)
                 GeometryReader { geometry in
                     ZStack {
                         Path { path in
                             for fraction in [0.0, 0.5, 1.0] {
-                                let y = geometry.size.height * fraction
+                                let y = PowerTrendGeometry.y(
+                                    fraction: fraction, height: geometry.size.height)
                                 path.move(to: CGPoint(x: 0, y: y))
                                 path.addLine(to: CGPoint(x: geometry.size.width, y: y))
                             }
@@ -74,7 +89,9 @@ struct PowerTrendPlot: View {
     private func position(_ point: Point, size: CGSize) -> CGPoint {
         let fraction = timeline.fraction(for: point.date) ?? 0
         return CGPoint(x: size.width * fraction,
-                       y: size.height * (1 - min(1, max(0, point.power / maximum))))
+                       y: PowerTrendGeometry.y(
+                           fraction: 1 - min(1, max(0, point.power / maximum)),
+                           height: size.height))
     }
 
     private func line(size: CGSize) -> Path {

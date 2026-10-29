@@ -168,11 +168,17 @@ struct Dashboard: View {
             .buttonStyle(ChipBarPressStyle())
             .accessibilityLabel("返回监控面板")
 
-            Spacer()
-            Text("设备与设置").font(.headline)
-            Spacer()
+            .frame(width: 72, alignment: .leading)
+
+            Spacer(minLength: 0)
+            Text("设备与设置")
+                .font(.headline)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            // Match the leading control width so the title remains centered.
             Image(systemName: "gearshape")
                 .foregroundStyle(.secondary)
+                .frame(width: 72, alignment: .trailing)
                 .accessibilityHidden(true)
         }
         .padding(.vertical, 4)
@@ -211,42 +217,60 @@ struct Dashboard: View {
 
     /// One and only one power history chart: the headline and real rolling
     /// 10-minute graph form the dashboard's single information focal point.
-    @ViewBuilder private var hero: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 3) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("芯片总功率")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        AnimatedMetricValue(value: monitor.connected ? monitor.sample?.total : nil)
-                            .font(.system(size: 29, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                        Text("W")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text("CPU + GPU + ANE")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(width: 92, alignment: .leading)
-
-                if monitor.history.compactMap({ $0.power(.total) }).isEmpty {
-                    Text("等待功率采样")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 65)
-                } else {
-                    PowerTrendPlot(points: totalChartPoints,
-                        maximum: max(1, (monitor.history.compactMap { $0.power(.total) }.max() ?? 1) * 1.15),
-                        timeline: trendTimeline, accent: accent)
-                        .frame(height: 65)
-                }
+    // The headline and y-axis now share the same top boundary. Both columns
+    // reserve exactly 70 pt, so loading/empty states do not shift the header.
+    private var totalPowerHeadline: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("芯片总功率")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(height: 14, alignment: .topLeading)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                AnimatedMetricValue(value: monitor.connected ? monitor.sample?.total : nil)
+                    .font(.system(size: 27, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Text("W")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+            .frame(height: 34, alignment: .leading)
+            Text("CPU + GPU + ANE")
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(height: 12, alignment: .leading)
+        }
+        .frame(width: 82, height: 70, alignment: .topLeading)
+    }
+
+    @ViewBuilder private var totalPowerChart: some View {
+        if monitor.history.compactMap({ $0.power(.total) }).isEmpty {
+            Text("等待功率采样")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 70)
+        } else {
+            PowerTrendPlot(
+                points: totalChartPoints,
+                maximum: max(1, (monitor.history.compactMap { $0.power(.total) }.max() ?? 1) * 1.15),
+                timeline: trendTimeline,
+                accent: accent
+            )
+            .frame(height: 70)
+        }
+    }
+
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 4) {
+                totalPowerHeadline
+                totalPowerChart
+            }
+            .frame(height: 70, alignment: .top)
             HStack(spacing: 8) {
                 Text("最近 10 分钟")
                 Spacer()
