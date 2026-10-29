@@ -28,7 +28,11 @@ struct RefreshIntervalSelector: View {
                         .background {
                             if selected {
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.primary.opacity(0.13))
+                                    .fill(ChipBarControlTint.accent.opacity(0.17))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .strokeBorder(ChipBarControlTint.accent.opacity(0.45), lineWidth: 0.7)
+                                    }
                                     .matchedGeometryEffect(id: "refresh-selected", in: highlight)
                             }
                         }

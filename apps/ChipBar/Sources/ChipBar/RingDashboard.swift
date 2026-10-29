@@ -19,7 +19,7 @@ struct DashboardRunway: View {
     }
 
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 4) {
             ZStack {
                 Circle()
                     .stroke(Color.primary.opacity(0.095), lineWidth: 5)
@@ -36,18 +36,18 @@ struct DashboardRunway: View {
                         .foregroundStyle(.secondary)
                     if percentage?.isFinite == true {
                         RunwayPercentage(value: fraction * 100)
-                            .font(.system(size: 21, weight: .semibold, design: .rounded))
+                            .font(.system(size: 19, weight: .semibold, design: .rounded))
                             .monospacedDigit()
                             .animation(reduceMotion ? nil :
                                 .spring(response: 0.55, dampingFraction: 1.0), value: fraction)
                     } else {
                         Text("—")
-                            .font(.system(size: 21, weight: .medium, design: .rounded))
+                            .font(.system(size: 19, weight: .medium, design: .rounded))
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-            .frame(width: 91, height: 91)
+            .frame(width: 80, height: 80)
             .accessibilityHidden(true)
 
             Text(subtitle)

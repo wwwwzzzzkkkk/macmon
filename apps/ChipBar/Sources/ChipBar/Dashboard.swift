@@ -3,7 +3,7 @@ import QuartzCore
 import ChipBarCore
 
 enum DashboardLayout {
-    static let width: CGFloat = 420
+    static let width: CGFloat = 394
 }
 
 enum DashboardMotion {
@@ -107,7 +107,7 @@ struct Dashboard: View {
     }
 
     private var monitoringScreen: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             header
             hero
             powerCards
@@ -213,15 +213,17 @@ struct Dashboard: View {
     /// 10-minute graph form the dashboard's single information focal point.
     @ViewBuilder private var hero: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .center, spacing: 6) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("芯片总功率")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                     HStack(alignment: .firstTextBaseline, spacing: 3) {
                         AnimatedMetricValue(value: monitor.connected ? monitor.sample?.total : nil)
-                            .font(.system(size: 32, weight: .semibold, design: .rounded))
+                            .font(.system(size: 29, weight: .semibold, design: .rounded))
                             .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                         Text("W")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -230,7 +232,7 @@ struct Dashboard: View {
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                 }
-                .frame(width: 142, alignment: .leading)
+                .frame(width: 106, alignment: .leading)
 
                 if monitor.history.compactMap({ $0.power(.total) }).isEmpty {
                     Text("等待功率采样")
@@ -264,7 +266,7 @@ struct Dashboard: View {
     }
 
     @ViewBuilder private var powerCards: some View {
-        HStack(alignment: .top, spacing: 7) {
+        HStack(alignment: .top, spacing: 6) {
             DashboardRunway(
                 title: "CPU", percentage: monitor.connected ? monitor.sample?.cpuUtilization : nil,
                 color: accent,
@@ -283,7 +285,7 @@ struct Dashboard: View {
                 pressureStatus: monitor.memoryPressure.title)
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 12)
+        .padding(.vertical, 8)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
     }
 
@@ -378,6 +380,7 @@ struct Dashboard: View {
                             HStack(spacing: 6) {
                                 Image(systemName: menuIcon(item))
                                     .font(.caption).frame(width: 14)
+                                    .foregroundStyle(enabled ? ChipBarControlTint.accent : Color.secondary)
                                 Text(menuTitle(item)).font(.caption2.weight(.medium)).lineLimit(1)
                                     .minimumScaleFactor(0.8)
                                 Spacer(minLength: 0)
@@ -386,12 +389,12 @@ struct Dashboard: View {
                             .foregroundStyle(enabled ? Color.primary : Color.secondary)
                             .padding(.horizontal, 9)
                             .frame(height: 39)
-                            .background(Color.primary.opacity(enabled ? 0.09 : 0.035),
+                            .background(enabled ? ChipBarControlTint.accent.opacity(0.16) : Color.primary.opacity(0.035),
                                         in: RoundedRectangle(cornerRadius: 10))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 10)
-                                    .strokeBorder(Color.primary.opacity(enabled ? 0.18 : 0.07),
-                                                  lineWidth: 0.7)
+                                    .strokeBorder(enabled ? ChipBarControlTint.accent.opacity(0.55) : Color.primary.opacity(0.07),
+                                                  lineWidth: enabled ? 1 : 0.7)
                             }
                         }
                         .buttonStyle(ChipBarPressStyle())
