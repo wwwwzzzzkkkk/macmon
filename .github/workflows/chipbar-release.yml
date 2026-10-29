@@ -60,6 +60,11 @@ jobs:
         run: python3 scripts/integration.py
       - name: Package and verify signature
         run: python3 scripts/version.py package
+      # Do not reserve the immutable tag unless both verified artifacts exist.
+      - name: Check archive and checksum before tagging
+        run: |
+          test -s dist/ChipBar-macOS-arm64.zip
+          test -s dist/SHA256SUMS
       # A failed test/build must never reserve an immutable version tag.
       - name: Create or verify version tag
         id: release-tag
