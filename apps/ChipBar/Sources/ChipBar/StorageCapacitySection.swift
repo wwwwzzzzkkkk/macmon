@@ -151,64 +151,90 @@ private struct StorageVolumeCard: View {
         return 1 - Double(capacity.available) / Double(capacity.total)
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: symbol)
-                    .font(.system(size: 12))
-                    .foregroundStyle(accent)
-                    .frame(width: 17)
-                Text(title)
-                    .font(.caption.weight(.medium))
+    // Keep each SwiftUI result-builder small enough for release-mode type checking.
+    // The cards retain the same hierarchy, fonts, dimensions and animation.
+    private var cardHeader: some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 12))
+                .foregroundStyle(accent)
+                .frame(width: 17)
+            Text(title)
+                .font(.caption.weight(.medium))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder private var capacityReadout: some View {
+        if let capacity {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(formatted(capacity.available))
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
                     .lineLimit(1)
-                    .truncationMode(.middle)
+                    .minimumScaleFactor(0.7)
                 Spacer(minLength: 0)
             }
+            Text("总计 \(formatted(capacity.total))")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        } else {
+            Text(placeholder)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(height: 26, alignment: .leading)
+            Text("容量暂不可用")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+        }
+    }
 
-            if let capacity {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(formatted(capacity.available))
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    Spacer(minLength: 0)
-                }
-                Text("总计 \(formatted(capacity.total))")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            } else {
-                Text(placeholder)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .frame(height: 26, alignment: .leading)
-                Text("容量暂不可用")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
+    private var capacityRunway: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.10))
+                Capsule().fill(accent.opacity(0.82))
+                    .frame(width: geometry.size.width * usedFraction)
             }
+        }
+        .frame(height: 5)
+        .animation(reduceMotion ? nil : ChipBarMotion.disclosure, value: usedFraction)
+    }
 
-            HStack(spacing: 7) {
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.primary.opacity(0.10))
-                        Capsule().fill(accent.opacity(0.82))
-                            .frame(width: geometry.size.width * usedFraction)
-                    }
-                }
-                .frame(height: 5)
-                .animation(reduceMotion ? nil : ChipBarMotion.disclosure, value: usedFraction)
+    private var usagePercentageLabel: String {
+        guard capacity != nil else { return "—" }
+        return String(format: "%.0f%%", usedFraction * 100)
+    }
 
-                Text(capacity.map { String(format: "%.0f%%", usedFraction * 100) } ?? "—")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .frame(width: 32, alignment: .trailing)
-            }
+    private var usageLine: some View {
+        HStack(spacing: 7) {
+            capacityRunway
+            Text(usagePercentageLabel)
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: 32, alignment: .trailing)
+        }
+    }
+
+    private var accessibilitySummary: String {
+        guard let capacity else { return "\(title)，\(placeholder)" }
+        let percent = Int((usedFraction * 100).rounded())
+        return "\(title)，可用 \(formatted(capacity.available))，总计 \(formatted(capacity.total))，已用 \(percent)%"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            cardHeader
+            capacityReadout
+            usageLine
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 96, alignment: .top)
@@ -219,7 +245,6 @@ private struct StorageVolumeCard: View {
                 .strokeBorder(Color.primary.opacity(0.055), lineWidth: 0.6)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title)，" +
-            (capacity.map { "可用 \(formatted($0.available))，总计 \(formatted($0.total))，已用 \(Int((usedFraction * 100).rounded()))%" } ?? placeholder))
+        .accessibilityLabel(accessibilitySummary)
     }
 }
