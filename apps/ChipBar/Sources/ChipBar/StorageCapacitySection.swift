@@ -18,10 +18,10 @@ struct ExternalVolumeCapacity: Identifiable {
 
     @Published private(set) var volumes: [ExternalVolumeCapacity] = []
     @Published private(set) var sampled = false
+    @Published private(set) var activity: DiskActivitySnapshot?
 
     private let sampler = DiskActivitySampler()
     private var lastSampleAt: Date?
-    private var scanning = false
 
     /// Display filesystem capacity per mounted external volume, never sum
     /// APFS sharing members. Identical APFS capacity/free records on one
@@ -41,20 +41,18 @@ struct ExternalVolumeCapacity: Identifiable {
 
     func watch() async {
         while !Task.isCancelled {
-            if !scanning &&
-                (lastSampleAt.map { Date().timeIntervalSince($0) >= 30 } ?? true) {
-                scanning = true
-                let result = await sampler.sampleAll(includeVolumes: true)
-                scanning = false
-                guard !Task.isCancelled else { return }
-
-                // Never add APFS System/Data partitions or several volumes
-                // together: each mounted volume gets its own space bar.
+            // Native physical-disk byte counters refresh every two seconds;
+            // volume capacity scans remain cached for 30 seconds.
+            let needsCapacity = lastSampleAt.map { Date().timeIntervalSince($0) >= 30 } ?? true
+            let result = await sampler.sampleAll(includeVolumes: needsCapacity)
+            guard !Task.isCancelled else { return }
+            activity = result
+            if needsCapacity {
                 volumes = Self.displayRows(from: result)
                 sampled = true
                 lastSampleAt = Date()
             }
-            do { try await Task.sleep(for: .seconds(5)) }
+            do { try await Task.sleep(for: .seconds(2)) }
             catch { return }
         }
     }
@@ -71,6 +69,67 @@ struct StorageCapacitySection: View {
         GridItem(.flexible(), spacing: 8)
     ]
 
+    private var freshActivity: DiskActivitySnapshot? {
+        guard let activity = externalStorage.activity,
+              Date().timeIntervalSince(activity.date) <= 6 else { return nil }
+        return activity
+    }
+
+    /// Sum counters only for connected *internal physical disks*.
+    private var internalRates: (read: Double?, write: Double?) {
+        guard let activity = freshActivity else { return (nil, nil) }
+        let values = activity.rates.filter {
+            activity.connected.contains($0.key) && !activity.external.contains($0.key)
+        }.map(\.value)
+        guard !values.isEmpty else { return (nil, nil) }
+        return (values.reduce(0) { $0 + $1.readMB },
+                values.reduce(0) { $0 + $1.writeMB })
+    }
+
+    /// Whole-drive I/O, not a fabricated rate for an individual APFS volume.
+    private func externalRates(for diskID: String) -> (read: Double?, write: Double?) {
+        guard let activity = freshActivity,
+              activity.connected.contains(diskID),
+              let rate = activity.rates[diskID] else { return (nil, nil) }
+        return (rate.readMB, rate.writeMB)
+    }
+
+    private var internalCard: some View {
+        let rates = internalRates
+        return StorageVolumeCard(
+            title: "Macintosh HD",
+            symbol: "internaldrive",
+            total: internalStorage.capacity?.totalBytes,
+            available: internalStorage.capacity?.availableBytes,
+            placeholder: internalStorage.sampled ? "不可用" : "读取中…",
+            readMB: rates.read,
+            writeMB: rates.write)
+    }
+
+    @ViewBuilder private var externalCards: some View {
+        if !externalStorage.sampled {
+            StorageVolumeCard(title: "外接储存", symbol: "externaldrive",
+                              total: nil, available: nil, placeholder: "读取中…")
+        } else if externalStorage.volumes.isEmpty {
+            StorageVolumeCard(title: "外接储存", symbol: "externaldrive",
+                              total: nil, available: nil, placeholder: "未接入磁盘")
+        } else {
+            ForEach(externalStorage.volumes) { item in
+                // Shared APFS volumes on one physical drive show the same
+                // whole-drive rate rather than claiming per-volume counters.
+                let rates = externalRates(for: item.diskID)
+                StorageVolumeCard(
+                    title: item.volume.name.isEmpty ? "外接储存" : item.volume.name,
+                    symbol: "externaldrive",
+                    total: item.volume.total,
+                    available: item.volume.available,
+                    placeholder: "不可用",
+                    readMB: rates.read,
+                    writeMB: rates.write)
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -83,29 +142,8 @@ struct StorageCapacitySection: View {
             }
 
             LazyVGrid(columns: columns, spacing: 8) {
-                StorageVolumeCard(
-                    title: "Macintosh HD",
-                    symbol: "internaldrive",
-                    total: internalStorage.capacity?.totalBytes,
-                    available: internalStorage.capacity?.availableBytes,
-                    placeholder: internalStorage.sampled ? "不可用" : "读取中…")
-
-                if !externalStorage.sampled {
-                    StorageVolumeCard(title: "外接储存", symbol: "externaldrive",
-                                      total: nil, available: nil, placeholder: "读取中…")
-                } else if externalStorage.volumes.isEmpty {
-                    StorageVolumeCard(title: "外接储存", symbol: "externaldrive",
-                                      total: nil, available: nil, placeholder: "未接入磁盘")
-                } else {
-                    ForEach(externalStorage.volumes) { item in
-                        StorageVolumeCard(
-                            title: item.volume.name.isEmpty ? "外接储存" : item.volume.name,
-                            symbol: "externaldrive",
-                            total: item.volume.total,
-                            available: item.volume.available,
-                            placeholder: "不可用")
-                    }
-                }
+                internalCard
+                externalCards
             }
         }
         .task {
@@ -131,6 +169,8 @@ private struct StorageVolumeCard: View {
     let total: Int64?
     let available: Int64?
     let placeholder: String
+    var readMB: Double? = nil
+    var writeMB: Double? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -224,20 +264,37 @@ private struct StorageVolumeCard: View {
         }
     }
 
+    private func formattedRate(_ rate: Double?) -> String {
+        guard let rate, rate.isFinite, rate >= 0 else { return "—" }
+        return String(format: "%.1f", rate)
+    }
+
+    private var diskSpeedLine: some View {
+        Text("读 \(formattedRate(readMB)) · 写 \(formattedRate(writeMB)) MB/s")
+            .font(.system(size: 9, weight: .medium, design: .rounded))
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(height: 13, alignment: .leading)
+    }
+
     private var accessibilitySummary: String {
-        guard let capacity else { return "\(title)，\(placeholder)" }
+        let speeds = "，读取 \(formattedRate(readMB)) MB/s，写入 \(formattedRate(writeMB)) MB/s"
+        guard let capacity else { return "\(title)，\(placeholder)" + speeds }
         let percent = Int((usedFraction * 100).rounded())
-        return "\(title)，可用 \(formatted(capacity.available))，总计 \(formatted(capacity.total))，已用 \(percent)%"
+        return "\(title)，可用 \(formatted(capacity.available))，总计 \(formatted(capacity.total))，已用 \(percent)%" + speeds
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             cardHeader
             capacityReadout
             usageLine
+            diskSpeedLine
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 96, alignment: .top)
+        .frame(height: 106, alignment: .top)
         .padding(11)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
         .overlay {
