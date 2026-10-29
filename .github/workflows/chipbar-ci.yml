@@ -12,11 +12,21 @@ defaults:
     working-directory: apps/ChipBar
 jobs:
   verify:
-    # Apple Silicon GitHub-hosted runner; avoids stalled macOS 15 job allocation.
-    runs-on: macos-26
-    timeout-minutes: 20
+    # Apple Silicon stable fallback: GitHub currently provides Xcode 26.3 on macOS 15.
+    # macos-26 jobs were cancelled before any step began; use a different runner image
+    # to distinguish image allocation problems from code/build failures.
+    runs-on: macos-15
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v6
+      - name: Select Xcode 26 and print runner diagnostics
+        working-directory: .
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          sw_vers
+          uname -m
+          xcodebuild -version
+          swift --version
       - name: Version management tests
         run: python3 -m unittest discover -s Tests/ReleaseTests -v
       - name: Parser tests
