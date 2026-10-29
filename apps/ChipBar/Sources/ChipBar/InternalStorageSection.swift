@@ -7,9 +7,26 @@ import ChipBarCore
 /// Disk Arbitration confirms that the selected volume is on an internal disk.
 /// External boot volumes are deliberately not described as internal storage.
 actor InternalStorageSampler {
+    // System Settings/Finder "available" may include purgeable APFS space;
+    // volumeAvailableCapacity alone reports a smaller raw free-space figure.
+    // Prefer the user-available figure but reject invalid/oversized values.
+    static func checkedCapacity(total: Int64, important: Int64?, raw: Int64?) -> InternalStorageCapacity? {
+        for available in [important, raw] {
+            if let available,
+               let capacity = InternalStorageCapacity(totalBytes: total, availableBytes: available) {
+                return capacity
+            }
+        }
+        return nil
+    }
+
     func read() -> InternalStorageCapacity? {
         guard let session = DASessionCreate(kCFAllocatorDefault) else { return nil }
-        let keys: Set<URLResourceKey> = [.volumeTotalCapacityKey, .volumeAvailableCapacityKey]
+        let keys: Set<URLResourceKey> = [
+            .volumeTotalCapacityKey,
+            .volumeAvailableCapacityForImportantUsageKey,
+            .volumeAvailableCapacityKey
+        ]
         for path in ["/System/Volumes/Data", "/"] {
             let url = URL(fileURLWithPath: path, isDirectory: true)
             guard FileManager.default.fileExists(atPath: path),
@@ -19,9 +36,10 @@ actor InternalStorageSampler {
                   details[kDADiskDescriptionVolumeNetworkKey as String] as? Bool != true,
                   let values = try? url.resourceValues(forKeys: keys),
                   let total = values.volumeTotalCapacity,
-                  let available = values.volumeAvailableCapacity,
-                  let capacity = InternalStorageCapacity(totalBytes: Int64(total),
-                                                         availableBytes: Int64(available)) else { continue }
+                  let capacity = Self.checkedCapacity(
+                      total: Int64(total),
+                      important: values.volumeAvailableCapacityForImportantUsage,
+                      raw: values.volumeAvailableCapacity.map { Int64($0) }) else { continue }
             return capacity
         }
         return nil

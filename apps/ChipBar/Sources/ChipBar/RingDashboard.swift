@@ -22,10 +22,10 @@ struct DashboardRunway: View {
         VStack(spacing: 4) {
             ZStack {
                 Circle()
-                    .stroke(Color.primary.opacity(0.095), lineWidth: 5)
+                    .stroke(Color.primary.opacity(0.095), lineWidth: 6)
                 Circle()
                     .trim(from: 0, to: fraction)
-                    .stroke(color, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .stroke(color, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(reduceMotion ? nil :
                         .spring(response: 0.55, dampingFraction: 1.0), value: fraction)
@@ -36,18 +36,18 @@ struct DashboardRunway: View {
                         .foregroundStyle(.secondary)
                     if percentage?.isFinite == true {
                         RunwayPercentage(value: fraction * 100)
-                            .font(.system(size: 19, weight: .semibold, design: .rounded))
+                            .font(.system(size: 18, weight: .semibold, design: .rounded))
                             .monospacedDigit()
                             .animation(reduceMotion ? nil :
                                 .spring(response: 0.55, dampingFraction: 1.0), value: fraction)
                     } else {
                         Text("—")
-                            .font(.system(size: 19, weight: .medium, design: .rounded))
+                            .font(.system(size: 18, weight: .medium, design: .rounded))
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-            .frame(width: 80, height: 80)
+            .frame(width: 74, height: 74)
             .accessibilityHidden(true)
 
             Text(subtitle)

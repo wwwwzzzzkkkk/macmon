@@ -17,15 +17,15 @@ struct PowerTrendPlot: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 GeometryReader { geometry in
                     ForEach(0..<3, id: \.self) { index in
                         Text(index == 2 ? "0" : tick(maximum * Double(2 - index) / 2))
                             .font(.caption2).foregroundStyle(.secondary)
-                            .frame(width: 28, alignment: .trailing)
-                            .position(x: 14, y: geometry.size.height * Double(index) / 2)
+                            .frame(width: 27, alignment: .trailing)
+                            .position(x: 13.5, y: geometry.size.height * Double(index) / 2)
                     }
-                }.frame(width: 28)
+                }.frame(width: 27)
                 GeometryReader { geometry in
                     ZStack {
                         Path { path in
@@ -60,7 +60,7 @@ struct PowerTrendPlot: View {
                         .monospacedDigit()
                         .fixedSize(horizontal: true, vertical: false)
                 }
-            }.padding(.leading, 34).font(.caption2).foregroundStyle(.secondary)
+            }.padding(.leading, 31).font(.caption2).foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("功率趋势")

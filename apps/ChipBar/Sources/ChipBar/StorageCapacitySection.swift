@@ -294,8 +294,8 @@ private struct StorageVolumeCard: View {
             diskSpeedLine
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 106, alignment: .top)
-        .padding(11)
+        .frame(height: 96, alignment: .center)
+        .padding(10)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
         .overlay {
             RoundedRectangle(cornerRadius: 13)

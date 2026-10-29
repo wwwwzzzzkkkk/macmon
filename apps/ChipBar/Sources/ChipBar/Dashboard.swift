@@ -213,7 +213,7 @@ struct Dashboard: View {
     /// 10-minute graph form the dashboard's single information focal point.
     @ViewBuilder private var hero: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 6) {
+            HStack(alignment: .top, spacing: 3) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("芯片总功率")
                         .font(.caption.weight(.medium))
@@ -232,7 +232,7 @@ struct Dashboard: View {
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                 }
-                .frame(width: 106, alignment: .leading)
+                .frame(width: 92, alignment: .leading)
 
                 if monitor.history.compactMap({ $0.power(.total) }).isEmpty {
                     Text("等待功率采样")
@@ -285,7 +285,7 @@ struct Dashboard: View {
                 pressureStatus: monitor.memoryPressure.title)
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
     }
 
