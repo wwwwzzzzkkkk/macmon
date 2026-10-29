@@ -24,9 +24,10 @@ defaults:
     working-directory: apps/ChipBar
 jobs:
   release:
-    # Apple Silicon GitHub-hosted runner; avoids stalled macOS 15 job allocation.
-    runs-on: macos-26
-    timeout-minutes: 20
+    # Stable arm64 runner fallback after macos-26 jobs were cancelled before startup.
+    # Select Xcode 26 explicitly (the default Xcode on macOS 15 is 16.x).
+    runs-on: macos-15
+    timeout-minutes: 35
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -41,6 +42,25 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
+      - name: Select Xcode 26 and print runner diagnostics
+        working-directory: .
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          sw_vers
+          uname -m
+          xcodebuild -version
+          swift --version
+      - name: Version management tests
+        run: python3 -m unittest discover -s Tests/ReleaseTests -v
+      - name: Parser tests
+        run: ./scripts/test.sh
+      - name: Build arm64 app
+        run: ./scripts/build.sh
+      - name: Subprocess fault checks
+        run: python3 scripts/integration.py
+      - name: Package and verify signature
+        run: python3 scripts/version.py package
+      # A failed test/build must never reserve an immutable version tag.
       - name: Create or verify version tag
         id: release-tag
         env:
@@ -80,21 +100,6 @@ jobs:
       - name: Check immutable version tag
         if: steps.release-tag.outputs.publish == 'true'
         run: python3 scripts/version.py check-tag
-      - name: Version management tests
-        if: steps.release-tag.outputs.publish == 'true'
-        run: python3 -m unittest discover -s Tests/ReleaseTests -v
-      - name: Parser tests
-        if: steps.release-tag.outputs.publish == 'true'
-        run: ./scripts/test.sh
-      - name: Build arm64 app
-        if: steps.release-tag.outputs.publish == 'true'
-        run: ./scripts/build.sh
-      - name: Subprocess fault checks
-        if: steps.release-tag.outputs.publish == 'true'
-        run: python3 scripts/integration.py
-      - name: Package and verify signature
-        if: steps.release-tag.outputs.publish == 'true'
-        run: python3 scripts/version.py package
       - name: Publish Release and update Homebrew
         if: steps.release-tag.outputs.publish == 'true'
         run: |
