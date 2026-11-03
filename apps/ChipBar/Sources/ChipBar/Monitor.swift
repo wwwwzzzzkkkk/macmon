@@ -23,6 +23,15 @@ private final class WeakMemoryPressureSource {
     init(_ value: any DispatchSourceMemoryPressure) { self.value = value }
 }
 
+/// The dashboard no longer displays network throughput, so opening it
+/// must not activate the independent network poller when no menu item uses it.
+enum NetworkSamplingPolicy {
+    static func isActive(startsAutomatically: Bool, paused: Bool, sleeping: Bool,
+                         menuItems: Set<MenuContent>) -> Bool {
+        startsAutomatically && !paused && !sleeping && menuItems.contains(.network)
+    }
+}
+
 @MainActor final class Monitor: ObservableObject {
     @Published private(set) var sample: Sample?
     // Chart history is updated before publishing each sample. Publishing the
@@ -258,7 +267,9 @@ private final class WeakMemoryPressureSource {
     private func configureNetwork() {
         // The home dashboard has no network widget. A panel open must not
         // activate route-table queries unless network speed is in the menu bar.
-        network.setPaused(!startsAutomatically || paused || sleeping || !menuItems.contains(.network))
+        network.setPaused(!NetworkSamplingPolicy.isActive(
+            startsAutomatically: startsAutomatically, paused: paused,
+            sleeping: sleeping, menuItems: menuItems))
     }
 
     /// One display clock gathers fast counters, then presents the latest complete frame.
