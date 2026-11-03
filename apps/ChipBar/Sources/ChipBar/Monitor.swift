@@ -85,7 +85,12 @@ private final class WeakMemoryPressureSource {
         sample = initialSample
         connected = initialSample != nil
         history = initialSample.map { [$0] } ?? []
-        if initialSample != nil { status = "预览 · 已有真实采样" }
+        // The standalone screenshot/fixture path does not open MenuController.
+        // Seed its chart here so the visual preview retains real power data.
+        if initialSample != nil {
+            powerChart = PowerChartSnapshot.build(history: history, intervalMillis: interval)
+            status = "预览 · 已有真实采样"
+        }
         memoryPressure = Self.currentSystemMemoryPressure() ?? .unknown
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in

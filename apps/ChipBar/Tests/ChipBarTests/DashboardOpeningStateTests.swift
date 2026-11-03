@@ -1,5 +1,7 @@
+import Foundation
 import Testing
 @testable import ChipBar
+import ChipBarCore
 
 @MainActor struct DashboardOpeningStateTests {
     @Test func normalReopenResetsEveryEphemeralControl() {
@@ -25,6 +27,13 @@ import Testing
         #expect(!state.showSystemDetails)
         #expect(state.ssdDetailsHeight == 0)
         #expect(state.applicationMetric == .cpu)
+    }
+
+    @Test func previewFixtureBuildsChartWithoutMenuPanel() throws {
+        let fixture = try Sample.decode(Data("{\"all_power\":12.5}".utf8))
+        let monitor = Monitor(start: false, initialSample: fixture)
+        #expect(monitor.powerChart.points.count == 1)
+        #expect(monitor.powerChart.points.first?.power == 12.5)
     }
 
     @Test func screenshotsKeepTheirExplicitQAOverrides() {
