@@ -11,6 +11,7 @@ struct ApplicationUsageSection: View {
     @ObservedObject var state: DashboardState
     @StateObject private var activity = ApplicationActivityModel.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var samplingStartedInThisPanel = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -55,6 +56,14 @@ struct ApplicationUsageSection: View {
         }
         .task(id: "\(monitor.paused)-\(monitor.sleeping)-\(monitor.interval)-\(state.applicationMetric == .gpu)") {
             guard !monitor.paused, !monitor.sleeping else { return }
+            if !samplingStartedInThisPanel {
+                // Avoid hundreds of libproc reads competing with the first
+                // Liquid Glass layout. Subsequent metric changes are immediate.
+                do { try await Task.sleep(for: .milliseconds(650)) }
+                catch { return }
+                guard !Task.isCancelled else { return }
+                samplingStartedInThisPanel = true
+            }
             await activity.watch(interval: monitor.interval,
                                  includeGPU: state.applicationMetric == .gpu)
         }

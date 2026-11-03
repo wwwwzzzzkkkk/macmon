@@ -159,7 +159,9 @@ import ChipBarCore
             monitor.ssd.$enabled.dropFirst().removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
             monitor.ssd.$status.dropFirst().removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
             monitor.ssd.$readings.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            dashboardState.$ssdDetailsHeight.dropFirst().map { _ in () }.eraseToAnyPublisher()
+            dashboardState.$ssdDetailsHeight.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            NotificationCenter.default.publisher(for: .chipBarStorageLayoutDidChange)
+                .map { _ in () }.eraseToAnyPublisher()
         ])
         .receive(on: DispatchQueue.main)
         .sink { [weak self] _ in

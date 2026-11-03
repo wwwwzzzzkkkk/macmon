@@ -247,7 +247,7 @@ struct Dashboard: View {
     }
 
     @ViewBuilder private var totalPowerChart: some View {
-        if monitor.history.compactMap({ $0.power(.total) }).isEmpty {
+        if monitor.powerChart.points.isEmpty {
             Text("等待功率采样")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -255,9 +255,9 @@ struct Dashboard: View {
                 .frame(height: 70)
         } else {
             PowerTrendPlot(
-                points: totalChartPoints,
-                maximum: max(1, (monitor.history.compactMap { $0.power(.total) }.max() ?? 1) * 1.15),
-                timeline: trendTimeline,
+                points: monitor.powerChart.points,
+                maximum: monitor.powerChart.maximum,
+                timeline: monitor.powerChart.timeline,
                 accent: accent
             )
             .frame(height: 70)
@@ -274,19 +274,13 @@ struct Dashboard: View {
             HStack(spacing: 8) {
                 Text("最近 10 分钟")
                 Spacer()
-                Text("均值 \(value(totalAverage)) W")
+                Text("均值 \(value(monitor.powerChart.average)) W")
             }
             .font(.system(size: 9))
             .foregroundStyle(.secondary)
         }
         .padding(12)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
-    }
-
-    private var totalAverage: Double? {
-        let values = monitor.history.compactMap { $0.total }
-        guard !values.isEmpty else { return nil }
-        return values.reduce(0, +) / Double(values.count)
     }
 
     @ViewBuilder private var powerCards: some View {
@@ -321,29 +315,6 @@ struct Dashboard: View {
     private func temperatureSummary(_ temperature: Double?) -> String {
         guard let temperature, temperature.isFinite else { return "温度不可用" }
         return String(format: "%.1f°C", temperature)
-    }
-
-    private var totalChartPoints: [PowerTrendPlot.Point] {
-        let timeline = trendTimeline
-        var previous: Sample?
-        var segment = 0
-        var output: [PowerTrendPlot.Point] = []
-        for sample in monitor.history {
-            guard timeline.fraction(for: sample.date) != nil else {
-                previous = nil
-                continue
-            }
-            if let previous,
-               sample.date.timeIntervalSince(previous.date) > Double(monitor.interval) / 1000 * 2.5 ||
-               previous.total == nil {
-                segment += 1
-            }
-            if let power = sample.total {
-                output.append(.init(date: sample.date, power: power, segment: segment))
-            }
-            previous = sample
-        }
-        return output
     }
 
     @ViewBuilder private var errorPanel: some View {
@@ -529,10 +500,6 @@ struct Dashboard: View {
     /// Pin the x-axis to a real 10-minute window ending at the latest
     /// received sample. On startup, a few data points occupy only the most
     /// recent part of the plot instead of stretching to its entire width.
-    private var trendTimeline: TrendTimeWindow {
-        TrendTimeWindow(endingAt: monitor.history.last?.date ?? Date())
-    }
-
     private func value(_ number: Double?) -> String { number.map { String(format: "%.1f", $0) } ?? "—" }
     private func temperature(_ number: Double?) -> String {
         guard monitor.connected, let number else { return "不可用" }

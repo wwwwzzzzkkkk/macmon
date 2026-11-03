@@ -25,7 +25,10 @@ private final class WeakMemoryPressureSource {
 
 @MainActor final class Monitor: ObservableObject {
     @Published private(set) var sample: Sample?
-    @Published private(set) var history: [Sample] = []
+    // Chart history is updated before publishing each sample. Publishing the
+    // whole array separately doubled dashboard invalidations on every tick.
+    private(set) var history: [Sample] = []
+    private(set) var powerChart = PowerChartSnapshot.empty
     @Published private(set) var status = "正在连接 macmon…"
     @Published private(set) var error: String?
     @Published private(set) var paused = false
@@ -40,7 +43,9 @@ private final class WeakMemoryPressureSource {
             configureNetwork()
         }
     }
-    @Published private(set) var menuDisk: DiskActivitySnapshot?
+    // Disk rates are rendered by MenuRefreshDriver after acquisition; they do
+    // not need to invalidate the complete glass dashboard at each poll.
+    private(set) var menuDisk: DiskActivitySnapshot?
     private var menuDiskSampler: DiskActivitySampler?
     @Published private(set) var dashboardVisible = false
     private let startsAutomatically: Bool
@@ -63,7 +68,6 @@ private final class WeakMemoryPressureSource {
     private var memoryPressureSource: (any DispatchSourceMemoryPressure)?
     let ssd: ExternalSSDMonitor
     let network: NetworkMonitor
-    private var networkSubscription: AnyCancellable?
     private var ssdSubscription: AnyCancellable?
     let hardware: String
 
@@ -94,7 +98,6 @@ private final class WeakMemoryPressureSource {
             }
         })
         ssdSubscription = ssd.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
-        networkSubscription = network.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         startMemoryPressureMonitoring()
         if start { restart(); restartMenuDisk(); configureNetwork() }
     }
@@ -240,6 +243,9 @@ private final class WeakMemoryPressureSource {
 
     func setDashboardVisible(_ visible: Bool) {
         guard dashboardVisible != visible else { return }
+        if visible {
+            powerChart = PowerChartSnapshot.build(history: history, intervalMillis: interval)
+        }
         dashboardVisible = visible
         configureNetwork()
     }
@@ -300,6 +306,18 @@ private final class WeakMemoryPressureSource {
         let next = StreamClient(path: path, interval: interval, onSample: { [weak self] sample in
             Task { @MainActor in
                 guard let self, self.generation == token else { return }
+                // Prepare the chart only when visible. Publishing the sample
+                // once, after history and chart are ready, coalesces the UI.
+                self.history.append(sample)
+                let cutoff = sample.date.addingTimeInterval(-600)
+                self.history.removeAll { $0.date < cutoff }
+                if self.history.count > 600 {
+                    self.history.removeFirst(self.history.count - 600)
+                }
+                if self.dashboardVisible {
+                    self.powerChart = PowerChartSnapshot.build(
+                        history: self.history, intervalMillis: self.interval)
+                }
                 self.sample = sample
                 self.lastReceived = Date()
                 if !self.connected { self.connected = true }
@@ -307,10 +325,6 @@ private final class WeakMemoryPressureSource {
                 self.failureCount = 0
                 let status = "实时采样 · \(self.interval / 1000) 秒"
                 if self.status != status { self.status = status }
-                self.history.append(sample)
-                let cutoff = Date().addingTimeInterval(-600)
-                self.history.removeAll { $0.date < cutoff }
-                if self.history.count > 600 { self.history.removeFirst(self.history.count - 600) }
             }
         }, onFailure: { [weak self] message in
             Task { @MainActor in

@@ -4,6 +4,11 @@ import ChipBarCore
 /// File-system capacities for mounted external drives. This is deliberately
 /// independent of the optional smartctl/SMART feature and never needs sudo.
 /// DiskActivitySampler caches APFS volume checks for 30 seconds.
+extension Notification.Name {
+    static let chipBarStorageLayoutDidChange =
+        Notification.Name("ChipBarStorageLayoutDidChange")
+}
+
 struct ExternalVolumeCapacity: Identifiable {
     let diskID: String
     let volume: DiskVolumeSpace
@@ -44,13 +49,23 @@ struct ExternalVolumeCapacity: Identifiable {
             // Native physical-disk byte counters refresh every two seconds;
             // volume capacity scans remain cached for 30 seconds.
             let needsCapacity = lastSampleAt.map { Date().timeIntervalSince($0) >= 30 } ?? true
-            let result = await sampler.sampleAll(includeVolumes: needsCapacity)
+            // The sampler already caches filesystem scans for 30 seconds, but
+            // must be allowed to invalidate on physical disk insertion/removal.
+            let result = await sampler.sampleAll(includeVolumes: true)
             guard !Task.isCancelled else { return }
+            let topologyChanged = activity?.external != result.external ||
+                                  activity?.connected != result.connected
             activity = result
-            if needsCapacity {
-                volumes = Self.displayRows(from: result)
-                sampled = true
+            if needsCapacity || topologyChanged || !sampled {
+                let nextVolumes = Self.displayRows(from: result)
+                let changed = volumes.map(\.id) != nextVolumes.map(\.id)
+                volumes = nextVolumes
+                if !sampled { sampled = true }
                 lastSampleAt = Date()
+                if changed || topologyChanged {
+                    NotificationCenter.default.post(name: .chipBarStorageLayoutDidChange,
+                                                    object: nil)
+                }
             }
             do { try await Task.sleep(for: .seconds(2)) }
             catch { return }
@@ -64,10 +79,22 @@ struct StorageCapacitySection: View {
     @StateObject private var internalStorage = InternalStorageModel.shared
     @StateObject private var externalStorage = ExternalStorageCapacityModel.shared
 
-    private let columns: [GridItem] = [
-        GridItem(.flexible(), spacing: 8),
-        GridItem(.flexible(), spacing: 8)
-    ]
+    // No placeholder card is rendered when no external device is detected.
+    // A newly mounted drive automatically restores the two-column grid.
+    private var showsExternalDrive: Bool {
+        Self.shouldShowExternal(volumes: externalStorage.volumes,
+                                snapshot: externalStorage.activity)
+    }
+
+    static func shouldShowExternal(volumes: [ExternalVolumeCapacity],
+                                   snapshot: DiskActivitySnapshot?) -> Bool {
+        !volumes.isEmpty || !(snapshot?.external.isEmpty ?? true)
+    }
+
+    private var columns: [GridItem] {
+        let count = showsExternalDrive ? 2 : 1
+        return Array(repeating: GridItem(.flexible(), spacing: 8), count: count)
+    }
 
     private var freshActivity: DiskActivitySnapshot? {
         guard let activity = externalStorage.activity,
@@ -107,12 +134,10 @@ struct StorageCapacitySection: View {
     }
 
     @ViewBuilder private var externalCards: some View {
-        if !externalStorage.sampled {
+        if externalStorage.volumes.isEmpty {
+            // Detected physical disk with no mountable filesystem.
             StorageVolumeCard(title: "外接储存", symbol: "externaldrive",
-                              total: nil, available: nil, placeholder: "读取中…")
-        } else if externalStorage.volumes.isEmpty {
-            StorageVolumeCard(title: "外接储存", symbol: "externaldrive",
-                              total: nil, available: nil, placeholder: "未接入磁盘")
+                              total: nil, available: nil, placeholder: "未挂载磁盘")
         } else {
             ForEach(externalStorage.volumes) { item in
                 // Shared APFS volumes on one physical drive show the same
@@ -143,7 +168,9 @@ struct StorageCapacitySection: View {
 
             LazyVGrid(columns: columns, spacing: 8) {
                 internalCard
-                externalCards
+                if showsExternalDrive {
+                    externalCards
+                }
             }
         }
         .task {

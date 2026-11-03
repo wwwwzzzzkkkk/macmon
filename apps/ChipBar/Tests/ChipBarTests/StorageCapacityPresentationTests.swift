@@ -46,6 +46,26 @@ import ChipBarCore
         #expect(Set(rows.map(\.id)) == [first.id, second.id])
     }
 
+    @Test func adaptsFromInternalOnlyToTwoColumns() throws {
+        let internalOnly = DiskActivitySnapshot(
+            connected: ["disk0"], external: []
+        )
+        #expect(!StorageCapacitySection.shouldShowExternal(volumes: [], snapshot: nil))
+        #expect(!StorageCapacitySection.shouldShowExternal(volumes: [], snapshot: internalOnly))
+
+        let mounted = try #require(DiskVolumeSpace(
+            id: "/Volumes/Media", name: "Media",
+            total: 1_000_000_000, available: 300_000_000, apfs: false))
+        let row = ExternalVolumeCapacity(diskID: "disk5", volume: mounted)
+        #expect(StorageCapacitySection.shouldShowExternal(volumes: [row], snapshot: internalOnly))
+
+        // A disk is connected but encrypted/unmounted: retain a visible
+        // external slot rather than incorrectly claiming the drive is absent.
+        let unmounted = DiskActivitySnapshot(connected: ["disk0", "disk5"],
+                                              external: ["disk5"])
+        #expect(StorageCapacitySection.shouldShowExternal(volumes: [], snapshot: unmounted))
+    }
+
     @Test func noExternalDrivesProducesEmptyCardInsteadOfInternalGuess() {
         let snapshot = DiskActivitySnapshot()
         #expect(ExternalStorageCapacityModel.displayRows(from: snapshot).isEmpty)
