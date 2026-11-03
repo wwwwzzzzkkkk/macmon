@@ -53,16 +53,28 @@ struct ExternalVolumeCapacity: Identifiable {
             // must be allowed to invalidate on physical disk insertion/removal.
             let result = await sampler.sampleAll(includeVolumes: true)
             guard !Task.isCancelled else { return }
-            let topologyChanged = activity?.external != result.external ||
-                                  activity?.connected != result.connected
+            let previousConnected = activity?.connected ?? []
+            let previousExternal = activity?.external ?? []
+            let topologyChanged = previousExternal != result.external ||
+                                  previousConnected != result.connected
+            let showedExternal = !volumes.isEmpty || !previousExternal.isEmpty
             activity = result
             if needsCapacity || topologyChanged || !sampled {
                 let nextVolumes = Self.displayRows(from: result)
-                let changed = volumes.map(\.id) != nextVolumes.map(\.id)
-                volumes = nextVolumes
+                let countChanged = volumes.count != nextVolumes.count
+                let contentChanged = countChanged ||
+                    zip(volumes, nextVolumes).contains { old, new in
+                        old.id != new.id || old.volume.total != new.volume.total ||
+                        old.volume.available != new.volume.available ||
+                        old.volume.name != new.volume.name
+                    }
+                if contentChanged { volumes = nextVolumes }
                 if !sampled { sampled = true }
                 lastSampleAt = Date()
-                if changed || topologyChanged {
+                let showsExternal = !nextVolumes.isEmpty || !result.external.isEmpty
+                // Only remeasure AppKit when a row enters/leaves, not when
+                // internal counters first appear or rates change each tick.
+                if countChanged || showedExternal != showsExternal {
                     NotificationCenter.default.post(name: .chipBarStorageLayoutDidChange,
                                                     object: nil)
                 }

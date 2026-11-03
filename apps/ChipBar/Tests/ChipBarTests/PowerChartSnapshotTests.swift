@@ -24,6 +24,13 @@ struct PowerChartSnapshotTests {
         #expect(result.timeline.end == samples.last?.date)
     }
 
+    @Test func subWattChartsPreserveMinimumYScale() throws {
+        let at = Date(timeIntervalSince1970: 1_720_000_000)
+        let result = PowerChartSnapshot.build(
+            history: try [sample(0.2, at: at)], intervalMillis: 2000)
+        #expect(result.maximum == 1)
+    }
+
     @Test func cachedChartExcludesOutOfWindowPointsButRetainsWindowStatistics() throws {
         let end = Date(timeIntervalSince1970: 1_720_000_800)
         let samples = try [

@@ -23,7 +23,7 @@ struct PowerChartSnapshot {
         points.reserveCapacity(history.count)
         var sum = 0.0
         var count = 0
-        var peak = 1.0
+        var maximumObserved: Double?
         let gap = Double(intervalMillis) / 1_000 * 2.5
 
         for sample in history {
@@ -32,7 +32,7 @@ struct PowerChartSnapshot {
             if let power = sample.total {
                 sum += power
                 count += 1
-                peak = max(peak, power * 1.15)
+                maximumObserved = max(maximumObserved ?? power, power)
             }
             guard timeline.fraction(for: sample.date) != nil else {
                 previous = nil
@@ -49,7 +49,9 @@ struct PowerChartSnapshot {
             previous = sample
         }
 
-        return Self(points: points, maximum: peak,
+        // Match the pre-cache axis rule exactly, including sub-1 W values.
+        let maximum = max(1, (maximumObserved ?? 1) * 1.15)
+        return Self(points: points, maximum: maximum,
                     average: count == 0 ? nil : sum / Double(count),
                     timeline: timeline)
     }
