@@ -14,6 +14,20 @@ import Testing
         coordinator.cancelPending()
     }
 
+    @Test func panelRefitIsNotScheduledBySamplesWithoutStructureChanges() async throws {
+        // Unrelated power readings are published through the Monitor and
+        // should never enqueue window fitting work; this coordinator only
+        // responds when explicitly asked for structural changes.
+        var fits = 0
+        let coordinator = PanelLayoutCoordinator { fits += 1 }
+        try await Task.sleep(for: .milliseconds(240))
+        #expect(fits == 0)
+        coordinator.request()
+        try await Task.sleep(for: .milliseconds(240))
+        #expect(fits == 1)
+        coordinator.cancelPending()
+    }
+
     @Test func scrollingDefersSizingUntilIdle() {
         #expect(!PanelLayoutCoordinator.canApply(afterScrollIdle: 0))
         #expect(!PanelLayoutCoordinator.canApply(afterScrollIdle: 0.18))

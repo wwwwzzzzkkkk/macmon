@@ -187,12 +187,12 @@ struct StorageCapacitySection: View {
         }
         .task {
             // Retain the existing non-blocking 30-second capacity sources.
-            do { try await Task.sleep(for: .milliseconds(320)) }
+            do { try await Task.sleep(for: .milliseconds(420)) }
             catch { return }
             await internalStorage.watch()
         }
         .task {
-            do { try await Task.sleep(for: .milliseconds(320)) }
+            do { try await Task.sleep(for: .milliseconds(900)) }
             catch { return }
             await externalStorage.watch()
         }

@@ -58,6 +58,34 @@ import ChipBarCore
         let token: UUID
     }
     private var disclosureTransition: DisclosureTransition?
+    // Reuse the previously measured, structurally equivalent Home height on
+    // subsequent opens. The SwiftUI tree still remounts so hidden dashboards
+    // never continue rendering, but costly NSHostingView.fittingSize is skipped.
+    private struct HomeLayoutKey: Equatable {
+        var status: String
+        var error: String?
+        var connected: Bool
+        var volumeIDs: [String]
+        var externalIDs: [String]
+    }
+    private var cachedHomeLayout: (key: HomeLayoutKey, height: CGFloat)?
+
+    private var homeLayoutKey: HomeLayoutKey? {
+        guard !dashboardState.showSettings, !dashboardState.showSystemDetails,
+              !dashboardState.showApplications, !dashboardState.showSSDDetails else { return nil }
+        let storage = ExternalStorageCapacityModel.shared
+        return HomeLayoutKey(status: monitor.status, error: monitor.error,
+                             connected: monitor.connected,
+                             volumeIDs: storage.volumes.map(\.id),
+                             externalIDs: (storage.activity?.external ?? []).sorted())
+    }
+
+    private func openProfileMark(_ phase: String, since start: TimeInterval) {
+        guard CommandLine.arguments.contains("--profile-open") else { return }
+        let millis = (ProcessInfo.processInfo.systemUptime - start) * 1_000
+        NSLog("ChipBar open: %@ %.1f ms", phase, millis)
+    }
+
     private var measuredHeight: CGFloat = 0
     private var maximumHeight: CGFloat = 850
     private var menuTracking = false
@@ -431,11 +459,15 @@ import ChipBarCore
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
-        hostingView.layoutSubtreeIfNeeded()
+        // fittingSize performs the required SwiftUI measurement; a full
+        // layoutSubtreeIfNeeded immediately before it repeats expensive work.
         let height = ceil(hostingView.fittingSize.height)
         guard height.isFinite, height > 0 else { return }
         let contentHeightChanged = height != measuredHeight
         measuredHeight = height
+        if let key = homeLayoutKey {
+            cachedHomeLayout = (key, height)
+        }
         let size = NSSize(width: DashboardLayout.width, height: min(navigationViewportHeight ?? height, maximumHeight))
         // A short destination page still needs a full viewport-sized document,
         // otherwise NSClipView can retain an invalid origin on the next return.
@@ -498,6 +530,7 @@ import ChipBarCore
     }
 
     @objc private func togglePanel() {
+        let openedAt = ProcessInfo.processInfo.systemUptime
         recordMouseQA("buttonAction")
         let shouldOpen = mouseDownTarget ?? !panelRequestedVisible
         mouseDownTarget = nil
@@ -530,13 +563,41 @@ import ChipBarCore
             dashboardMounted = true
         }
         monitor.setDashboardVisible(true)
-        refresh(forceLayout: true)
+        // Most panel opens use identical structural content. Reuse the exact
+        // prior height rather than synchronously recomputing every SwiftUI
+        // body's fittingSize while the user is clicking the status item.
+        var usedCachedHeight = false
+        if let key = homeLayoutKey, let cached = cachedHomeLayout,
+           cached.key == key, cached.height > 0 {
+            let viewportHeight = min(cached.height, maximumHeight)
+            let documentHeight = max(cached.height, viewportHeight)
+            let documentSize = NSSize(width: DashboardLayout.width, height: documentHeight)
+            if hostingView.frame.size != documentSize {
+                hostingView.setFrameSize(documentSize)
+            }
+            if let frame = panelFrame(size: NSSize(width: DashboardLayout.width,
+                                                   height: viewportHeight)),
+               panel.frame != frame {
+                panel.setFrame(frame, display: false)
+            }
+            let maximumOffset = max(0, documentHeight - viewportHeight)
+            scrollView.contentView.scroll(to: NSPoint(
+                x: 0, y: hostingView.isFlipped ? 0 : maximumOffset))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+            measuredHeight = cached.height
+            resetScrollForPage = false
+            usedCachedHeight = true
+        } else {
+            refresh(forceLayout: true)
+        }
+        openProfileMark(usedCachedHeight ? "cached geometry" : "full geometry", since: openedAt)
         positionPanel()
         if !panel.isVisible { panel.alphaValue = 0 }
         panelRequestedVisible = true
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(nil)
         panel.displayIfNeeded()
+        openProfileMark("first display", since: openedAt)
         animatePanel(visible: true)
     }
 

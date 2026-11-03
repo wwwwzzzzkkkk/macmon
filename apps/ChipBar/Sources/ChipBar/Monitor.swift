@@ -256,14 +256,16 @@ private final class WeakMemoryPressureSource {
     }
 
     private func configureNetwork() {
-        network.setPaused(!startsAutomatically || paused || sleeping || (!dashboardVisible && !menuItems.contains(.network)))
+        // The home dashboard has no network widget. A panel open must not
+        // activate route-table queries unless network speed is in the menu bar.
+        network.setPaused(!startsAutomatically || paused || sleeping || !menuItems.contains(.network))
     }
 
     /// One display clock gathers fast counters, then presents the latest complete frame.
     /// SMART readings retain their independent, slow 30-second acquisition cadence.
     func sampleMenuSources() async {
         guard !paused, !sleeping else { return }
-        network.sample()
+        if menuItems.contains(.network) { network.sample() }
         if let sampler = menuDiskSampler {
             let next = await sampler.sampleAll()
             guard !Task.isCancelled, sampler === menuDiskSampler else { return }

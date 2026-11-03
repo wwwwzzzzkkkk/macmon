@@ -59,7 +59,7 @@ struct ApplicationUsageSection: View {
             if !samplingStartedInThisPanel {
                 // Avoid hundreds of libproc reads competing with the first
                 // Liquid Glass layout. Subsequent metric changes are immediate.
-                do { try await Task.sleep(for: .milliseconds(650)) }
+                do { try await Task.sleep(for: .milliseconds(1350)) }
                 catch { return }
                 guard !Task.isCancelled else { return }
                 samplingStartedInThisPanel = true
