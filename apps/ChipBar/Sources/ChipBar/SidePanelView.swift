@@ -12,8 +12,8 @@ enum SidePanelLayout {
     static let padding: CGFloat = 12
     static let contentWidth: CGFloat = width - 2 * padding
     static let applicationHeight: CGFloat = 250
-    static let powerHeight: CGFloat = 482
-    static let diskHeight: CGFloat = 444
+    static let powerHeight: CGFloat = 516
+    static let diskHeight: CGFloat = 410
 
     static func height(for kind: DashboardSidePanelKind) -> CGFloat {
         switch kind {
