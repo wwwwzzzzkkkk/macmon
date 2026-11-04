@@ -18,6 +18,7 @@ enum DashboardMotion {
 }
 
 final class DashboardState: ObservableObject {
+    @Published var sidePanel: DashboardSidePanelKind? = nil
     @Published var chartMetric: PowerMetric = .total
     @Published var showSettings = false
     @Published var showApplications = CommandLine.arguments.contains("--apps")
@@ -41,6 +42,7 @@ final class DashboardState: ObservableObject {
         let system = arguments.contains("--system-details") || ssd
             || arguments.contains("--ssd-disclosure-only")
         chartMetric = .total
+        sidePanel = nil
         showSettings = false
         showApplications = apps
         applicationsExpansion = apps ? 1 : 0
@@ -115,7 +117,10 @@ struct Dashboard: View {
                                 active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
             DashboardANEStrip(power: monitor.sample?.ane, connected: monitor.connected)
             StorageCapacitySection()
-            ApplicationUsageSection(monitor: monitor, state: state)
+            HStack(spacing: 8) {
+                sidePanelEntry("电源与功率", icon: "bolt.horizontal.circle", kind: .power)
+                sidePanelEntry("应用占用", icon: "square.stack.3d.up", kind: .applications)
+            }
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
             footer
@@ -305,6 +310,43 @@ struct Dashboard: View {
         .padding(.horizontal, 6)
         .padding(.vertical, 6)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func sidePanelEntry(_ title: String, icon: String,
+                                kind: DashboardSidePanelKind) -> some View {
+        let selected = state.sidePanel == kind
+        return Button {
+            if kind == .applications && state.sidePanel != .applications {
+                // The sidecar may show five rows without growing the main window.
+                state.showApplications = true
+                state.applicationsExpansion = 1
+            }
+            state.sidePanel = selected ? nil : kind
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                    .font(.system(size: 13))
+                    .foregroundStyle(accent)
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                Spacer(minLength: 2)
+                Image(systemName: selected ? "chevron.right" : "rectangle.on.rectangle")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 11)
+            .frame(height: 41)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(selected ? accent.opacity(0.42) : Color.primary.opacity(0.05),
+                                  lineWidth: 0.7)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(ChipBarPressStyle())
+        .accessibilityLabel("\(title)，\(selected ? "收起" : "在侧边卡片展开")")
     }
 
     private func wattage(_ power: Double?) -> String {
