@@ -49,7 +49,7 @@ struct DashboardSidePanelView: View {
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.23), value: state.sidePanel)
             Spacer(minLength: 0)
         }
-        .frame(width: 308, height: 357, alignment: .topLeading)
+        .frame(width: 308, height: state.sidePanel == .power ? 445 : 357, alignment: .topLeading)
         .padding(13)
         .buttonStyle(ChipBarPressStyle())
     }
