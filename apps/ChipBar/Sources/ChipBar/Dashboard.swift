@@ -307,7 +307,7 @@ struct Dashboard: View {
                 title: "内存", percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
                 color: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
                 subtitle: monitor.connected ? memoryCapacitySummary : "内存 —",
-                detail: "压力 · \(monitor.memoryPressure.title)",
+                detail: "统一内存",
                 pressureStatus: monitor.memoryPressure.title)
         }
         .padding(.horizontal, 6)

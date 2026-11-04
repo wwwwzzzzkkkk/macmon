@@ -5,6 +5,27 @@ enum DashboardSidePanelKind: String, Equatable {
     case power
 }
 
+/// Lightweight first frame avoids synchronously constructing application/SMC views.
+struct SidePanelLoadingView: View {
+    let kind: DashboardSidePanelKind
+    var body: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Label(kind == .power ? "电源与功率" : "应用占用",
+                  systemImage: kind == .power ? "bolt.horizontal.circle" : "square.stack.3d.up")
+                .font(.headline)
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.primary.opacity(0.045))
+                .frame(height: kind == .power ? 210 : 180)
+                .overlay {
+                    ProgressView().controlSize(.small).accessibilityLabel("正在准备数据")
+                }
+            Spacer(minLength: 0)
+        }
+        .frame(width: 308, height: kind == .power ? 402 : 296, alignment: .topLeading)
+        .padding(13)
+    }
+}
+
 /// Hosted in a separate nonactivating NSPanel; the main dashboard never resizes
 /// when switching the resource ranking or updating the power flow.
 struct DashboardSidePanelView: View {
@@ -35,7 +56,7 @@ struct DashboardSidePanelView: View {
 
             ZStack(alignment: .topLeading) {
                 if state.sidePanel == .applications {
-                    ApplicationUsageSection(monitor: monitor, state: state)
+                    ApplicationUsageSection(monitor: monitor, state: state, showsDisclosure: false)
                         .transition(reduceMotion ? .opacity :
                             .asymmetric(insertion: .offset(x: 12).combined(with: .opacity),
                                         removal: .offset(x: -10).combined(with: .opacity)))
@@ -47,9 +68,8 @@ struct DashboardSidePanelView: View {
                 }
             }
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.23), value: state.sidePanel)
-            Spacer(minLength: 0)
         }
-        .frame(width: 308, height: state.sidePanel == .power ? 445 : 357, alignment: .topLeading)
+        .frame(width: 308, height: state.sidePanel == .power ? 402 : 296, alignment: .topLeading)
         .padding(13)
         .buttonStyle(ChipBarPressStyle())
     }

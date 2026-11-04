@@ -21,6 +21,7 @@ import QuartzCore
     private let onClose: () -> Void
     private var transition = UUID()
     private var lastOpenedOnRight = true
+    private var mountTask: Task<Void, Never>?
 
     var isKeyWindow: Bool { panel.isKeyWindow }
     func owns(_ other: NSWindow?) -> Bool { other === panel }
@@ -40,7 +41,7 @@ import QuartzCore
         scrollView.contentView.drawsBackground = false
         scrollView.contentView.focusRingType = .none
         scrollView.documentView = host
-        host.setFrameSize(NSSize(width: 334, height: 383))
+        host.setFrameSize(NSSize(width: 334, height: 322))
         let material = PanelMaterialView(contentView: scrollView)
         panel.contentView = material
         panel.isOpaque = false
@@ -62,9 +63,11 @@ import QuartzCore
         guard state.sidePanel != nil,
               let screen = parent.screen ?? NSScreen.main else { return }
         transition = UUID()
+        mountTask?.cancel()
+        let token = transition
         let visible = screen.visibleFrame
         let width: CGFloat = 334
-        let desiredHeight: CGFloat = state.sidePanel == .power ? 471 : 383
+        let desiredHeight: CGFloat = state.sidePanel == .power ? 428 : 322
         let height = min(desiredHeight, max(200, visible.height - 16))
         host.setFrameSize(NSSize(width: width, height: desiredHeight))
         let spacing: CGFloat = 9
@@ -81,18 +84,25 @@ import QuartzCore
         host.appearance = parent.appearance
         panel.contentView?.appearance = parent.appearance
 
-        // The view observes DashboardState, so switching tabs preserves its
-        // SwiftUI identity and the existing rank transition.
+        // Present a lightweight shell first: creating the full ranking or
+        // SMC SwiftUI tree synchronously delays the native window first frame.
+        host.rootView = AnyView(SidePanelLoadingView(kind: state.sidePanel ?? .power))
         if !panel.isVisible {
-            host.rootView = AnyView(DashboardSidePanelView(
-                monitor: monitor, state: state, close: onClose
-            ))
             let offset: CGFloat = openRight ? -14 : 14
             panel.setFrame(target.offsetBy(dx: offset, dy: 0), display: false)
             panel.alphaValue = 0
             panel.makeKeyAndOrderFront(nil)
         } else {
             panel.makeKeyAndOrderFront(nil)
+        }
+        mountTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(90)) }
+            catch { return }
+            guard let self, self.transition == token, self.panel.isVisible else { return }
+            self.host.rootView = AnyView(DashboardSidePanelView(
+                monitor: self.monitor, state: self.state, close: self.onClose
+            ))
+            self.mountTask = nil
         }
         let motion = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         guard motion else {
@@ -112,6 +122,8 @@ import QuartzCore
 
     func hide(animated: Bool = true) {
         transition = UUID()
+        mountTask?.cancel()
+        mountTask = nil
         let token = transition
         guard panel.isVisible else {
             host.rootView = AnyView(EmptyView())
