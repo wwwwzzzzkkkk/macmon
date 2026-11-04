@@ -40,46 +40,75 @@ struct MacHardwareInformation: Sendable, Equatable {
     }
 }
 
+/// Information density without a long five-row table. Hardware and CPU tier
+/// metadata are cached by the existing static samplers (no periodic sysctl).
 struct MacHardwareInformationSection: View {
     let chip: String
     private let info = MacHardwareInformation.current
+    private let tiers = CPUCoreTopology.current.levels
+    private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
+
+    private var coreDescription: String {
+        guard !tiers.isEmpty else { return "\(info.logicalCPUCount) 逻辑核" }
+        return tiers.map { "\($0.shortTitle) \($0.count)" }.joined(separator: " · ")
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Label("电脑基本信息", systemImage: "desktopcomputer")
-                .font(.subheadline.weight(.semibold))
-
-            VStack(spacing: 0) {
-                fact("设备型号", info.modelIdentifier)
-                Divider().opacity(0.45)
-                fact("芯片", chip.isEmpty ? "不可用" : chip)
-                Divider().opacity(0.45)
-                fact("系统版本", info.macOSVersion)
-                Divider().opacity(0.45)
-                fact("物理内存", info.installedMemory)
-                Divider().opacity(0.45)
-                fact("CPU 核心", "\(info.logicalCPUCount) 核")
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "desktopcomputer")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(accent)
+                    .frame(width: 38, height: 38)
+                    .background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 11))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(chip.isEmpty ? "Apple Silicon" : chip)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.80)
+                    Text(info.modelIdentifier)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 4)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
+            Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 0.5)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 7),
+                                GridItem(.flexible(), spacing: 7)], spacing: 7) {
+                fact("系统版本", info.macOSVersion, symbol: "apple.logo")
+                fact("统一内存", info.installedMemory, symbol: "memorychip")
+                fact("CPU 核心", "\(info.logicalCPUCount) 核", symbol: "cpu")
+                fact("核心结构", coreDescription, symbol: "square.grid.3x3")
+            }
         }
+        .padding(12)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
         .accessibilityElement(children: .contain)
     }
 
-    private func fact(_ label: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(label).foregroundStyle(.secondary)
-                .frame(width: 63, alignment: .leading)
-            Spacer(minLength: 4)
-            Text(value)
-                .multilineTextAlignment(.trailing)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .textSelection(.enabled)
+    private func fact(_ title: String, _ value: String, symbol: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 11))
+                .foregroundStyle(accent.opacity(0.8))
+                .frame(width: 15)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
         }
-        .font(.caption)
-        .frame(minHeight: 31)
+        .frame(maxWidth: .infinity, minHeight: 39, alignment: .topLeading)
+        .padding(8)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
         .accessibilityElement(children: .combine)
     }
 }

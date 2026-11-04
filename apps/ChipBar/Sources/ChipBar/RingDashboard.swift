@@ -19,7 +19,7 @@ struct DashboardRunway: View {
     }
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 0) {
             ZStack {
                 Circle()
                     .stroke(Color.primary.opacity(0.095), lineWidth: 6)
@@ -48,6 +48,7 @@ struct DashboardRunway: View {
                 }
             }
             .frame(width: 74, height: 74)
+            .padding(.bottom, 10)
             .accessibilityHidden(true)
 
             Text(subtitle)
@@ -57,14 +58,15 @@ struct DashboardRunway: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 // All three cards reserve an identical slot for wattage/RAM.
-                .frame(height: 16, alignment: .center)
+                .frame(height: 17, alignment: .center)
+                .padding(.bottom, 3)
             Text(detail)
                 .font(.system(size: 9, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
-                .frame(height: 13)
+                .frame(height: 14)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)

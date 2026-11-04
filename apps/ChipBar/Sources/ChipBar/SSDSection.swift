@@ -99,7 +99,6 @@ struct SSDSettings: View {
     @ObservedObject var ssd: ExternalSSDMonitor
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Divider()
             Toggle("监控外接 NVMe SSD", isOn: $ssd.enabled)
                 .toggleStyle(ChipBarGlassToggleStyle())
             if ssd.enabled {

@@ -134,27 +134,22 @@ struct Dashboard: View {
     /// The only secondary page: system facts, hardware details and settings.
     /// Home remains compact, with internal/external storage space bars.
     private var settingsScreen: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             settingsNavigation
-            MacHardwareInformationSection(
-                chip: monitor.sample?.chip ?? monitor.hardware)
-            HStack {
-                Label("硬件状态", systemImage: "cpu")
-                    .font(.subheadline.weight(.semibold))
+            MacHardwareInformationSection(chip: monitor.sample?.chip ?? monitor.hardware)
+            HStack(spacing: 8) {
+                Label("硬件状态", systemImage: "waveform.path.ecg")
+                    .font(.caption.weight(.semibold))
                 Spacer()
+                Circle().fill(monitor.connected ? Color.green : Color.secondary)
+                    .frame(width: 6, height: 6)
+                Text(monitor.connected ? "实时" : "未连接")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
+            .padding(.horizontal, 2)
             fanOverview
             if monitor.ssd.enabled {
                 SSDSection(ssd: monitor.ssd, state: state)
-            } else {
-                HStack(spacing: 8) {
-                    Label("外接 SSD 状态", systemImage: "externaldrive")
-                    Spacer()
-                    Text("监控未启用").foregroundStyle(.secondary)
-                }
-                .font(.subheadline)
-                .padding(11)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
             }
             settingsPanel
         }
@@ -167,26 +162,26 @@ struct Dashboard: View {
                 if state.showSettings { state.showSettings = false }
                 else { state.showSystemDetails = false }
             } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "chevron.left").font(.caption.weight(.semibold))
-                    Text("返回").font(.subheadline)
-                }
-                .contentShape(Rectangle())
+                Image(systemName: "chevron.left")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 30, height: 30)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 9))
+                    .contentShape(RoundedRectangle(cornerRadius: 9))
             }
             .buttonStyle(ChipBarPressStyle())
             .accessibilityLabel("返回监控面板")
-
-            .frame(width: 72, alignment: .leading)
-
-            Spacer(minLength: 0)
-            Text("设备与设置")
-                .font(.headline)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-            // Match the leading control width so the title remains centered.
-            Image(systemName: "gearshape")
-                .foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .trailing)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("设备与设置")
+                    .font(.headline)
+                Text("硬件概览 · 显示偏好")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "slider.horizontal.3")
+                .foregroundStyle(accent)
+                .font(.system(size: 15))
                 .accessibilityHidden(true)
         }
         .padding(.vertical, 4)
@@ -307,7 +302,7 @@ struct Dashboard: View {
                 title: "内存", percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
                 color: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
                 subtitle: monitor.connected ? memoryCapacitySummary : "内存 —",
-                detail: "压力 · \(monitor.memoryPressure.title)",
+                detail: "统一内存",
                 pressureStatus: monitor.memoryPressure.title)
         }
         .padding(.horizontal, 6)
@@ -376,94 +371,125 @@ struct Dashboard: View {
 
     private var fanOverview: some View {
         HStack(spacing: 9) {
-            Label("风扇", systemImage: "fanblades")
+            Label("风扇转速", systemImage: "fanblades")
+                .font(.caption.weight(.medium))
             Spacer()
             let fans = monitor.connected ? monitor.sample?.fans ?? [] : []
-            Text(fans.isEmpty ? "不可用" : fans.map { String(format: "%.0f", $0.rpm) }.joined(separator: " / ") + " RPM")
+            Text(fans.isEmpty ? "不可用" :
+                 fans.map { String(format: "%.0f", $0.rpm) }.joined(separator: " / ") + " RPM")
+                .font(.caption.weight(.semibold))
                 .monospacedDigit()
+                .foregroundStyle(fans.isEmpty ? Color.secondary : Color.primary)
         }
-        .font(.subheadline)
-        .padding(11)
+        .padding(.horizontal, 12)
+        .frame(height: 35)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
     }
 
     private var settingsPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("偏好设置", systemImage: "slider.horizontal.3")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版本")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("刷新频率").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("采样频率", systemImage: "clock.arrow.circlepath")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text("影响刷新与功耗")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
                 RefreshIntervalSelector(selection: $monitor.interval)
             }
+            .padding(12)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 11) {
                 HStack {
-                    Text("菜单栏项目").font(.subheadline.weight(.semibold))
+                    Label("菜单栏显示", systemImage: "menubar.rectangle")
+                        .font(.subheadline.weight(.semibold))
                     Spacer()
-                    Text("选择显示内容").font(.caption2).foregroundStyle(.secondary)
+                    Text("\(monitor.menuItems.count) / \(MenuContent.allCases.count) 已显示")
+                        .font(.caption2)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                 }
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
+                // Compact selection tiles: one coherent active state rather
+                // than a separate miniature switch and bright border per row.
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 6),
+                                    GridItem(.flexible(), spacing: 6),
+                                    GridItem(.flexible(), spacing: 6)], spacing: 6) {
                     ForEach(MenuContent.allCases) { item in
                         let enabled = monitor.menuItems.contains(item)
                         Button {
-                            if enabled { monitor.menuItems.remove(item) }
-                            else { monitor.menuItems.insert(item) }
+                            withAnimation(ChipBarMotion.optional(ChipBarMotion.selection,
+                                                                 reduceMotion: reduceMotion)) {
+                                if enabled { monitor.menuItems.remove(item) }
+                                else { monitor.menuItems.insert(item) }
+                            }
                         } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 4) {
                                 Image(systemName: menuIcon(item))
-                                    .font(.caption).frame(width: 14)
-                                    .foregroundStyle(enabled ? ChipBarControlTint.accent : Color.secondary)
-                                Text(menuTitle(item)).font(.caption2.weight(.medium)).lineLimit(1)
-                                    .minimumScaleFactor(0.8)
+                                    .font(.system(size: 11))
+                                    .frame(width: 13)
+                                    .foregroundStyle(enabled ? accent : Color.secondary)
+                                Text(menuTitle(item))
+                                    .font(.system(size: 10, weight: .medium))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
                                 Spacer(minLength: 0)
-                                ChipBarMiniSwitch(enabled: enabled, compact: true)
+                                if enabled {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 9, weight: .semibold))
+                                        .foregroundStyle(accent)
+                                }
                             }
                             .foregroundStyle(enabled ? Color.primary : Color.secondary)
-                            .padding(.horizontal, 9)
-                            .frame(height: 39)
-                            .background(enabled ? ChipBarControlTint.accent.opacity(0.16) : Color.primary.opacity(0.035),
-                                        in: RoundedRectangle(cornerRadius: 10))
+                            .padding(.horizontal, 8)
+                            .frame(height: 34)
+                            .background(enabled ? accent.opacity(0.13) :
+                                            Color.primary.opacity(0.035),
+                                        in: RoundedRectangle(cornerRadius: 9))
                             .overlay {
-                                RoundedRectangle(cornerRadius: 10)
-                                    .strokeBorder(enabled ? ChipBarControlTint.accent.opacity(0.55) : Color.primary.opacity(0.07),
-                                                  lineWidth: enabled ? 1 : 0.7)
+                                RoundedRectangle(cornerRadius: 9)
+                                    .strokeBorder(enabled ? accent.opacity(0.30) :
+                                                      Color.primary.opacity(0.05),
+                                                  lineWidth: 0.75)
                             }
+                            .contentShape(RoundedRectangle(cornerRadius: 9))
                         }
                         .buttonStyle(ChipBarPressStyle())
-                        .accessibilityLabel("\(item.title)，\(enabled ? "已显示" : "未显示")")
-                        .animation(ChipBarMotion.optional(ChipBarMotion.selection,
-                                                          reduceMotion: reduceMotion),
-                                   value: enabled)
+                        .accessibilityLabel(item.title)
+                        .accessibilityValue(enabled ? "已显示" : "未显示")
+                        .accessibilityHint("点击切换菜单栏内容")
                     }
                 }
                 if monitor.menuItems.contains(.power) {
                     ChipBarPowerSelection(selection: $monitor.menuMetric)
                 }
                 if monitor.ssd.enabled {
-                    Toggle("显示 SSD 温度", isOn: Binding(
+                    Toggle("菜单栏显示 SSD 温度", isOn: Binding(
                         get: { monitor.ssd.showInMenu },
                         set: { monitor.ssd.showInMenu = $0 }))
                         .toggleStyle(ChipBarGlassToggleStyle())
                 }
             }
+            .padding(12)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
 
-            Divider()
-            SSDSettings(ssd: monitor.ssd)
-
-            Divider()
             VStack(alignment: .leading, spacing: 8) {
+                Label("储存监控", systemImage: "externaldrive")
+                    .font(.subheadline.weight(.semibold))
+                SSDSettings(ssd: monitor.ssd)
+            }
+            .padding(12)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
+
+            VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 8) {
                     Label("应用更新", systemImage: "arrow.triangle.2.circlepath")
                         .font(.subheadline.weight(.semibold))
                     Spacer()
+                    Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+                         as? String ?? "开发版本")
+                        .font(.caption2).foregroundStyle(.secondary)
                     if updater.busy { ProgressView().controlSize(.small) }
                     Button("检查更新") { updater.check() }
                         .font(.caption)
@@ -483,17 +509,19 @@ struct Dashboard: View {
                     .disabled(updater.busy)
                 }
             }
+            .padding(12)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
 
-            Text("默认自动发现 macmon 与 smartctl；已保存的兼容配置继续生效。功率为芯片读数，不代表整机插座输入功率。")
-                .font(.caption2).foregroundStyle(.secondary)
+            Text("功率数据来自芯片传感器，不代表墙插功耗。macmon 与 smartctl 可自动发现。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 3)
             if !monitor.connected {
                 Text("macmon 未连接，请检查安装后重试。")
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }
-        .padding(12)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func menuTitle(_ item: MenuContent) -> String {

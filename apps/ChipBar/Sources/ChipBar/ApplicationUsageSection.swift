@@ -9,16 +9,19 @@ enum ApplicationResource: String, CaseIterable, Identifiable {
 struct ApplicationUsageSection: View {
     @ObservedObject var monitor: Monitor
     @ObservedObject var state: DashboardState
+    var showsDisclosure = true
     @StateObject private var activity = ApplicationActivityModel.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var samplingStartedInThisPanel = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if #available(macOS 14.0, *) {
-                disclosureButton.focusEffectDisabled()
-            } else {
-                disclosureButton
+            if showsDisclosure {
+                if #available(macOS 14.0, *) {
+                    disclosureButton.focusEffectDisabled()
+                } else {
+                    disclosureButton
+                }
             }
             ApplicationMetricSelector(selection: $state.applicationMetric)
             // Changing metrics creates a separate view identity: the old
@@ -40,26 +43,27 @@ struct ApplicationUsageSection: View {
             .clipped()
             .animation(ChipBarMotion.optional(ChipBarMotion.resourceStack,
                                               reduceMotion: reduceMotion), value: state.applicationMetric)
-            VStack(alignment: .leading, spacing: 0) {
-                ZStack(alignment: .topLeading) {
-                    Text(shortExplanation).opacity(1 - state.applicationsExpansion)
-                    Text(explanation).opacity(state.applicationsExpansion)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(state.showApplications ? explanation : shortExplanation)
+                    .lineLimit(state.showApplications ? 2 : 1)
+                    .frame(height: state.showApplications ? 32 : 14, alignment: .topLeading)
+                    .help(explanation)
+                if state.showApplications {
+                    Text(activity.snapshot.map(samplingSummary) ?? "正在读取进程计数…")
+                        .lineLimit(1).frame(height: 15, alignment: .leading)
                 }
-                .frame(height: 14 + 28 * state.applicationsExpansion, alignment: .topLeading).clipped()
-                Text(activity.snapshot.map(samplingSummary) ?? "正在读取进程计数…")
-                    .lineLimit(1).padding(.top, 8)
-                    .opacity(state.applicationsExpansion)
-                    .frame(height: 20 * state.applicationsExpansion, alignment: .topLeading).clipped()
-            }.font(.caption2).foregroundStyle(.secondary)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(state.showApplications ? explanation : shortExplanation)
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(state.showApplications ? explanation : shortExplanation)
         }
         .task(id: "\(monitor.paused)-\(monitor.sleeping)-\(monitor.interval)-\(state.applicationMetric == .gpu)") {
             guard !monitor.paused, !monitor.sleeping else { return }
             if !samplingStartedInThisPanel {
                 // Avoid hundreds of libproc reads competing with the first
                 // Liquid Glass layout. Subsequent metric changes are immediate.
-                do { try await Task.sleep(for: .milliseconds(1350)) }
+                do { try await Task.sleep(for: .milliseconds(350)) }
                 catch { return }
                 guard !Task.isCancelled else { return }
                 samplingStartedInThisPanel = true
