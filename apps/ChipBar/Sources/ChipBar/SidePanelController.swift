@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import QuartzCore
 
 @MainActor private final class ChipBarSideWindow: NSPanel {
     var escape: (() -> Void)?
@@ -54,9 +55,7 @@ import SwiftUI
         panel.title = "ChipBar 侧边卡片"
         panel.delegate = delegate
         panel.escape = onClose
-        host.rootView = AnyView(DashboardSidePanelView(monitor: monitor, state: state, close: onClose))
-        // Unmount immediately. The panel only needs its real SwiftUI tree when opened.
-        host.rootView = AnyView(EmptyView())
+        // The hosted view is mounted on demand to avoid reading processes or SMC on startup.
     }
 
     func show(beside parent: NSWindow) {
@@ -65,7 +64,9 @@ import SwiftUI
         transition = UUID()
         let visible = screen.visibleFrame
         let width: CGFloat = 334
-        let height = min(383, max(200, visible.height - 16))
+        let desiredHeight: CGFloat = state.sidePanel == .power ? 471 : 383
+        let height = min(desiredHeight, max(200, visible.height - 16))
+        host.setFrameSize(NSSize(width: width, height: desiredHeight))
         let spacing: CGFloat = 9
         let rightSpace = visible.maxX - parent.frame.maxX - 8
         let leftSpace = parent.frame.minX - visible.minX - 8
