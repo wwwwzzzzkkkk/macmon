@@ -85,7 +85,8 @@ enum NetworkSamplingPolicy {
         ssd = ExternalSSDMonitor(defaults: ssdDefaults, start: start)
         network = NetworkMonitor(start: false)
         menuItems = UserDefaults.standard.stringArray(forKey: "menuItems")
-            .map { Set($0.compactMap(MenuContent.init(rawValue:))) } ?? [.logo, .power]
+            .map { Set($0.compactMap(MenuContent.init(rawValue:))).subtracting([.externalDisk]) }
+            ?? [.logo, .power]
         let saved = UserDefaults.standard.integer(forKey: "interval")
         interval = [1000, 2000, 5000, 10000].contains(saved) ? saved : 2000
         menuMetric = PowerMetric(rawValue: UserDefaults.standard.string(forKey: "menuMetric") ?? "") ?? .total
@@ -185,9 +186,7 @@ enum NetworkSamplingPolicy {
             let value = connected ? sample?.cpuTemperature : nil
             items.append(MenuReadout("cpu-temperature", value.map { String(format: "%.0f°C", $0) } ?? "—", "CPU TEMP"))
         }
-        if ssd.enabled, ssd.showInMenu {
-            items.append(MenuReadout("ssd", ssd.menuTemperature.map { String(format: "%.0f°C", $0) } ?? "—", "SSD"))
-        }
+        items.append(contentsOf: ssd.selectedTemperatureReadouts)
         if menuItems.contains(.fans) {
             let rpm = connected ? sample?.fans.map(\.rpm).max() : nil
             items.append(MenuReadout("fans", rpm.map { String(format: "%.0f", $0) } ?? "—", "RPM"))
@@ -201,20 +200,15 @@ enum NetworkSamplingPolicy {
             items.append(MenuReadout("disk", "R " + MenuReadout.rate(rates.read),
                                      "W " + MenuReadout.rate(rates.write), pairedValues: true))
         }
-        if let external = externalDiskReadout { items.append(external) }
+
         return items
     }
 
-    private var needsMenuDisk: Bool { menuItems.contains(.disk) || menuItems.contains(.externalDisk) }
+    private var needsMenuDisk: Bool { menuItems.contains(.disk) }
     private var menuDiskMaximumAge: TimeInterval { max(6, Double(interval) / 1000 * 3) }
 
     private var diskMenuRates: (read: Double?, write: Double?) {
         menuDisk?.menuRates(maximumAge: menuDiskMaximumAge) ?? (nil, nil)
-    }
-
-    private var externalDiskReadout: MenuReadout? {
-        guard menuItems.contains(.externalDisk) else { return nil }
-        return menuDisk?.externalMenuReadout(maximumAge: menuDiskMaximumAge)
     }
 
     var menuText: String {
@@ -244,7 +238,7 @@ enum NetworkSamplingPolicy {
             let rates = diskMenuRates
             parts.append("读\(NetworkRate.text(rates.read)) 写\(NetworkRate.text(rates.write))")
         }
-        if let external = externalDiskReadout { parts.append("外置 \(external.top) \(external.bottom)") }
+
         let temperature = ssd.menuSuffix
         if !temperature.isEmpty { parts.append(String(temperature.dropFirst(3))) }
         return parts.joined(separator: " · ")
