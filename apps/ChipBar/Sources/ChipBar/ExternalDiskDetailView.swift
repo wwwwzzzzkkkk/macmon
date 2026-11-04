@@ -65,10 +65,10 @@ struct ExternalDiskDetailView: View {
                         $0.isFresh() ? $0.composite : nil
                     }.map { String(format: "%.0f", $0) } ?? "—",
                                unit: "°C", symbol: "thermometer.medium", color: amber)
-                    metricTile("读取", value: rates?.readMB.map {
+                    metricTile("读取", value: (rates?.readMB).map {
                         String(format: "%.1f", $0)
                     } ?? "—", unit: "MB/s", symbol: "arrow.down", color: blue)
-                    metricTile("写入", value: rates?.writeMB.map {
+                    metricTile("写入", value: (rates?.writeMB).map {
                         String(format: "%.1f", $0)
                     } ?? "—", unit: "MB/s", symbol: "arrow.up", color: violet)
                 }
