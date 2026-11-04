@@ -7,7 +7,8 @@ import ChipBarCore
 @MainActor struct DashboardOpeningStateTests {
     @Test func normalReopenResetsEveryEphemeralControl() {
         let state = DashboardState()
-        state.sidePanel = .power
+        state.sidePanel = .externalDisk
+        state.selectedExternalVolumeID = "/Volumes/Zark"
         state.chartMetric = .cpu
         state.showSettings = true
         state.showApplications = true
@@ -21,6 +22,7 @@ import ChipBarCore
         state.resetForOpening(arguments: ["ChipBar"])
 
         #expect(state.sidePanel == nil)
+        #expect(state.selectedExternalVolumeID == nil)
         #expect(state.chartMetric == .total)
         #expect(!state.showSettings)
         #expect(!state.showApplications)
@@ -60,18 +62,14 @@ import ChipBarCore
         }
     }
 
-    @Test func sidePanelHeightsMatchDisplayedContentAndPowerMode() {
+    @Test func sidePanelHeightsMatchThreeIndependentPages() {
         #expect(SidePanelLayout.width == 314)
         #expect(SidePanelLayout.contentWidth == SidePanelLayout.width - 2 * SidePanelLayout.padding)
         #expect(SidePanelLayout.height(for: .applications) == SidePanelLayout.applicationHeight)
-        #expect(SidePanelLayout.height(for: .power) ==
-                SidePanelLayout.powerHeight(hasBattery: false, charging: false))
-        #expect(SidePanelLayout.powerHeight(hasBattery: false, charging: false) <
-                SidePanelLayout.applicationHeight)
-        #expect(SidePanelLayout.powerHeight(hasBattery: true, charging: false) >
-                SidePanelLayout.applicationHeight)
-        #expect(SidePanelLayout.powerHeight(hasBattery: true, charging: true) >
-                SidePanelLayout.powerHeight(hasBattery: true, charging: false))
+        #expect(SidePanelLayout.height(for: .power) == SidePanelLayout.powerHeight)
+        #expect(SidePanelLayout.height(for: .externalDisk) == SidePanelLayout.diskHeight)
+        #expect(SidePanelLayout.powerHeight > SidePanelLayout.applicationHeight)
+        #expect(SidePanelLayout.diskHeight > SidePanelLayout.applicationHeight)
     }
 
     @Test func previewFixtureBuildsChartWithoutMenuPanel() throws {

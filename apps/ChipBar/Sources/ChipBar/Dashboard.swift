@@ -139,16 +139,6 @@ struct Dashboard: View {
         VStack(alignment: .leading, spacing: 10) {
             settingsNavigation
             MacHardwareInformationSection(chip: monitor.sample?.chip ?? monitor.hardware)
-            HStack(spacing: 8) {
-                Label("硬件状态", systemImage: "waveform.path.ecg")
-                    .font(.caption.weight(.semibold))
-                Spacer()
-                Circle().fill(monitor.connected ? Color.green : Color.secondary)
-                    .frame(width: 6, height: 6)
-                Text(monitor.connected ? "实时" : "未连接")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 2)
             fanOverview
             settingsPanel
         }
