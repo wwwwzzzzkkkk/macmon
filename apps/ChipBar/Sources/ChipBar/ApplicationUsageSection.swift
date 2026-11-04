@@ -43,20 +43,10 @@ struct ApplicationUsageSection: View {
             .clipped()
             .animation(ChipBarMotion.optional(ChipBarMotion.resourceStack,
                                               reduceMotion: reduceMotion), value: state.applicationMetric)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(state.showApplications ? explanation : shortExplanation)
-                    .lineLimit(state.showApplications ? 2 : 1)
-                    .frame(height: state.showApplications ? 32 : 14, alignment: .topLeading)
-                    .help(explanation)
-                if state.showApplications {
-                    Text(activity.snapshot.map(samplingSummary) ?? "正在读取进程计数…")
-                        .lineLimit(1).frame(height: 15, alignment: .leading)
-                }
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(state.showApplications ? explanation : shortExplanation)
+            // Keep the ranking scannable. Advanced measurement caveats
+            // remain available on hover and to assistive technologies.
+            .help(explanation)
+            .accessibilityHint(explanation)
         }
         .task(id: "\(monitor.paused)-\(monitor.sleeping)-\(monitor.interval)-\(state.applicationMetric == .gpu)") {
             guard !monitor.paused, !monitor.sleeping else { return }
@@ -171,21 +161,6 @@ struct ApplicationUsageSection: View {
         }
     }
 
-    private func samplingSummary(_ snapshot: ActivitySnapshot) -> String {
-        var detail: String
-        switch state.applicationMetric {
-        case .cpu: detail = "CPU 可读取 \(snapshot.readableCPUCount)/\(snapshot.processCount) 个进程"
-        case .gpu: detail = "GPU 读取 \(snapshot.gpuClientCount) 个驱动客户端"
-        case .memory:
-            detail = "内存可读取 \(snapshot.readableMemoryCount)/\(snapshot.processCount) 个进程"
-            if snapshot.approximateMemoryCount > 0 {
-                detail += " · 其中 \(snapshot.approximateMemoryCount) 个为 RSS 近似值"
-            }
-        case .ane: detail = snapshot.neuralSupported ? "ANE 内存计数可用" : "当前未提供 ANE 内存计数"
-        }
-        return "\(detail) · 每 \(max(2, monitor.interval / 1000)) 秒更新"
-    }
-
     private func emptyMessage(_ snapshot: ActivitySnapshot, metric: ApplicationResource) -> String {
         switch metric {
         case .cpu: return snapshot.readableCPUCount > 0 ? "正在建立 CPU 采样基线…" : "当前无法读取进程 CPU 计数器"
@@ -201,16 +176,6 @@ struct ApplicationUsageSection: View {
         case .gpu: return "驱动 GPU 时间 / 采样间隔，可超过100%；不等同于整机 GPU 利用率的分摊。共享服务单独显示。"
         case .memory: return "优先统计进程物理足迹（Physical Footprint）；系统无法提供时使用 RSS 驻留内存近似值（≈），并合并可读取的应用辅助进程。RSS 与活动监视器的内存不完全一致。"
         case .ane: return "此处为 ANE 记账内存，不是计算利用率。系统未提供逐应用 ANE 计算百分比；没有记账不代表未使用 ANE。"
-        }
-    }
-
-    private var shortExplanation: String {
-        switch state.applicationMetric {
-        case .cpu: return "前三名 · 100% = 一个逻辑核心"
-        case .gpu: return "前三名 · GPU 时间占比，可超过100%"
-        case .memory: return (activity.snapshot?.approximateMemoryCount ?? 0) > 0
-            ? "前三名 · ≈ 表示 RSS 近似值" : "前三名 · 内存占用（MB / GB）"
-        case .ane: return "前三名 · ANE 记账内存，非计算利用率"
         }
     }
 

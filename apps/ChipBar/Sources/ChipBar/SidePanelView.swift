@@ -5,79 +5,98 @@ enum DashboardSidePanelKind: String, Equatable {
     case power
 }
 
-/// Lightweight first frame avoids synchronously constructing application/SMC views.
-struct SidePanelLoadingView: View {
-    let kind: DashboardSidePanelKind
-    var body: some View {
-        VStack(alignment: .leading, spacing: 15) {
-            Label(kind == .power ? "电源与功率" : "应用占用",
-                  systemImage: kind == .power ? "bolt.horizontal.circle" : "square.stack.3d.up")
-                .font(.headline)
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.primary.opacity(0.045))
-                .frame(height: kind == .power ? 210 : 180)
-                .overlay {
-                    ProgressView().controlSize(.small).accessibilityLabel("正在准备数据")
-                }
-            Spacer(minLength: 0)
+/// One source of truth for sidebar geometry, including the placeholder's
+/// first frame. The window never reads a stale @Published kind.
+enum SidePanelLayout {
+    static let width: CGFloat = 314
+    static let padding: CGFloat = 12
+    static let contentWidth: CGFloat = width - 2 * padding
+    static let applicationHeight: CGFloat = 250
+
+    static func powerHeight(hasBattery: Bool, charging: Bool) -> CGFloat {
+        guard hasBattery else { return 190 }
+        return charging ? 314 : 284
+    }
+
+    static func height(for kind: DashboardSidePanelKind) -> CGFloat {
+        switch kind {
+        case .applications: return applicationHeight
+        case .power: return powerHeight(hasBattery: false, charging: false)
         }
-        .frame(width: 308, height: kind == .power ? 402 : 296, alignment: .topLeading)
-        .padding(13)
     }
 }
 
-/// Hosted in a separate nonactivating NSPanel; the main dashboard never resizes
-/// when switching the resource ranking or updating the power flow.
+/// Lightweight first frame. The placeholder uses exactly the same top inset
+/// as the mounted content and never reserves a giant invisible bottom region.
+struct SidePanelLoadingView: View {
+    let kind: DashboardSidePanelKind
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(kind == .power ? "电源与功率" : "应用占用",
+                  systemImage: kind == .power ? "bolt.horizontal.circle" : "square.stack.3d.up")
+                .font(.headline)
+                .frame(height: 28)
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.primary.opacity(0.045))
+                .frame(height: kind == .power ? 95 : 165)
+                .overlay {
+                    ProgressView().controlSize(.small)
+                        .accessibilityLabel("正在准备数据")
+                }
+        }
+        .frame(width: SidePanelLayout.contentWidth, alignment: .topLeading)
+        .padding(SidePanelLayout.padding)
+    }
+}
+
+/// The parent dashboard stays stationary. Only this independently hosted
+/// native glass NSPanel changes height as power source information arrives.
 struct DashboardSidePanelView: View {
     @ObservedObject var monitor: Monitor
     @ObservedObject var state: DashboardState
     var close: () -> Void
+    var onPowerLayoutChange: (Bool, Bool) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: state.sidePanel == .power ? "bolt.horizontal.circle" : "square.stack.3d.up")
+                Image(systemName: state.sidePanel == .power
+                      ? "bolt.horizontal.circle" : "square.stack.3d.up")
                     .foregroundStyle(Color(red: 0.22, green: 0.65, blue: 0.79))
                 Text(state.sidePanel == .power ? "电源与功率" : "应用占用")
                     .font(.headline)
-                Spacer()
+                Spacer(minLength: 0)
                 Button(action: close) {
                     Image(systemName: "xmark")
                         .font(.caption.weight(.semibold))
                         .frame(width: 24, height: 24)
                         .contentShape(Rectangle())
                 }
-                .accessibilityLabel("收起侧边卡片")
+                .accessibilityLabel("关闭侧边卡片")
                 .buttonStyle(ChipBarPressStyle())
             }
             .frame(height: 28)
 
-            ZStack(alignment: .topLeading) {
-                if state.sidePanel == .applications {
-                    ApplicationUsageSection(monitor: monitor, state: state, showsDisclosure: false)
-                        .transition(reduceMotion ? .opacity :
-                            .asymmetric(insertion: .offset(x: 12).combined(with: .opacity),
-                                        removal: .offset(x: -10).combined(with: .opacity)))
-                } else if state.sidePanel == .power {
-                    ChipBarPowerFlowView(active: !monitor.paused && !monitor.sleeping)
-                        .transition(reduceMotion ? .opacity :
-                            .asymmetric(insertion: .offset(x: 12).combined(with: .opacity),
-                                        removal: .offset(x: -10).combined(with: .opacity)))
-                }
+            if state.sidePanel == .applications {
+                ApplicationUsageSection(monitor: monitor, state: state, showsDisclosure: false)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(x: 8)))
+            } else if state.sidePanel == .power {
+                ChipBarPowerFlowView(active: !monitor.paused && !monitor.sleeping,
+                                     onLayoutMode: onPowerLayoutChange)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(x: 8)))
             }
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.23), value: state.sidePanel)
         }
-        .frame(width: 308, height: state.sidePanel == .power ? 402 : 296, alignment: .topLeading)
-        .padding(13)
+        .frame(width: SidePanelLayout.contentWidth, alignment: .topLeading)
+        .padding(SidePanelLayout.padding)
         .buttonStyle(ChipBarPressStyle())
     }
 }
 
-/// A restrained flowing-current path. Canvas draws at 18 fps only while the
-/// sidecard is visible, powered and Reduce Motion is off. Data is still polled
-/// by the SMC actor independently, once per second.
+/// The fine energy line animates only while live; the SMC sampler runs at its
+/// own cadence, independent from the decorative Canvas timeline.
 private struct PowerFlowEnergyTrack: View {
     let startY: CGFloat
     let endY: CGFloat
@@ -90,8 +109,8 @@ private struct PowerFlowEnergyTrack: View {
         TimelineView(.animation(minimumInterval: 1.0 / 18.0,
                                 paused: !energized || !active || reduceMotion)) { timeline in
             Canvas { context, size in
-                let from = CGPoint(x: 92, y: startY)
-                let to = CGPoint(x: size.width - 92, y: endY)
+                let from = CGPoint(x: 84, y: startY)
+                let to = CGPoint(x: size.width - 84, y: endY)
                 let midX = (from.x + to.x) / 2
                 let controlA = CGPoint(x: midX, y: from.y)
                 let controlB = CGPoint(x: midX, y: to.y)
@@ -132,13 +151,13 @@ private struct PowerFlowNode: View {
     var tint = Color(red: 0.22, green: 0.65, blue: 0.79)
 
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 4) {
             Image(systemName: symbol)
-                .font(.system(size: 17, weight: .medium))
+                .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(tint)
-                .frame(height: 19)
+                .frame(height: 18)
             Text(watts.map { String(format: "%.1f W", $0) } ?? "—")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
             Text(title)
@@ -146,10 +165,10 @@ private struct PowerFlowNode: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .frame(width: 91, height: 72)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
+        .frame(width: 84, height: 66)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
         .overlay {
-            RoundedRectangle(cornerRadius: 13)
+            RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(tint.opacity(0.14), lineWidth: 0.75)
         }
         .accessibilityElement(children: .combine)
@@ -158,6 +177,7 @@ private struct PowerFlowNode: View {
 
 struct ChipBarPowerFlowView: View {
     var active: Bool
+    var onLayoutMode: (Bool, Bool) -> Void
     @StateObject private var model = ChipBarPowerFlowModel()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let cyan = Color(red: 0.22, green: 0.65, blue: 0.79)
@@ -165,122 +185,131 @@ struct ChipBarPowerFlowView: View {
 
     private var power: ChipBarPowerReading { model.reading }
     private var charging: Bool {
-        power.hasBattery && power.onAdapter &&
-        (power.batteryWatts ?? 0) > 0.5
+        power.hasBattery && power.onAdapter && (power.batteryWatts ?? 0) > 0.5
     }
     private var discharging: Bool { power.hasBattery && !power.onAdapter }
     private var hasSystemPower: Bool { power.live && (power.systemWatts ?? 0) > 0 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(power.hasBattery
                          ? (power.onAdapter ? "适配器供电" : "电池供电")
-                         : "内部电源轨")
+                         : "电源状态")
                         .font(.subheadline.weight(.semibold))
-                    Text(power.live ? "传感器在线 · 每秒采样" : "等待 SMC 传感器")
+                    Text(power.live ? "实时" : "读取中")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 3)
+                Spacer(minLength: 0)
                 if let percent = power.batteryPercent {
                     Text(String(format: "%.0f%%", percent))
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 } else {
-                    Image(systemName: "bolt.circle")
+                    Image(systemName: power.hasBattery ? "battery.75percent" : "bolt.circle")
                         .font(.title3)
                         .foregroundStyle(cyan)
                 }
             }
-            if let percent = power.batteryPercent {
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.primary.opacity(0.08))
-                        Capsule().fill(green.opacity(0.80))
-                            .frame(width: geometry.size.width *
-                                   CGFloat(min(100, max(0, percent)) / 100))
-                    }
+            .frame(height: 34)
+
+            if !power.hasBattery {
+                // Desktop Macs report a single internal rail. Do not invent
+                // an external AC source or waste space on a fake flow diagram.
+                VStack(spacing: 6) {
+                    Text(power.systemWatts.map { String(format: "%.1f W", $0) } ?? "— W")
+                        .font(.system(size: 27, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(power.live ? Color.primary : Color.secondary)
+                    Text("系统内部功率")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .frame(height: 5)
-                .accessibilityLabel("电池电量 \(Int(percent.rounded()))%")
-            }
-
-            HStack(spacing: 8) {
-                Text("能量流向")
-                    .font(.caption.weight(.semibold))
-                Spacer()
-                Circle().fill(power.live ? green : Color.secondary)
-                    .frame(width: 5, height: 5)
-                Text(power.live ? "实时" : "暂无数据")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            GeometryReader { geo in
-                ZStack {
-                    if charging {
-                        PowerFlowEnergyTrack(startY: 98, endY: 48,
-                                             tint: cyan, energized: hasSystemPower,
-                                             active: active, reduceMotion: reduceMotion)
-                        PowerFlowEnergyTrack(startY: 98, endY: 148,
-                                             tint: green,
-                                             energized: power.live && (power.batteryWatts ?? 0) > 0,
-                                             active: active, reduceMotion: reduceMotion)
-                    } else {
-                        PowerFlowEnergyTrack(startY: 98, endY: 98,
-                                             tint: cyan, energized: hasSystemPower,
-                                             active: active, reduceMotion: reduceMotion)
-                    }
-                    if discharging {
-                        PowerFlowNode(title: "电池输出", watts: power.batteryWatts.map(abs),
-                                      symbol: "battery.75percent", tint: green)
-                            .position(x: 47, y: 98)
-                        PowerFlowNode(title: "系统负载", watts: power.systemWatts,
-                                      symbol: "laptopcomputer")
-                            .position(x: geo.size.width - 47, y: 98)
-                    } else if power.hasBattery {
-                        PowerFlowNode(title: "适配器输入", watts: power.adapterWatts,
-                                      symbol: "powerplug")
-                            .position(x: 47, y: 98)
-                        PowerFlowNode(title: "系统负载", watts: power.systemWatts,
-                                      symbol: "laptopcomputer")
-                            .position(x: geo.size.width - 47, y: charging ? 48 : 98)
-                        if charging {
-                            PowerFlowNode(title: "电池充电", watts: power.batteryWatts,
-                                          symbol: "battery.75percent", tint: green)
-                                .position(x: geo.size.width - 47, y: 148)
+                .frame(maxWidth: .infinity)
+                .frame(height: 86)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+            } else {
+                if let percent = power.batteryPercent {
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.primary.opacity(0.08))
+                            Capsule().fill(green.opacity(0.80))
+                                .frame(width: geometry.size.width *
+                                       CGFloat(min(100, max(0, percent)) / 100))
                         }
-                    } else {
-                        PowerFlowNode(title: "外部供电", watts: nil,
-                                      symbol: "powerplug")
-                            .position(x: 47, y: 98)
-                        PowerFlowNode(title: "内部功率", watts: power.systemWatts,
-                                      symbol: "desktopcomputer")
-                            .position(x: geo.size.width - 47, y: 98)
+                    }
+                    .frame(height: 6)
+                    .accessibilityLabel("电池电量 \(Int(percent.rounded()))%")
+                }
+                HStack(spacing: 8) {
+                    Text("能量流向").font(.caption.weight(.semibold))
+                    Spacer()
+                    Circle().fill(power.live ? green : Color.secondary)
+                        .frame(width: 5, height: 5)
+                    Text(power.live ? "实时" : "未连接")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                .frame(height: 16)
+
+                GeometryReader { geo in
+                    ZStack {
+                        if charging {
+                            PowerFlowEnergyTrack(startY: 85, endY: 42,
+                                                 tint: cyan, energized: hasSystemPower,
+                                                 active: active, reduceMotion: reduceMotion)
+                            PowerFlowEnergyTrack(startY: 85, endY: 130,
+                                                 tint: green, energized: power.live &&
+                                                     (power.batteryWatts ?? 0) > 0,
+                                                 active: active, reduceMotion: reduceMotion)
+                        } else {
+                            PowerFlowEnergyTrack(startY: 71, endY: 71,
+                                                 tint: cyan, energized: hasSystemPower,
+                                                 active: active, reduceMotion: reduceMotion)
+                        }
+                        if discharging {
+                            PowerFlowNode(title: "电池输出",
+                                          watts: power.batteryWatts.map(abs),
+                                          symbol: "battery.75percent", tint: green)
+                                .position(x: 42, y: 71)
+                            PowerFlowNode(title: "系统负载", watts: power.systemWatts,
+                                          symbol: "laptopcomputer")
+                                .position(x: geo.size.width - 42, y: 71)
+                        } else {
+                            PowerFlowNode(title: "适配器输入", watts: power.adapterWatts,
+                                          symbol: "powerplug")
+                                .position(x: 42, y: charging ? 85 : 71)
+                            PowerFlowNode(title: "系统负载", watts: power.systemWatts,
+                                          symbol: "laptopcomputer")
+                                .position(x: geo.size.width - 42,
+                                          y: charging ? 42 : 71)
+                            if charging {
+                                PowerFlowNode(title: "电池充电", watts: power.batteryWatts,
+                                              symbol: "battery.75percent", tint: green)
+                                    .position(x: geo.size.width - 42, y: 130)
+                            }
+                        }
                     }
                 }
+                .frame(height: charging ? 172 : 142)
+                .background(Color.primary.opacity(0.035),
+                            in: RoundedRectangle(cornerRadius: 14))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(Color.primary.opacity(0.055), lineWidth: 0.7)
+                }
             }
-            .frame(height: 196)
-            .background(Color.primary.opacity(0.035),
-                        in: RoundedRectangle(cornerRadius: 16))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(Color.primary.opacity(0.055), lineWidth: 0.7)
-            }
-
-            Text(power.sourceLabel)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(power.hasBattery
-                 ? "系统功率为适配器与电池读数的差值估算；非插座功耗。"
-                 : "SMC 为内部 DC 功率读数，并非墙插 AC 功耗。")
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
         }
+        // Hide implementation details from the compact UI. They are still
+        // discoverable and remain available to VoiceOver.
+        .help(power.sourceLabel + " · " + (power.hasBattery
+              ? "系统侧功率为估算值，不代表插座 AC 功耗。"
+              : "仅内部 DC 读数，非插座 AC 功耗。"))
+        .accessibilityHint(power.sourceLabel)
+        .onAppear { onLayoutMode(power.hasBattery, charging) }
+        .onChange(of: power.hasBattery) { _ in onLayoutMode(power.hasBattery, charging) }
+        .onChange(of: charging) { _ in onLayoutMode(power.hasBattery, charging) }
         .task(id: active) {
             guard active else { return }
             await model.watch()

@@ -3,7 +3,7 @@ import QuartzCore
 import ChipBarCore
 
 enum DashboardLayout {
-    static let width: CGFloat = 394
+    static let width: CGFloat = 378
 }
 
 enum DashboardMotion {
@@ -287,7 +287,7 @@ struct Dashboard: View {
     }
 
     @ViewBuilder private var powerCards: some View {
-        HStack(alignment: .top, spacing: 6) {
+        HStack(alignment: .top, spacing: 3) {
             DashboardRunway(
                 title: "CPU", percentage: monitor.connected ? monitor.sample?.cpuUtilization : nil,
                 color: accent,
@@ -305,8 +305,8 @@ struct Dashboard: View {
                 detail: "统一内存",
                 pressureStatus: monitor.memoryPressure.title)
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 5)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
     }
 
@@ -512,11 +512,6 @@ struct Dashboard: View {
             .padding(12)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
 
-            Text("功率数据来自芯片传感器，不代表墙插功耗。macmon 与 smartctl 可自动发现。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 3)
             if !monitor.connected {
                 Text("macmon 未连接，请检查安装后重试。")
                     .font(.caption2).foregroundStyle(.secondary)
