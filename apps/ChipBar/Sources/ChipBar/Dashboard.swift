@@ -53,7 +53,10 @@ final class DashboardState: ObservableObject {
         applicationMetric = arguments.contains("--apps-gpu") ? .gpu :
             arguments.contains("--apps-ane") ? .ane : .cpu
     }
-    func toggleApplications() { showApplications.toggle() }
+    func toggleApplications() {
+        showApplications.toggle()
+        applicationsExpansion = showApplications ? 1 : 0
+    }
     func toggleSettings() { showSettings.toggle() }
 }
 

@@ -31,6 +31,16 @@ import ChipBarCore
         #expect(state.applicationMetric == .cpu)
     }
 
+    @Test func sidecardApplicationDisclosureUpdatesBothLayoutAndState() {
+        let state = DashboardState()
+        state.toggleApplications()
+        #expect(state.showApplications)
+        #expect(state.applicationsExpansion == 1)
+        state.toggleApplications()
+        #expect(!state.showApplications)
+        #expect(state.applicationsExpansion == 0)
+    }
+
     @Test func previewFixtureBuildsChartWithoutMenuPanel() throws {
         let fixture = try Sample.decode(Data("{\"all_power\":12.5}".utf8))
         let monitor = Monitor(start: false, initialSample: fixture)

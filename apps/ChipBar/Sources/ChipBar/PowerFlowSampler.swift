@@ -5,7 +5,7 @@ import IOKit.ps
 
 /// Only the values observed in read-only SMC and IOPowerSources are shown.
 /// An internal SMC DC rail is not a wall-socket AC power meter.
-struct ChipBarPowerReading: Equatable {
+struct ChipBarPowerReading: Equatable, Sendable {
     var hasBattery: Bool
     var onAdapter: Bool
     var isCharging: Bool
