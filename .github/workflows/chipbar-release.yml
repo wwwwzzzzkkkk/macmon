@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing version tag to publish or repair (e.g. chipbar-v1.1.4)
-        required: true
+        description: Optional existing version tag to repair; leave blank to build and publish VERSION
+        required: false
         type: string
 permissions:
   contents: write
@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Validate manual tag input
         working-directory: .
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
         env:
           TAG: ${{ inputs.tag }}
         run: |
@@ -82,7 +82,7 @@ jobs:
           EVENT_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$INPUT_TAG" ]]; then
             TAG="$INPUT_TAG"
             PUBLISH=true
           else
