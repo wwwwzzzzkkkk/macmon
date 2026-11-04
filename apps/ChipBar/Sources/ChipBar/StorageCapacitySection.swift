@@ -88,6 +88,7 @@ struct ExternalVolumeCapacity: Identifiable {
 /// The capacity overview belongs on Home, not behind System Details or an
 /// SSD disclosure. Temperatures, fan telemetry and SMART stay on that page.
 struct StorageCapacitySection: View {
+    @ObservedObject var state: DashboardState
     @StateObject private var internalStorage = InternalStorageModel.shared
     @StateObject private var externalStorage = ExternalStorageCapacityModel.shared
 
@@ -155,14 +156,22 @@ struct StorageCapacitySection: View {
                 // Shared APFS volumes on one physical drive show the same
                 // whole-drive rate rather than claiming per-volume counters.
                 let rates = externalRates(for: item.diskID)
-                StorageVolumeCard(
-                    title: item.volume.name.isEmpty ? "外接储存" : item.volume.name,
-                    symbol: "externaldrive",
-                    total: item.volume.total,
-                    available: item.volume.available,
-                    placeholder: "不可用",
-                    readMB: rates.read,
-                    writeMB: rates.write)
+                Button {
+                    state.selectedExternalVolumeID = item.id
+                    state.sidePanel = .externalDisk
+                } label: {
+                    StorageVolumeCard(
+                        title: item.volume.name.isEmpty ? "外接储存" : item.volume.name,
+                        symbol: "externaldrive",
+                        total: item.volume.total,
+                        available: item.volume.available,
+                        placeholder: "不可用",
+                        readMB: rates.read,
+                        writeMB: rates.write,
+                        showsChevron: true)
+                }
+                .buttonStyle(ChipBarPressStyle())
+                .accessibilityHint("查看外置磁盘详情")
             }
         }
     }
@@ -210,6 +219,7 @@ private struct StorageVolumeCard: View {
     let placeholder: String
     var readMB: Double? = nil
     var writeMB: Double? = nil
+    var showsChevron = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -243,6 +253,15 @@ private struct StorageVolumeCard: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 0)
+            if showsChevron {
+                Text("已用 \(usagePercentageLabel)")
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(accent)
+            }
         }
     }
 
@@ -303,11 +322,13 @@ private struct StorageVolumeCard: View {
     private var usageLine: some View {
         HStack(spacing: 7) {
             capacityRunway
-            Text(usagePercentageLabel)
-                .font(.system(size: 10, weight: .medium, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .frame(width: 32, alignment: .trailing)
+            if !showsChevron {
+                Text(usagePercentageLabel)
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, alignment: .trailing)
+            }
         }
     }
 

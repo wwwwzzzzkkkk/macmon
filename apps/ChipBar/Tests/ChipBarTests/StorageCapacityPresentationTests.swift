@@ -29,6 +29,23 @@ import ChipBarCore
         #expect(rows.first?.volume.total == 1_000_000_000_000)
     }
 
+    @Test func multipleVolumesRemainSeparatelyAddressableByMountPoint() throws {
+        let a = try #require(DiskVolumeSpace(id: "/Volumes/Zark",
+                    name: "Zark", total: 2_050_000_000_000,
+                    available: 1_390_000_000_000, apfs: false))
+        let b = try #require(DiskVolumeSpace(id: "/Volumes/Other",
+                    name: "Other", total: 1_000_000_000_000,
+                    available: 650_000_000_000, apfs: false))
+        let snapshot = DiskActivitySnapshot(
+            volumes: ["disk4": [a], "disk5": [b]],
+            connected: ["disk4", "disk5"],
+            external: ["disk4", "disk5"])
+        let rows = ExternalStorageCapacityModel.displayRows(from: snapshot)
+        #expect(rows.count == 2)
+        #expect(rows.first(where: { $0.id == "/Volumes/Zark" })?.diskID == "disk4")
+        #expect(rows.first(where: { $0.id == "/Volumes/Other" })?.diskID == "disk5")
+    }
+
     @Test func preservesIndependentMountedExternalVolumes() throws {
         let first = try #require(DiskVolumeSpace(id: "/Volumes/Backup", name: "Backup",
                                                 total: 300_000_000_000,

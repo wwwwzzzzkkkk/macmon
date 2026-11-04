@@ -15,6 +15,7 @@ struct ChipBarPowerReading: Equatable, Sendable {
     var systemWatts: Double?
     var sourceLabel: String
     var live: Bool
+    var sourceKey: String? = nil
 
     static let unavailable = ChipBarPowerReading(
         hasBattery: false, onAdapter: true, isCharging: false,
@@ -59,7 +60,7 @@ actor ChipBarPowerSampler {
                 adapterWatts: adapter, batteryWatts: batteryWatts,
                 systemWatts: systemWatts,
                 sourceLabel: available ? "SMC 实时采样 · 系统侧为功率差估算" : "传感器暂不可用",
-                live: available
+                live: available, sourceKey: input == nil ? nil : "PDTR"
             )
         }
 
@@ -81,7 +82,7 @@ actor ChipBarPowerSampler {
             batteryPercent: nil, adapterWatts: nil, batteryWatts: nil,
             systemWatts: power,
             sourceLabel: power == nil ? "未检测到内部系统功率传感器" : "SMC \(source) · 内部 DC 功率，非插座 AC 输入",
-            live: power != nil
+            live: power != nil, sourceKey: power == nil ? nil : source
         )
     }
 

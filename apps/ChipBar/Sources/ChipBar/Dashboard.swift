@@ -19,6 +19,7 @@ enum DashboardMotion {
 
 final class DashboardState: ObservableObject {
     @Published var sidePanel: DashboardSidePanelKind? = nil
+    @Published var selectedExternalVolumeID: String? = nil
     @Published var chartMetric: PowerMetric = .total
     @Published var showSettings = false
     @Published var showApplications = CommandLine.arguments.contains("--apps")
@@ -43,6 +44,7 @@ final class DashboardState: ObservableObject {
             || arguments.contains("--ssd-disclosure-only")
         chartMetric = .total
         sidePanel = nil
+        selectedExternalVolumeID = nil
         showSettings = false
         showApplications = apps
         applicationsExpansion = apps ? 1 : 0
@@ -119,7 +121,7 @@ struct Dashboard: View {
             CPUCoreUsageSection(samplingInterval: monitor.interval,
                                 active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
             DashboardANEStrip(power: monitor.sample?.ane, connected: monitor.connected)
-            StorageCapacitySection()
+            StorageCapacitySection(state: state)
             HStack(spacing: 8) {
                 sidePanelEntry("电源与功率", icon: "bolt.horizontal.circle", kind: .power)
                 sidePanelEntry("应用占用", icon: "square.stack.3d.up", kind: .applications)
@@ -137,20 +139,7 @@ struct Dashboard: View {
         VStack(alignment: .leading, spacing: 10) {
             settingsNavigation
             MacHardwareInformationSection(chip: monitor.sample?.chip ?? monitor.hardware)
-            HStack(spacing: 8) {
-                Label("硬件状态", systemImage: "waveform.path.ecg")
-                    .font(.caption.weight(.semibold))
-                Spacer()
-                Circle().fill(monitor.connected ? Color.green : Color.secondary)
-                    .frame(width: 6, height: 6)
-                Text(monitor.connected ? "实时" : "未连接")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 2)
             fanOverview
-            if monitor.ssd.enabled {
-                SSDSection(ssd: monitor.ssd, state: state)
-            }
             settingsPanel
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -406,78 +395,30 @@ struct Dashboard: View {
                     Label("菜单栏显示", systemImage: "menubar.rectangle")
                         .font(.subheadline.weight(.semibold))
                     Spacer()
-                    Text("\(monitor.menuItems.count) / \(MenuContent.allCases.count) 已显示")
+                    Text("\(monitor.menuItems.count) / 8 已显示")
                         .font(.caption2)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
-                // Compact selection tiles: one coherent active state rather
-                // than a separate miniature switch and bright border per row.
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 6),
-                                    GridItem(.flexible(), spacing: 6),
-                                    GridItem(.flexible(), spacing: 6)], spacing: 6) {
-                    ForEach(MenuContent.allCases) { item in
-                        let enabled = monitor.menuItems.contains(item)
-                        Button {
-                            withAnimation(ChipBarMotion.optional(ChipBarMotion.selection,
-                                                                 reduceMotion: reduceMotion)) {
-                                if enabled { monitor.menuItems.remove(item) }
-                                else { monitor.menuItems.insert(item) }
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: menuIcon(item))
-                                    .font(.system(size: 11))
-                                    .frame(width: 13)
-                                    .foregroundStyle(enabled ? accent : Color.secondary)
-                                Text(menuTitle(item))
-                                    .font(.system(size: 10, weight: .medium))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.7)
-                                Spacer(minLength: 0)
-                                if enabled {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 9, weight: .semibold))
-                                        .foregroundStyle(accent)
-                                }
-                            }
-                            .foregroundStyle(enabled ? Color.primary : Color.secondary)
-                            .padding(.horizontal, 8)
-                            .frame(height: 34)
-                            .background(enabled ? accent.opacity(0.13) :
-                                            Color.primary.opacity(0.035),
-                                        in: RoundedRectangle(cornerRadius: 9))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 9)
-                                    .strokeBorder(enabled ? accent.opacity(0.30) :
-                                                      Color.primary.opacity(0.05),
-                                                  lineWidth: 0.75)
-                            }
-                            .contentShape(RoundedRectangle(cornerRadius: 9))
-                        }
-                        .buttonStyle(ChipBarPressStyle())
-                        .accessibilityLabel(item.title)
-                        .accessibilityValue(enabled ? "已显示" : "未显示")
-                        .accessibilityHint("点击切换菜单栏内容")
+                Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+                    GridRow {
+                        menuChoice(.logo)
+                        menuChoice(.power)
+                        menuChoice(.utilization)
+                    }
+                    GridRow {
+                        menuChoice(.memory)
+                        menuChoice(.cpuTemperature)
+                        menuChoice(.fans)
+                    }
+                    GridRow {
+                        menuChoice(.network)
+                        menuChoice(.disk).gridCellColumns(2)
                     }
                 }
                 if monitor.menuItems.contains(.power) {
                     ChipBarPowerSelection(selection: $monitor.menuMetric)
                 }
-                if monitor.ssd.enabled {
-                    Toggle("菜单栏显示 SSD 温度", isOn: Binding(
-                        get: { monitor.ssd.showInMenu },
-                        set: { monitor.ssd.showInMenu = $0 }))
-                        .toggleStyle(ChipBarGlassToggleStyle())
-                }
-            }
-            .padding(12)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
-
-            VStack(alignment: .leading, spacing: 8) {
-                Label("储存监控", systemImage: "externaldrive")
-                    .font(.subheadline.weight(.semibold))
-                SSDSettings(ssd: monitor.ssd)
             }
             .padding(12)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
@@ -517,6 +458,49 @@ struct Dashboard: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func menuChoice(_ item: MenuContent) -> some View {
+        let enabled = monitor.menuItems.contains(item)
+        return Button {
+            withAnimation(ChipBarMotion.optional(ChipBarMotion.selection,
+                                                 reduceMotion: reduceMotion)) {
+                if enabled { monitor.menuItems.remove(item) }
+                else { monitor.menuItems.insert(item) }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: menuIcon(item))
+                    .font(.system(size: 11))
+                    .frame(width: 13)
+                    .foregroundStyle(enabled ? accent : Color.secondary)
+                Text(menuTitle(item))
+                    .font(.system(size: 10, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Spacer(minLength: 0)
+                if enabled {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(accent)
+                }
+            }
+            .foregroundStyle(enabled ? Color.primary : Color.secondary)
+            .padding(.horizontal, 8)
+            .frame(height: 34)
+            .frame(maxWidth: .infinity)
+            .background(enabled ? accent.opacity(0.13) : Color.primary.opacity(0.035),
+                        in: RoundedRectangle(cornerRadius: 9))
+            .overlay {
+                RoundedRectangle(cornerRadius: 9)
+                    .strokeBorder(enabled ? accent.opacity(0.30) : Color.primary.opacity(0.05),
+                                  lineWidth: 0.75)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 9))
+        }
+        .buttonStyle(ChipBarPressStyle())
+        .accessibilityLabel(item.title)
+        .accessibilityValue(enabled ? "已显示" : "未显示")
     }
 
     private func menuTitle(_ item: MenuContent) -> String {

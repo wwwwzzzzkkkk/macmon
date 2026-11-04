@@ -70,6 +70,28 @@ import ChipBarCore
         #expect(monitor.readings.isEmpty)
     }
 
+    @Test func selectingOneDriveDoesNotSelectUnrelatedDiskTemperature() async throws {
+        let data = try SSDTemperature.decode(Data(#"{"model_name":"Sample NVMe","nvme_smart_health_information_log":{"temperature":50}}"#.utf8))
+        let output = SSDProbeResult(readings: [
+            SSDReading(id: "disk4", name: "Zark", temperature: data),
+            SSDReading(id: "disk5", name: "Other", temperature: data)
+        ], status: "test")
+        let preferences = defaults()
+        preferences.set(false, forKey: "ssdMenu")
+        let monitor = ExternalSSDMonitor(defaults: preferences, probe: { _, _, _, _ in output })
+        defer { monitor.shutdown() }
+        try await awaitRead(monitor)
+        monitor.setTemperatureInMenu(true, for: "disk4")
+        #expect(monitor.showsTemperatureInMenu(for: "disk4"))
+        #expect(!monitor.showsTemperatureInMenu(for: "disk5"))
+        #expect(monitor.selectedTemperatureReadouts.count == 1)
+        #expect(monitor.selectedTemperatureReadouts.first?.id == "ssd-disk4")
+        #expect(preferences.stringArray(forKey: "ssdMenuDriveIDs") == ["disk4"])
+        monitor.setTemperatureInMenu(false, for: "disk4")
+        #expect(monitor.selectedTemperatureReadouts.isEmpty)
+        #expect(!monitor.showsTemperatureInMenu(for: "disk4"))
+    }
+
     @Test func customExecutableCannotUseSudoEvenIfSavedPreferenceIsTrue() async throws {
         let saved = defaults()
         saved.set(true, forKey: "ssdSudo")
