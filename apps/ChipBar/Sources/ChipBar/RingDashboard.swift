@@ -32,23 +32,23 @@ struct DashboardRunway: View {
 
                 VStack(spacing: 2) {
                     Text(title)
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                     if percentage?.isFinite == true {
                         RunwayPercentage(value: fraction * 100)
-                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                            .font(.system(size: 17, weight: .semibold, design: .rounded))
                             .monospacedDigit()
                             .animation(reduceMotion ? nil :
                                 .spring(response: 0.55, dampingFraction: 1.0), value: fraction)
                     } else {
                         Text("—")
-                            .font(.system(size: 18, weight: .medium, design: .rounded))
+                            .font(.system(size: 17, weight: .medium, design: .rounded))
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-            .frame(width: 74, height: 74)
-            .padding(.bottom, 10)
+            .frame(width: 69, height: 69)
+            .padding(.bottom, 8)
             .accessibilityHidden(true)
 
             Text(subtitle)

@@ -24,6 +24,9 @@ import QuartzCore
     private var mountTask: Task<Void, Never>?
 
     var isKeyWindow: Bool { panel.isKeyWindow }
+    var isVisible: Bool { panel.isVisible }
+    private var openedKind: DashboardSidePanelKind?
+    private weak var parentWindow: NSWindow?
     func owns(_ other: NSWindow?) -> Bool { other === panel }
 
     init(monitor: Monitor, state: DashboardState, delegate: NSWindowDelegate,
@@ -41,7 +44,8 @@ import QuartzCore
         scrollView.contentView.drawsBackground = false
         scrollView.contentView.focusRingType = .none
         scrollView.documentView = host
-        host.setFrameSize(NSSize(width: 334, height: 322))
+        host.setFrameSize(NSSize(width: SidePanelLayout.width,
+                                 height: SidePanelLayout.applicationHeight))
         let material = PanelMaterialView(contentView: scrollView)
         panel.contentView = material
         panel.isOpaque = false
@@ -59,15 +63,16 @@ import QuartzCore
         // The hosted view is mounted on demand to avoid reading processes or SMC on startup.
     }
 
-    func show(beside parent: NSWindow) {
-        guard state.sidePanel != nil,
-              let screen = parent.screen ?? NSScreen.main else { return }
+    func show(_ kind: DashboardSidePanelKind, beside parent: NSWindow) {
+        guard let screen = parent.screen ?? NSScreen.main else { return }
         transition = UUID()
         mountTask?.cancel()
         let token = transition
+        openedKind = kind
+        parentWindow = parent
         let visible = screen.visibleFrame
-        let width: CGFloat = 334
-        let desiredHeight: CGFloat = state.sidePanel == .power ? 428 : 322
+        let width = SidePanelLayout.width
+        let desiredHeight = SidePanelLayout.height(for: kind)
         let height = min(desiredHeight, max(200, visible.height - 16))
         host.setFrameSize(NSSize(width: width, height: desiredHeight))
         let spacing: CGFloat = 9
@@ -86,7 +91,7 @@ import QuartzCore
 
         // Present a lightweight shell first: creating the full ranking or
         // SMC SwiftUI tree synchronously delays the native window first frame.
-        host.rootView = AnyView(SidePanelLoadingView(kind: state.sidePanel ?? .power))
+        host.rootView = AnyView(SidePanelLoadingView(kind: kind))
         if !panel.isVisible {
             let offset: CGFloat = openRight ? -14 : 14
             panel.setFrame(target.offsetBy(dx: offset, dy: 0), display: false)
@@ -98,9 +103,13 @@ import QuartzCore
         mountTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .milliseconds(90)) }
             catch { return }
-            guard let self, self.transition == token, self.panel.isVisible else { return }
+            guard let self, self.transition == token, self.panel.isVisible,
+                  self.openedKind == kind else { return }
             self.host.rootView = AnyView(DashboardSidePanelView(
-                monitor: self.monitor, state: self.state, close: self.onClose
+                monitor: self.monitor, state: self.state, close: self.onClose,
+                onPowerLayoutChange: { [weak self] hasBattery, charging in
+                    self?.resizePowerPanel(hasBattery: hasBattery, charging: charging)
+                }
             ))
             self.mountTask = nil
         }
@@ -120,8 +129,26 @@ import QuartzCore
         }
     }
 
+    private func resizePowerPanel(hasBattery: Bool, charging: Bool) {
+        guard openedKind == .power, panel.isVisible,
+              let parent = parentWindow, let screen = panel.screen ?? parent.screen else { return }
+        let wanted = SidePanelLayout.powerHeight(hasBattery: hasBattery, charging: charging)
+        let height = min(wanted, max(150, screen.visibleFrame.height - 16))
+        guard abs(panel.frame.height - height) > 0.5 else { return }
+        let top = min(screen.visibleFrame.maxY - 8, parent.frame.maxY)
+        let target = NSRect(x: panel.frame.minX, y: max(screen.visibleFrame.minY + 8, top - height),
+                            width: SidePanelLayout.width, height: height)
+        host.setFrameSize(NSSize(width: SidePanelLayout.width, height: wanted))
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.18
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().setFrame(target, display: true)
+        }
+    }
+
     func hide(animated: Bool = true) {
         transition = UUID()
+        openedKind = nil
         mountTask?.cancel()
         mountTask = nil
         let token = transition

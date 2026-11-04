@@ -43,20 +43,10 @@ struct ApplicationUsageSection: View {
             .clipped()
             .animation(ChipBarMotion.optional(ChipBarMotion.resourceStack,
                                               reduceMotion: reduceMotion), value: state.applicationMetric)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(state.showApplications ? explanation : shortExplanation)
-                    .lineLimit(state.showApplications ? 2 : 1)
-                    .frame(height: state.showApplications ? 32 : 14, alignment: .topLeading)
-                    .help(explanation)
-                if state.showApplications {
-                    Text(activity.snapshot.map(samplingSummary) ?? "正在读取进程计数…")
-                        .lineLimit(1).frame(height: 15, alignment: .leading)
-                }
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(state.showApplications ? explanation : shortExplanation)
+            // Keep the ranking scannable. Advanced measurement caveats
+            // remain available on hover and to assistive technologies.
+            .help(explanation)
+            .accessibilityHint(explanation)
         }
         .task(id: "\(monitor.paused)-\(monitor.sleeping)-\(monitor.interval)-\(state.applicationMetric == .gpu)") {
             guard !monitor.paused, !monitor.sleeping else { return }

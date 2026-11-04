@@ -218,9 +218,12 @@ import ChipBarCore
                     self.sidePanelController?.hide(animated: false)
                     return
                 }
-                if side != nil {
+                if let side {
+                    // @Published emits the NEW value before its storage changes.
+                    // Pass the selection directly instead of reading stale
+                    // DashboardState inside the side-window controller.
                     self.autoDismissal?.cancel()
-                    self.sidePanelController?.show(beside: self.panel)
+                    self.sidePanelController?.show(side, beside: self.panel)
                 } else {
                     self.sidePanelController?.hide()
                     if !self.panel.isKeyWindow { self.panel.makeKeyAndOrderFront(nil) }
@@ -686,6 +689,11 @@ import ChipBarCore
 
     func windowDidResignKey(_ notification: Notification) {
         recordMouseQA("panelResignedKey")
+        // Moving keyboard focus from Home to its sidecard is internal
+        // navigation, not an outside click. Ignore it until the next event.
+        if let window = notification.object as? NSWindow,
+           window === panel,
+           sidePanelController?.isVisible == true { return }
         dismissForFocusLoss()
     }
 
