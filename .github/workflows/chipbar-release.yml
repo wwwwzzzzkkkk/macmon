@@ -24,9 +24,9 @@ defaults:
     working-directory: apps/ChipBar
 jobs:
   release:
-    # Stable arm64 runner fallback after macos-26 jobs were cancelled before startup.
-    # Select Xcode 26 explicitly (the default Xcode on macOS 15 is 16.x).
-    runs-on: macos-15
+    # ARM macOS runner capacity can cancel jobs before checkout. Cross-build
+    # the distributed arm64 app on the Intel image using Xcode 26.3.
+    runs-on: macos-15-intel
     timeout-minutes: 35
     env:
       GH_TOKEN: ${{ github.token }}
@@ -56,7 +56,13 @@ jobs:
         run: ./scripts/test.sh
       - name: Build arm64 app
         run: ./scripts/build.sh
+      - name: Verify distributed architecture
+        run: lipo -archs dist/ChipBar.app/Contents/MacOS/ChipBar | grep -qw arm64
+      - name: Build host-native integration test binary
+        run: swift build --build-system native -c release --arch x86_64
       - name: Subprocess fault checks
+        env:
+          CHIPBAR_DIAGNOSE_BINARY: .build/x86_64-apple-macosx/release/ChipBar
         run: python3 scripts/integration.py
       - name: Package and verify signature
         run: python3 scripts/version.py package

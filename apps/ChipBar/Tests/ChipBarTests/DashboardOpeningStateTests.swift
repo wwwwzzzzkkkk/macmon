@@ -6,6 +6,7 @@ import ChipBarCore
 @MainActor struct DashboardOpeningStateTests {
     @Test func normalReopenResetsEveryEphemeralControl() {
         let state = DashboardState()
+        state.sidePanel = .power
         state.chartMetric = .cpu
         state.showSettings = true
         state.showApplications = true
@@ -18,6 +19,7 @@ import ChipBarCore
 
         state.resetForOpening(arguments: ["ChipBar"])
 
+        #expect(state.sidePanel == nil)
         #expect(state.chartMetric == .total)
         #expect(!state.showSettings)
         #expect(!state.showApplications)
@@ -27,6 +29,16 @@ import ChipBarCore
         #expect(!state.showSystemDetails)
         #expect(state.ssdDetailsHeight == 0)
         #expect(state.applicationMetric == .cpu)
+    }
+
+    @Test func sidecardApplicationDisclosureUpdatesBothLayoutAndState() {
+        let state = DashboardState()
+        state.toggleApplications()
+        #expect(state.showApplications)
+        #expect(state.applicationsExpansion == 1)
+        state.toggleApplications()
+        #expect(!state.showApplications)
+        #expect(state.applicationsExpansion == 0)
     }
 
     @Test func previewFixtureBuildsChartWithoutMenuPanel() throws {

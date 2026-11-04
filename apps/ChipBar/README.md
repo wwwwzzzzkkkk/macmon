@@ -1,9 +1,9 @@
 # ChipBar · Apple Silicon 菜单栏监控
 
-> **ChipBar v2.0.3** · macOS 13+ · Apple Silicon（arm64） · SwiftUI + AppKit  
+> **ChipBar v3.0.0** · macOS 13+ · Apple Silicon（arm64） · SwiftUI + AppKit  
 > 在一个 370 pt 的原生菜单栏面板中，查看功率、温度、CPU/GPU 活跃度、系统内存、应用排行和可选的外置 SSD 状态。
 
-**[返回产品主页](../../README.md)** · **[下载正式版](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.3)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+**[返回产品主页](../../README.md)** · **[下载正式版](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.0.0)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
 
 ## 产品截图
 
@@ -13,6 +13,14 @@
   <img src="preview-settings.png" width="650" alt="ChipBar 浅色界面与设置截图" />
   <p><sub>浅色模式与设置截图 · 当前版本已采用独立设置二级页</sub></p>
 </div>
+
+
+## 3.0.0 · 独立资源卡片与实时功率流
+
+- 首页保留芯片总功率、CPU/GPU/内存圆环、逐核心占用、ANE 和内外置储存空间。原应用排行改为“应用占用”入口，点击会在主面板旁展开独立的系统 Liquid Glass 窗口，保留原有指标切换动画与最多五名应用排行。
+- “电源与功率”入口展开独立的动态功率流卡片。MacBook 使用 AppleSMC 的 PDTR/B0AC/B0AV 及系统电池状态，分别显示适配器输入、充放电及由两者推算的系统侧负载；Mac mini 等无电池设备尝试 PSTR、PDTR、PD0R 的内部系统功率。**这些数据不是插座端交流输入功率，传感器不可用时显示 —。**
+- 侧边面板优先在右侧展开，空间不足时在左侧展开；侧边关闭后停止额外读取，不会为主面板增加持续的后台功率采样。
+- 充电功率读取参考 MIT 许可的 [PowerFlow](https://github.com/dylansantwani/powerflow)，许可文本位于 [THIRD_PARTY_POWERSENSORS_LICENSE.md](THIRD_PARTY_POWERSENSORS_LICENSE.md)。
 
 ## 为什么使用 ChipBar？
 
@@ -54,7 +62,7 @@ ChipBar 专为希望**在工作时随时了解 Mac 资源状态**的用户设计
 
 ### 3. 「应用占用」：CPU / GPU / 内存 / ANE
 
-打开面板默认显示资源排行**前三名**，点击“更多”可查看**前五名**，无需额外打开其他窗口。四项可以随时切换：
+点击主面板“应用占用”入口后，在旁边的独立玻璃卡片中默认显示资源排行**前五名**，点击“收起”可查看**前三名**。四项可以随时切换：
 
 | 选项 | 指标含义 | 需要了解 |
 | --- | --- | --- |
@@ -93,7 +101,7 @@ SSD 监控是**可选功能**，用户开启后可在面板中查看：
 ### 6. Liquid Glass 与交互细节
 
 - macOS 26+ 使用系统 `NSGlassEffectView`；较早版本使用 `NSVisualEffectView`，并适配深色 / 浅色模式。
-- **370 pt 紧凑宽度**；窗口依屏幕可用空间调整高度，内容多时支持滚动。
+- **394 pt 紧凑主面板**；窗口依屏幕可用空间调整高度，内容多时支持滚动。
 - 进入「设备与设置」后切换到**统一的二级页面**，显示 Mac 基础信息、风扇、SSD / SMART 和刷新率与菜单栏偏好；左上角「返回」回到监控面板。
 - 页面切换采用淡入和方向滑动，固定同一玻璃窗口高度，减少反复重算面板导致的跳动。
 - 支持显示 / 隐藏、暂停 / 恢复；点击其他地方或按 Esc 关闭面板。
@@ -127,7 +135,7 @@ brew upgrade --cask wwwwzzzzkkkk/chipbar/chipbar
 
 1. 启动后点击菜单栏中的 ChipBar 读数。
 2. 查看芯片合计、CPU/GPU/ANE、利用率、内存和温度。
-3. 点击“应用占用”中的 CPU、GPU、内存或 ANE 切换排行；“更多”查看前五名。
+3. 点击“应用占用”打开右侧独立卡片，再在 CPU、GPU、内存或 ANE 间切换排行。
 4. 在「设备与设置」选择 1 / 2 / 5 / 10 秒硬件刷新间隔及常驻菜单栏项目。
 5. 如果使用外置 NVMe SSD，可开启相应监控；温度功能按需安装 `smartmontools`。
 

@@ -70,7 +70,11 @@ struct ApplicationUsageSection: View {
     }
 
     private var disclosureButton: some View {
-        Button { state.toggleApplications() } label: {
+        Button {
+            withAnimation(reduceMotion ? nil : ChipBarMotion.disclosure) {
+                state.toggleApplications()
+            }
+        } label: {
             HStack {
                 Text("应用占用").font(.subheadline.weight(.medium))
                 Spacer()

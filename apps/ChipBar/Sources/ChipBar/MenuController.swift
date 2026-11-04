@@ -36,6 +36,8 @@ import ChipBarCore
     private var scrollObserver: NSObjectProtocol?
     private var menuPreferences: AnyCancellable?
     private var menuRefresh: MenuRefreshDriver!
+    private var sidePanelSubscription: AnyCancellable?
+    private var sidePanelController: ChipBarSidePanelController?
     private var disclosureSubscription: AnyCancellable?
     private var settingsNavigationSubscription: AnyCancellable?
     private var systemDisclosureSubscription: AnyCancellable?
@@ -72,7 +74,7 @@ import ChipBarCore
 
     private var homeLayoutKey: HomeLayoutKey? {
         guard !dashboardState.showSettings, !dashboardState.showSystemDetails,
-              !dashboardState.showApplications, !dashboardState.showSSDDetails else { return nil }
+              !dashboardState.showSSDDetails else { return nil }
         let storage = ExternalStorageCapacityModel.shared
         return HomeLayoutKey(status: monitor.status, error: monitor.error,
                              connected: monitor.connected,
@@ -146,6 +148,9 @@ import ChipBarCore
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.layoutCoordinator.noteScroll() }
         }
+        sidePanelController = ChipBarSidePanelController(
+            monitor: monitor, state: dashboardState, delegate: self,
+            onClose: { [weak self] in self?.dashboardState.sidePanel = nil })
         installDismissalHandlers()
         menuRefresh = MenuRefreshDriver(read: { [weak monitor] in
             await monitor?.sampleMenuSources()
@@ -200,10 +205,26 @@ import ChipBarCore
         }
         // Synchronous main-thread state delivery: resetForOpening() happens
         // before the panel is presented, so it cannot queue stale navigation.
-        disclosureSubscription = dashboardState.$showApplications.combineLatest(dashboardState.$showSSDDetails)
-            .dropFirst()
-            .sink { [weak self] apps, ssd in
-                self?.animateDisclosure(applications: apps, ssd: ssd)
+        // The application ranking lives in its own NSPanel, so changing it
+        // must never resize the original menu or invalidate Home's layout cache.
+        disclosureSubscription = dashboardState.$showSSDDetails.dropFirst()
+            .sink { [weak self] ssd in
+                self?.animateDisclosure(applications: false, ssd: ssd)
+            }
+        sidePanelSubscription = dashboardState.$sidePanel.dropFirst()
+            .sink { [weak self] side in
+                guard let self else { return }
+                guard self.panelRequestedVisible else {
+                    self.sidePanelController?.hide(animated: false)
+                    return
+                }
+                if side != nil {
+                    self.autoDismissal?.cancel()
+                    self.sidePanelController?.show(beside: self.panel)
+                } else {
+                    self.sidePanelController?.hide()
+                    if !self.panel.isKeyWindow { self.panel.makeKeyAndOrderFront(nil) }
+                }
             }
         settingsNavigationSubscription = dashboardState.$showSettings
             .dropFirst()
@@ -218,6 +239,7 @@ import ChipBarCore
     /// the glass NSPanel frame mid-slide. This avoids two-stage fitting
     /// corrections, vertical hops, and Liquid Glass frame compositing hitches.
     private func navigateBetweenPages() {
+        if dashboardState.sidePanel != nil { dashboardState.sidePanel = nil }
         guard dashboardMounted, panelRequestedVisible else { return }
         navigationTask?.cancel()
         layoutCoordinator.cancelPending()
@@ -409,7 +431,9 @@ import ChipBarCore
                 return nil
             }
             if event.type != .keyDown, !self.menuTracking, NSApplication.shared.modalWindow == nil,
-               event.window !== self.panel, !self.isStatusButtonEvent(event) {
+               event.window !== self.panel,
+               !(self.sidePanelController?.owns(event.window) ?? false),
+               !self.isStatusButtonEvent(event) {
                 self.hidePanel()
             }
             return event
@@ -607,6 +631,7 @@ import ChipBarCore
         mouseReleaseCleanup?.cancel(); mouseReleaseCleanup = nil
         guard panelRequestedVisible else { return }
         panelRequestedVisible = false
+        sidePanelController?.hide(animated: false)
         monitor.setDashboardVisible(false)
         animatePanel(visible: false, animated: animated)
     }
@@ -673,7 +698,9 @@ import ChipBarCore
         autoDismissal = Task { @MainActor [weak self] in
             do { try await Task.sleep(nanoseconds: 150_000_000) } catch { return }
             guard let self, self.panelTransition == transition, !self.menuTracking, self.mouseDownTarget == nil,
-                  NSApplication.shared.modalWindow == nil else { return }
+                  NSApplication.shared.modalWindow == nil,
+                  !self.panel.isKeyWindow,
+                  !(self.sidePanelController?.isKeyWindow ?? false) else { return }
             self.hidePanel()
         }
     }
