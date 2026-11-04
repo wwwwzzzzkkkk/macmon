@@ -106,10 +106,7 @@ import QuartzCore
             guard let self, self.transition == token, self.panel.isVisible,
                   self.openedKind == kind else { return }
             self.host.rootView = AnyView(DashboardSidePanelView(
-                monitor: self.monitor, state: self.state, close: self.onClose,
-                onPowerLayoutChange: { [weak self] hasBattery, charging in
-                    self?.resizePowerPanel(hasBattery: hasBattery, charging: charging)
-                }
+                monitor: self.monitor, state: self.state, close: self.onClose
             ))
             self.mountTask = nil
         }
@@ -126,23 +123,6 @@ import QuartzCore
             panel.animator().alphaValue = 1
         } completionHandler: {
             Task { @MainActor [weak self] in self?.panel.invalidateShadow() }
-        }
-    }
-
-    private func resizePowerPanel(hasBattery: Bool, charging: Bool) {
-        guard openedKind == .power, panel.isVisible,
-              let parent = parentWindow, let screen = panel.screen ?? parent.screen else { return }
-        let wanted = SidePanelLayout.powerHeight(hasBattery: hasBattery, charging: charging)
-        let height = min(wanted, max(150, screen.visibleFrame.height - 16))
-        guard abs(panel.frame.height - height) > 0.5 else { return }
-        let top = min(screen.visibleFrame.maxY - 8, parent.frame.maxY)
-        let target = NSRect(x: panel.frame.minX, y: max(screen.visibleFrame.minY + 8, top - height),
-                            width: SidePanelLayout.width, height: height)
-        host.setFrameSize(NSSize(width: SidePanelLayout.width, height: wanted))
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.18
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            panel.animator().setFrame(target, display: true)
         }
     }
 
