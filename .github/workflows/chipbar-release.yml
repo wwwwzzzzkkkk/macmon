@@ -40,7 +40,7 @@ jobs:
           python3 -c 'import os,re; assert re.fullmatch(r"chipbar-v[0-9]+\.[0-9]+\.[0-9]+",os.environ["TAG"]), "Expected chipbar-vX.Y.Z tag"'
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
           fetch-depth: 0
       - name: Select Xcode 26 and print runner diagnostics
         working-directory: .
