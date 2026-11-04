@@ -12,6 +12,9 @@ permissions:
 
 jobs:
   test:
+    # The macmon Rust checks target the upstream main branch; ChipBar has its
+    # own Swift CI and should not consume scarce ARM macOS runners.
+    if: github.base_ref == 'main'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
