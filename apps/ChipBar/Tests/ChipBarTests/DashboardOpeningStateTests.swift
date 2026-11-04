@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import Testing
 @testable import ChipBar
 import ChipBarCore
@@ -39,6 +40,38 @@ import ChipBarCore
         state.toggleApplications()
         #expect(!state.showApplications)
         #expect(state.applicationsExpansion == 0)
+    }
+
+    @Test func sidePanelNotificationsCarryNewValueBeforeStoredStateChanges() {
+        let state = DashboardState()
+        var emitted: DashboardSidePanelKind?
+        var storedAtEmission: DashboardSidePanelKind?
+        let observation = state.$sidePanel.dropFirst().sink { value in
+            emitted = value
+            storedAtEmission = state.sidePanel
+        }
+        withExtendedLifetime(observation) {
+            state.sidePanel = .power
+            #expect(emitted == .power)
+            #expect(storedAtEmission == nil)
+            state.sidePanel = .applications
+            #expect(emitted == .applications)
+            #expect(storedAtEmission == .power)
+        }
+    }
+
+    @Test func sidePanelHeightsMatchDisplayedContentAndPowerMode() {
+        #expect(SidePanelLayout.width == 314)
+        #expect(SidePanelLayout.contentWidth == SidePanelLayout.width - 2 * SidePanelLayout.padding)
+        #expect(SidePanelLayout.height(for: .applications) == SidePanelLayout.applicationHeight)
+        #expect(SidePanelLayout.height(for: .power) ==
+                SidePanelLayout.powerHeight(hasBattery: false, charging: false))
+        #expect(SidePanelLayout.powerHeight(hasBattery: false, charging: false) <
+                SidePanelLayout.applicationHeight)
+        #expect(SidePanelLayout.powerHeight(hasBattery: true, charging: false) >
+                SidePanelLayout.applicationHeight)
+        #expect(SidePanelLayout.powerHeight(hasBattery: true, charging: true) >
+                SidePanelLayout.powerHeight(hasBattery: true, charging: false))
     }
 
     @Test func previewFixtureBuildsChartWithoutMenuPanel() throws {
