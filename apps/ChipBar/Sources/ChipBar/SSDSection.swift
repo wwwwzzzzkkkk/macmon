@@ -102,8 +102,6 @@ struct SSDSettings: View {
             Toggle("监控外接 NVMe SSD", isOn: $ssd.enabled)
                 .toggleStyle(ChipBarGlassToggleStyle())
             if ssd.enabled {
-                Text("外接 SSD 温度监控可在此开启或关闭。")
-                    .font(.caption2).foregroundStyle(.secondary)
                 // Keep previously configured paths and permissions internally.
                 // Device selection uses auto detection by default and never
                 // silently grants sudo access when the control is hidden.
