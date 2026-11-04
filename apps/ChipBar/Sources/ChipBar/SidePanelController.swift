@@ -84,7 +84,7 @@ import SwiftUI
         // SwiftUI identity and the existing rank transition.
         if !panel.isVisible {
             host.rootView = AnyView(DashboardSidePanelView(
-                monitor: monitor, state: state, close: { onClose() }
+                monitor: monitor, state: state, close: onClose
             ))
             let offset: CGFloat = openRight ? -14 : 14
             panel.setFrame(target.offsetBy(dx: offset, dy: 0), display: false)
