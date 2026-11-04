@@ -102,7 +102,7 @@ struct SSDSettings: View {
             Toggle("监控外接 NVMe SSD", isOn: $ssd.enabled)
                 .toggleStyle(ChipBarGlassToggleStyle())
             if ssd.enabled {
-                Text("多盘显示最高综合温度；各盘详情见面板。每轮结束后等待 30 秒，不保存历史。")
+                Text("外接 SSD 温度监控可在此开启或关闭。")
                     .font(.caption2).foregroundStyle(.secondary)
                 // Keep previously configured paths and permissions internally.
                 // Device selection uses auto detection by default and never
@@ -114,8 +114,6 @@ struct SSDSettings: View {
                 Link("安装、权限与硬盘盒兼容说明", destination: URL(string: "https://github.com/wwwwzzzzkkkk/macmon/blob/chipbar/apps/ChipBar/docs/EXTERNAL_SSD.md")!)
                     .font(.caption)
                 Button("重新检测 SSD") { ssd.restart() }
-                Text("传感器编号由 SSD 提供，不能据此确定主控或闪存位置。")
-                    .font(.caption2).foregroundStyle(.secondary)
             }
         }
     }

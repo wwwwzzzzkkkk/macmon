@@ -196,7 +196,7 @@ struct ChipBarPowerFlowView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(power.hasBattery
                          ? (power.onAdapter ? "适配器供电" : "电池供电")
-                         : "内部功率")
+                         : "电源状态")
                         .font(.subheadline.weight(.semibold))
                     Text(power.live ? "实时" : "读取中")
                         .font(.caption2)

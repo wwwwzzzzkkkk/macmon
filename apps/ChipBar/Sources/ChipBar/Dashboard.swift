@@ -512,11 +512,6 @@ struct Dashboard: View {
             .padding(12)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
 
-            Text("功率数据来自芯片传感器，不代表墙插功耗。macmon 与 smartctl 可自动发现。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 3)
             if !monitor.connected {
                 Text("macmon 未连接，请检查安装后重试。")
                     .font(.caption2).foregroundStyle(.secondary)
