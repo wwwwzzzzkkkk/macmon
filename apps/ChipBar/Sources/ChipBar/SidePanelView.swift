@@ -106,9 +106,9 @@ private struct PowerFlowEnergyTrack: View {
                     if !reduceMotion {
                         let phase = timeline.date.timeIntervalSinceReferenceDate * 0.27
                         for index in 0..<4 {
-                            let t = (phase + Double(index) * 0.25)
-                                .truncatingRemainder(dividingBy: 1)
-                            let u = 1 - t
+                            let t = CGFloat((phase + Double(index) * 0.25)
+                                .truncatingRemainder(dividingBy: 1))
+                            let u: CGFloat = 1 - t
                             let x = u*u*u*from.x + 3*u*u*t*controlA.x
                                 + 3*u*t*t*controlB.x + t*t*t*to.x
                             let y = u*u*u*from.y + 3*u*u*t*controlA.y
