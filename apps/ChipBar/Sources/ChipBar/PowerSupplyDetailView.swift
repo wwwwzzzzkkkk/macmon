@@ -53,67 +53,271 @@ enum PowerSourceMode: Equatable {
     }
 }
 
-private struct PowerTile: ViewModifier {
-    func body(content: Content) -> some View {
-        content.padding(12)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
+
+/// Geometry is derived only from valid measured watts. An inconsistent sensor
+/// reading never becomes a plausible-looking Sankey flow.
+struct PowerSankeyGeometry {
+    static let wattsToPoints: CGFloat = 4.4
+    static let maximumHeight: CGFloat = 150
+    static let nodeGap: CGFloat = 16
+
+    let totalHeight: CGFloat
+    let chipHeight: CGFloat
+    let otherHeight: CGFloat
+    let sourceTop: CGFloat
+    let chipTop: CGFloat
+    let otherTop: CGFloat
+
+    static func make(distribution: PowerDistribution, chartHeight: CGFloat = 190)
+        -> PowerSankeyGeometry? {
+        guard let internalWatts = distribution.internalWatts,
+              let chipWatts = distribution.chipWatts,
+              let otherWatts = distribution.otherWatts,
+              internalWatts.isFinite, internalWatts > 0,
+              chipWatts.isFinite, otherWatts.isFinite,
+              chartHeight > nodeGap else { return nil }
+        let scale = min(wattsToPoints,
+                        min(maximumHeight, chartHeight - nodeGap) / CGFloat(internalWatts))
+        let total = CGFloat(internalWatts) * scale
+        let chip = CGFloat(chipWatts) * scale
+        let other = total - chip
+        let sourceTop = (chartHeight - total) / 2
+        let rightTop = (chartHeight - total - nodeGap) / 2
+        return PowerSankeyGeometry(
+            totalHeight: total, chipHeight: chip, otherHeight: other,
+            sourceTop: sourceTop, chipTop: rightTop,
+            otherTop: rightTop + chip + nodeGap
+        )
     }
+
+    var chipCenter: CGFloat { chipTop + chipHeight / 2 }
+    var otherCenter: CGFloat { otherTop + otherHeight / 2 }
 }
 
-private struct EnergyNode: View {
-    let name: String
-    let watts: Double?
-    let amber: Bool
-    var highlighted = false
+/// The chart is drawn into a single Canvas. Its animated dashed lines are
+/// invalidated only while the side panel is actually mounted and active.
+private struct PowerSankeyFlow: View {
+    let distribution: PowerDistribution
+    let externalWatts: Double?
+    let sourceTitle: String
+    let active: Bool
 
-    private let glow = Color(red: 0.93, green: 0.62, blue: 0.27)
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    var body: some View {
-        VStack(spacing: 5) {
-            Text(name)
-                .font(.system(size: 9, weight: .medium))
+    private let amber = Color(red: 251 / 255, green: 191 / 255, blue: 36 / 255)
+
+    private func value(_ watts: Double?) -> String {
+        guard let watts, watts.isFinite, watts >= 0 else { return "—" }
+        return String(format: "%.1f", watts)
+    }
+
+    private func fraction(_ portion: Double?) -> String {
+        guard let portion, portion.isFinite else { return "—" }
+        return String(format: "%.0f%%", portion * 100)
+    }
+
+    private var accessibleText: String {
+        let total = distribution.internalWatts
+        let chip = distribution.chipWatts
+        let other = distribution.otherWatts
+        return "内部功率 \(value(total)) 瓦，其中芯片 \(value(chip)) 瓦，其余部件 \(value(other)) 瓦（估算）"
+    }
+
+    private var leftLabel: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("内部功率")
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Text(watts.map { String(format: "%.1f", $0) } ?? "—")
-                .font(.system(size: highlighted ? 17 : 12,
-                              weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .minimumScaleFactor(0.75)
-                .lineLimit(1)
-            Text("W").font(.system(size: 9)).foregroundStyle(.secondary)
-        }
-        .frame(width: highlighted ? 86 : 61, height: highlighted ? 100 : 47)
-        .background(Color.primary.opacity(0.035),
-                    in: RoundedRectangle(cornerRadius: 11))
-        .overlay {
-            RoundedRectangle(cornerRadius: 11)
-                .strokeBorder(amber ? glow.opacity(0.85) : Color.primary.opacity(0.10),
-                              lineWidth: amber ? 1.4 : 0.6)
-        }
-        .shadow(color: amber ? glow.opacity(0.19) : .clear,
-                radius: highlighted ? 10 : 0)
-        .opacity(watts == nil && !highlighted ? 0.42 : 1)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-private struct PowerDash: View {
-    var amber: Bool
-    var body: some View {
-        HStack(spacing: 1) {
-            Path { path in
-                path.move(to: CGPoint(x: 0, y: 4))
-                path.addLine(to: CGPoint(x: 14, y: 4))
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value(distribution.internalWatts))
+                    .font(.system(size: 32, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+                Text("W")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }
-            .stroke(amber ? Color.orange.opacity(0.9) : Color.secondary.opacity(0.48),
-                    style: StrokeStyle(lineWidth: 1.4, dash: [3, 3]))
-            .frame(width: 14, height: 8)
-            Image(systemName: "chevron.right")
-                .font(.system(size: 6, weight: .semibold))
-                .foregroundStyle(amber ? Color.orange : Color.secondary)
+            HStack(spacing: 3) {
+                Text(sourceTitle)
+                Text(value(externalWatts))
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+            .opacity(externalWatts == nil ? 0.48 : 1)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
         }
-        .frame(width: 19, height: 10)
-        .accessibilityHidden(true)
+        .frame(width: 82, alignment: .leading)
+    }
+
+    private func outputLabel(_ name: String, watts: Double?, percent: Double?,
+                             tint: Color, estimated: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                Circle().fill(tint).frame(width: 7, height: 7)
+                Text(name).font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value(watts))
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.68)
+                Text("W").font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 4) {
+                Text(fraction(percent))
+                if estimated { Text("· 估算") }
+            }
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+        .frame(width: 88, alignment: .leading)
+        .opacity(watts == nil ? 0.48 : 1)
+    }
+
+    /// Draw one closed Bezier ribbon. The top and bottom horizontal control
+    /// points both sit on the same midpoint, avoiding sharp or angled joins.
+    private func ribbon(x0: CGFloat, x1: CGFloat,
+                        sourceTop: CGFloat, targetTop: CGFloat,
+                        height: CGFloat) -> Path {
+        let midpoint = (x0 + x1) / 2
+        return Path { path in
+            path.move(to: CGPoint(x: x0, y: sourceTop))
+            path.addCurve(to: CGPoint(x: x1, y: targetTop),
+                          control1: CGPoint(x: midpoint, y: sourceTop),
+                          control2: CGPoint(x: midpoint, y: targetTop))
+            path.addLine(to: CGPoint(x: x1, y: targetTop + height))
+            path.addCurve(to: CGPoint(x: x0, y: sourceTop + height),
+                          control1: CGPoint(x: midpoint, y: targetTop + height),
+                          control2: CGPoint(x: midpoint, y: sourceTop + height))
+            path.closeSubpath()
+        }
+    }
+
+    private func flowLine(x0: CGFloat, x1: CGFloat,
+                          from: CGFloat, to: CGFloat) -> Path {
+        let midpoint = (x0 + x1) / 2
+        return Path { path in
+            path.move(to: CGPoint(x: x0, y: from))
+            path.addCurve(to: CGPoint(x: x1, y: to),
+                          control1: CGPoint(x: midpoint, y: from),
+                          control2: CGPoint(x: midpoint, y: to))
+        }
+    }
+
+    private func draw(in context: GraphicsContext, size: CGSize, phase: CGFloat,
+                      geometry: PowerSankeyGeometry) {
+        let barWidth: CGFloat = 6
+        let leftX: CGFloat = 90
+        let rightX = max(leftX + 40, size.width - 96)
+        let startX = leftX + barWidth
+        let sourceChipTop = geometry.sourceTop
+        let sourceOtherTop = geometry.sourceTop + geometry.chipHeight
+
+        func fillBand(_ path: Path, start: Color, end: Color, glow: Bool) {
+            let gradient = Gradient(colors: [start, end])
+            let fill = GraphicsContext.Shading.linearGradient(
+                gradient, startPoint: CGPoint(x: startX, y: 0),
+                endPoint: CGPoint(x: rightX, y: 0))
+            if glow {
+                context.drawLayer { layer in
+                    layer.addFilter(.shadow(color: amber.opacity(0.32), radius: 8))
+                    layer.fill(path, with: fill)
+                }
+            }
+            context.fill(path, with: fill)
+        }
+
+        if geometry.chipHeight > 0 {
+            let path = ribbon(x0: startX, x1: rightX,
+                              sourceTop: sourceChipTop, targetTop: geometry.chipTop,
+                              height: geometry.chipHeight)
+            fillBand(path, start: amber.opacity(0.25), end: amber.opacity(0.8), glow: true)
+        }
+        if geometry.otherHeight > 0 {
+            let path = ribbon(x0: startX, x1: rightX,
+                              sourceTop: sourceOtherTop, targetTop: geometry.otherTop,
+                              height: geometry.otherHeight)
+            fillBand(path, start: .white.opacity(0.07),
+                     end: .white.opacity(0.26), glow: false)
+        }
+
+        let lineStyle = StrokeStyle(lineWidth: 2, lineCap: .round,
+                                    dash: [2, 10], dashPhase: phase)
+        if geometry.chipHeight > 0 {
+            let path = flowLine(x0: startX, x1: rightX,
+                                from: sourceChipTop + geometry.chipHeight / 2,
+                                to: geometry.chipCenter)
+            context.stroke(path, with: .color(amber.opacity(0.95)), style: lineStyle)
+        }
+        if geometry.otherHeight > 0 {
+            let path = flowLine(x0: startX, x1: rightX,
+                                from: sourceOtherTop + geometry.otherHeight / 2,
+                                to: geometry.otherCenter)
+            context.stroke(path, with: .color(.white.opacity(0.56)), style: lineStyle)
+        }
+        // One rounded source rail, split into measured chip and estimated
+        // other-component colors, as in the reference. Clipping once avoids
+        // a visible seam or separate rounded caps at the internal division.
+        context.drawLayer { node in
+            let source = Path(roundedRect: CGRect(x: leftX, y: geometry.sourceTop,
+                                                   width: barWidth, height: geometry.totalHeight),
+                              cornerRadius: 3)
+            node.clip(to: source)
+            node.fill(source, with: .color(.white.opacity(0.5)))
+            node.fill(Path(CGRect(x: leftX, y: geometry.sourceTop,
+                                  width: barWidth, height: geometry.chipHeight)),
+                      with: .color(amber))
+        }
+        context.fill(Path(roundedRect: CGRect(x: rightX, y: geometry.chipTop,
+                                               width: barWidth, height: geometry.chipHeight),
+                          cornerRadius: 3), with: .color(amber))
+        context.fill(Path(roundedRect: CGRect(x: rightX, y: geometry.otherTop,
+                                               width: barWidth, height: geometry.otherHeight),
+                          cornerRadius: 3), with: .color(.white.opacity(0.5)))
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let geometry = PowerSankeyGeometry.make(distribution: distribution)
+            ZStack(alignment: .topLeading) {
+                if let geometry {
+                    TimelineView(.animation(minimumInterval: 1.0 / 30.0,
+                                            paused: !active || reduceMotion)) { time in
+                        // Negative phase moves the round dashes left-to-right;
+                        // one complete 12-point pattern traverses in 1.1 s.
+                        let elapsed = time.date.timeIntervalSinceReferenceDate
+                        let phase = (!active || reduceMotion) ? CGFloat.zero :
+                            -CGFloat((elapsed * 12 / 1.1).truncatingRemainder(dividingBy: 12))
+                        Canvas(opaque: false, rendersAsynchronously: false) { context, size in
+                            draw(in: context, size: size, phase: phase, geometry: geometry)
+                        }
+                    }
+                    .accessibilityHidden(true)
+                }
+                leftLabel
+                    .position(x: 41, y: 95)
+                outputLabel("芯片", watts: distribution.chipWatts,
+                            percent: distribution.chipFraction,
+                            tint: amber, estimated: false)
+                    .position(x: proxy.size.width - 44,
+                              y: geometry?.chipCenter ?? 56)
+                outputLabel("其余部件", watts: distribution.otherWatts,
+                            percent: distribution.otherFraction,
+                            tint: Color.white.opacity(0.7), estimated: true)
+                    .position(x: proxy.size.width - 44,
+                              y: geometry?.otherCenter ?? 140)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .frame(height: 190)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibleText)
     }
 }
 
@@ -123,35 +327,37 @@ struct PowerSupplyDetailView: View {
     let close: () -> Void
     @ObservedObject private var sampler = ChipBarPowerFlowModel.shared
 
-    private let amber = Color(red: 0.93, green: 0.62, blue: 0.27)
     private var reading: ChipBarPowerReading { sampler.reading }
     private var breakdown: PowerDistribution {
         PowerDistribution(internalWatts: reading.systemWatts,
                           chipWatts: monitor.connected ? monitor.sample?.total : nil)
     }
     private var mode: PowerSourceMode { PowerSourceMode(reading: reading) }
-    private var inputWatts: Double? {
+    private var supplyTitle: String {
+        mode == .battery ? "电池供电" : "外部供电"
+    }
+    private var supplyWatts: Double? {
+        if mode == .battery {
+            guard let watts = reading.batteryWatts, watts.isFinite, watts < 0
+            else { return nil }
+            return abs(watts)
+        }
         guard reading.hasBattery, reading.onAdapter else { return nil }
         return reading.adapterWatts
     }
-    private var batteryOutputWatts: Double? {
-        guard let watts = reading.batteryWatts, watts.isFinite, watts < 0 else { return nil }
-        return abs(watts)
-    }
-    private var chargingWatts: Double? {
-        guard mode == .adapterCharging,
-              let watts = reading.batteryWatts, watts.isFinite, watts >= 0 else { return nil }
-        return watts
+
+    private var sensorSource: String {
+        reading.sourceKey.map { "SMC \($0)" } ?? "SMC —"
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 9) {
                 Button(action: close) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 12, weight: .semibold))
                         .frame(width: 26, height: 29)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 9))
+                        .glassTile(radius: 14, interactive: true)
                 }
                 .accessibilityLabel("返回主页面")
                 VStack(alignment: .leading, spacing: 2) {
@@ -163,101 +369,40 @@ struct PowerSupplyDetailView: View {
                 Text(reading.live ? "实时" : "离线")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(reading.live ? Color.green : Color.secondary)
-                    .padding(.horizontal, 8).padding(.vertical, 5)
-                    .background((reading.live ? Color.green : Color.secondary).opacity(0.11),
-                                in: Capsule())
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background((reading.live ? Color.green : Color.secondary).opacity(0.12),
+                                in: Capsule(style: .continuous))
             }
             .frame(height: 40)
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("能量流向").font(.caption.weight(.semibold))
-                HStack(alignment: .center, spacing: 3) {
-                    if mode != .desktop {
-                        VStack(spacing: 5) {
-                            if mode == .battery {
-                                EnergyNode(name: "电池供电", watts: batteryOutputWatts,
-                                           amber: false)
-                            } else {
-                                EnergyNode(name: "外部供电", watts: inputWatts,
-                                           amber: false)
-                            }
-                            if mode.showsBatteryBranch {
-                                PowerDash(amber: false)
-                                    .rotationEffect(.degrees(mode == .adapterCharging ? 90 : -90))
-                                    .frame(height: 17)
-                                EnergyNode(
-                                    name: mode == .adapterCharging ? "电池充电" : "电池补充",
-                                    watts: mode == .adapterCharging
-                                        ? chargingWatts : batteryOutputWatts,
-                                    amber: false
-                                )
-                            }
-                        }
-                        PowerDash(amber: false)
-                    }
-                    EnergyNode(name: "内部功率", watts: reading.systemWatts,
-                               amber: true, highlighted: true)
-                    PowerDash(amber: true)
-                    VStack(spacing: 6) {
-                        EnergyNode(name: "芯片", watts: breakdown.chipWatts, amber: false)
-                        EnergyNode(name: "其余部件", watts: breakdown.otherWatts, amber: false)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: mode.showsBatteryBranch ? 128 : 112)
-            }
-            .modifier(PowerTile())
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Text("内部功率构成").font(.caption.weight(.semibold))
-                    Spacer(minLength: 0)
-                    Circle().fill(amber).frame(width: 6, height: 6)
-                    Text("芯片")
-                    Circle().fill(Color.white.opacity(0.3)).frame(width: 6, height: 6)
-                    Text("其余部件")
-                }
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.secondary)
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.30))
-                        if let fraction = breakdown.chipFraction {
-                            Capsule().fill(amber)
-                                .frame(width: geo.size.width * fraction)
-                        }
-                    }
-                }
-                .frame(height: 8)
-            }
-            .modifier(PowerTile())
-
-            VStack(spacing: 7) {
-                readout("数据源", reading.sourceKey.map { "SMC \($0)" } ?? "—")
-                Divider().opacity(0.25)
-                readout("采样间隔", "每秒")
-                Divider().opacity(0.25)
                 HStack {
-                    Text("传感器状态").foregroundStyle(.secondary)
-                    Spacer()
-                    Circle().fill(reading.live ? Color.green : Color.secondary)
-                        .frame(width: 6, height: 6)
-                    Text(reading.live ? "在线" : "离线")
+                    Text("功率流向").font(.caption.weight(.semibold))
+                    Spacer(minLength: 4)
+                    Text("左 → 右 · 条带粗细 = 瓦数")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
+                PowerSankeyFlow(distribution: breakdown, externalWatts: supplyWatts,
+                                sourceTitle: supplyTitle, active: active && reading.live)
             }
-            .font(.system(size: 11))
-            .modifier(PowerTile())
+            .padding(12)
+            .glassTile(radius: 26)
 
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Text("数据来自 \(sensorSource)，为内部 DC 功率读数，并非插座 AC 输入功耗。其余部件 = 内部功率 − 芯片总功率。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .glassTile(radius: 26)
         }
-        .help("内部 DC 功率不是插座 AC 输入功耗。其余部件为内部功率减去芯片总功率的估算值。")
     }
-
-    private func readout(_ title: String, _ value: String) -> some View {
-        HStack {
-            Text(title).foregroundStyle(.secondary)
-            Spacer()
-            Text(value).monospacedDigit()
-        }
-    }
-
 }
