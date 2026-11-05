@@ -130,6 +130,7 @@ actor ChipBarPowerSampler {
 }
 
 @MainActor final class ChipBarPowerFlowModel: ObservableObject {
+    static let shared = ChipBarPowerFlowModel()
     @Published private(set) var reading = ChipBarPowerReading.unavailable
     private let sampler = ChipBarPowerSampler()
 

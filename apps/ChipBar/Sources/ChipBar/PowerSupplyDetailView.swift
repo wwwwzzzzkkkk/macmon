@@ -96,7 +96,7 @@ struct PowerSupplyDetailView: View {
     @ObservedObject var monitor: Monitor
     let active: Bool
     let close: () -> Void
-    @StateObject private var sampler = ChipBarPowerFlowModel()
+    @ObservedObject private var sampler = ChipBarPowerFlowModel.shared
 
     private let amber = Color(red: 0.93, green: 0.62, blue: 0.27)
     private var reading: ChipBarPowerReading { sampler.reading }
@@ -193,19 +193,8 @@ struct PowerSupplyDetailView: View {
             .font(.system(size: 11))
             .modifier(PowerTile())
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text("说明").font(.caption.weight(.semibold))
-                Text("这是内部 DC 功率读数，并非插座 AC 输入功耗。")
-                Text("其余部件 = 内部功率 − 芯片总功率（估算）。")
-            }
-            .font(.system(size: 10))
-            .foregroundStyle(.secondary)
-            .modifier(PowerTile())
         }
-        .task(id: active) {
-            guard active else { return }
-            await sampler.watch()
-        }
+        .help("内部 DC 功率不是插座 AC 输入功耗。其余部件为内部功率减去芯片总功率的估算值。")
     }
 
     private func readout(_ title: String, _ value: String) -> some View {

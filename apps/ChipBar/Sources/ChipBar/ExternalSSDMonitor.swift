@@ -5,6 +5,14 @@ import ChipBarCore
 @MainActor final class ExternalSSDMonitor: ObservableObject {
     @Published var enabled: Bool { didSet { defaults.set(enabled, forKey: "ssdEnabled"); restart() } }
     @Published var showInMenu: Bool { didSet { defaults.set(showInMenu, forKey: "ssdMenu") } }
+    /// Master visibility is always editable, even when no external disk is mounted.
+    /// Per-drive preferences remain saved when temporarily switched off.
+    @Published var menuTemperaturesEnabled: Bool {
+        didSet {
+            defaults.set(menuTemperaturesEnabled, forKey: "ssdMenuGlobalEnabled")
+            if menuTemperaturesEnabled && !enabled { enabled = true }
+        }
+    }
     @Published private(set) var menuDiskIDs: Set<String> {
         didSet { defaults.set(Array(menuDiskIDs).sorted(), forKey: "ssdMenuDriveIDs") }
     }
@@ -39,6 +47,9 @@ import ChipBarCore
         showInMenu = defaults.bool(forKey: "ssdMenu")
         menuDiskIDs = Set(defaults.stringArray(forKey: "ssdMenuDriveIDs") ?? [])
         diskMenuConfigured = defaults.bool(forKey: "ssdMenuDriveConfigured")
+        menuTemperaturesEnabled = (defaults.object(forKey: "ssdMenuGlobalEnabled") as? Bool)
+            ?? (defaults.bool(forKey: "ssdMenu") ||
+                !(defaults.stringArray(forKey: "ssdMenuDriveIDs") ?? []).isEmpty)
         useSudo = defaults.bool(forKey: "ssdSudo")
         deviceType = SMARTDeviceType(rawValue: defaults.string(forKey: "ssdType") ?? "") ?? .auto
         customPath = defaults.string(forKey: "smartctlPath") ?? ""
@@ -62,7 +73,7 @@ import ChipBarCore
     }
 
     func showsTemperatureInMenu(for diskID: String) -> Bool {
-        diskMenuConfigured ? menuDiskIDs.contains(diskID) : showInMenu
+        menuTemperaturesEnabled && (diskMenuConfigured ? menuDiskIDs.contains(diskID) : showInMenu)
     }
 
     func setTemperatureInMenu(_ show: Bool, for diskID: String) {
@@ -75,6 +86,7 @@ import ChipBarCore
             showInMenu = false
         }
         if show {
+            menuTemperaturesEnabled = true
             menuDiskIDs.insert(diskID)
             if !enabled { enabled = true }
         } else {
@@ -83,7 +95,7 @@ import ChipBarCore
     }
 
     var selectedTemperatureReadouts: [MenuReadout] {
-        guard enabled else { return [] }
+        guard enabled, menuTemperaturesEnabled else { return [] }
         if !diskMenuConfigured {
             guard showInMenu else { return [] }
             return [MenuReadout("ssd", menuTemperature.map {
@@ -99,7 +111,7 @@ import ChipBarCore
     }
 
     var menuSuffix: String {
-        guard enabled else { return "" }
+        guard enabled, menuTemperaturesEnabled else { return "" }
         if !diskMenuConfigured {
             guard showInMenu else { return "" }
             return menuTemperature.map { String(format: " · SSD %.0f°C", $0) } ?? " · SSD —"
