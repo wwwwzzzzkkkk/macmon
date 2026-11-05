@@ -12,13 +12,15 @@ enum SidePanelLayout {
     static let padding: CGFloat = 12
     static let contentWidth: CGFloat = width - 2 * padding
     static let applicationHeight: CGFloat = 250
-    static let powerHeight: CGFloat = 516
+    static let powerHeight: CGFloat = 400
+    static let chargingPowerHeight: CGFloat = 418
     static let diskHeight: CGFloat = 410
 
-    static func height(for kind: DashboardSidePanelKind) -> CGFloat {
+    static func height(for kind: DashboardSidePanelKind,
+                       powerMode: PowerSourceMode = .desktop) -> CGFloat {
         switch kind {
         case .applications: return applicationHeight
-        case .power: return powerHeight
+        case .power: return powerMode.showsBatteryBranch ? chargingPowerHeight : powerHeight
         case .externalDisk: return diskHeight
         }
     }
