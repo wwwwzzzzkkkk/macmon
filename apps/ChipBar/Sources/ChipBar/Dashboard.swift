@@ -207,9 +207,14 @@ struct Dashboard: View {
 
     /// Keep RAM capacity outside the shared ring box while leaving the
     /// memory usage percentage and macOS pressure-colored stroke unchanged.
-    private var memoryCapacitySummary: String {
-        guard monitor.connected, let memory = monitor.sample?.memory else { return "内存 —" }
-        return String(format: "%.1f / %.1f GB", memory.usedGiB, memory.totalGiB)
+    private var memoryUsedSummary: String {
+        guard monitor.connected, let memory = monitor.sample?.memory else { return "— GB" }
+        return String(format: "%.1f GB", memory.usedGiB)
+    }
+
+    private var memoryTotalSummary: String {
+        guard monitor.connected, let memory = monitor.sample?.memory else { return "共 — GB" }
+        return String(format: "共 %.1f GB", memory.totalGiB)
     }
 
     /// One and only one power history chart: the headline and real rolling
@@ -284,19 +289,19 @@ struct Dashboard: View {
         HStack(alignment: .top, spacing: 8) {
             DashboardRunway(
                 title: "CPU", percentage: monitor.connected ? monitor.sample?.cpuUtilization : nil,
-                color: accent,
+                color: Color(red: 0.36, green: 0.62, blue: 1.0),
                 subtitle: wattage(monitor.connected ? monitor.sample?.cpu : nil),
                 detail: temperatureSummary(monitor.connected ? monitor.sample?.cpuTemperature : nil))
             DashboardRunway(
                 title: "GPU", percentage: monitor.connected ? monitor.sample?.gpuUtilization : nil,
-                color: accent.opacity(0.78),
+                color: Color(red: 0.69, green: 0.56, blue: 0.99),
                 subtitle: wattage(monitor.connected ? monitor.sample?.gpu : nil),
                 detail: temperatureSummary(monitor.connected ? monitor.sample?.gpuTemperature : nil))
             DashboardRunway(
                 title: "内存", percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
                 color: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
-                subtitle: monitor.connected ? memoryCapacitySummary : "内存 —",
-                detail: "统一内存",
+                subtitle: memoryUsedSummary,
+                detail: memoryTotalSummary,
                 pressureStatus: monitor.memoryPressure.title)
         }
     }
