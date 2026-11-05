@@ -9,18 +9,27 @@ enum DashboardSidePanelKind: String, Equatable {
 /// Shared native-window sizing for each independent tile page.
 enum SidePanelLayout {
     static let width: CGFloat = 314
+    // 420pt window - 24pt panel margins - 24pt tile padding = 372pt canvas.
+    // App ranking and disk detail retain their existing compact widths.
+    static let powerWidth: CGFloat = 420
     static let padding: CGFloat = 12
     static let contentWidth: CGFloat = width - 2 * padding
     static let applicationHeight: CGFloat = 250
-    static let powerHeight: CGFloat = 400
-    static let chargingPowerHeight: CGFloat = 418
+    static let powerHeight: CGFloat = 410
     static let diskHeight: CGFloat = 410
 
-    static func height(for kind: DashboardSidePanelKind,
-                       powerMode: PowerSourceMode = .desktop) -> CGFloat {
+    static func width(for kind: DashboardSidePanelKind?) -> CGFloat {
+        kind == .power ? powerWidth : width
+    }
+
+    static func contentWidth(for kind: DashboardSidePanelKind?) -> CGFloat {
+        width(for: kind) - 2 * padding
+    }
+
+    static func height(for kind: DashboardSidePanelKind) -> CGFloat {
         switch kind {
         case .applications: return applicationHeight
-        case .power: return powerMode.showsBatteryBranch ? chargingPowerHeight : powerHeight
+        case .power: return powerHeight
         case .externalDisk: return diskHeight
         }
     }
@@ -41,7 +50,7 @@ struct SidePanelLoadingView: View {
                 .frame(height: kind == .applications ? 165 : 105)
                 .overlay { ProgressView().controlSize(.small) }
         }
-        .frame(width: SidePanelLayout.contentWidth, alignment: .topLeading)
+        .frame(width: SidePanelLayout.contentWidth(for: kind), alignment: .topLeading)
         .padding(SidePanelLayout.padding)
     }
 }
@@ -82,7 +91,7 @@ struct DashboardSidePanelView: View {
                 EmptyView()
             }
         }
-        .frame(width: SidePanelLayout.contentWidth, alignment: .topLeading)
+        .frame(width: SidePanelLayout.contentWidth(for: state.sidePanel), alignment: .topLeading)
         .padding(SidePanelLayout.padding)
         .buttonStyle(ChipBarPressStyle())
     }

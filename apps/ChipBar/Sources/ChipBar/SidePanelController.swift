@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 import QuartzCore
-import Combine
 
 @MainActor private final class ChipBarSideWindow: NSPanel {
     var escape: (() -> Void)?
@@ -23,7 +22,6 @@ import Combine
     private var transition = UUID()
     private var lastOpenedOnRight = true
     private var mountTask: Task<Void, Never>?
-    private var powerSubscription: AnyCancellable?
 
     var isKeyWindow: Bool { panel.isKeyWindow }
     var isVisible: Bool { panel.isVisible }
@@ -62,12 +60,6 @@ import Combine
         panel.title = "ChipBar 侧边卡片"
         panel.delegate = delegate
         panel.escape = onClose
-        powerSubscription = ChipBarPowerFlowModel.shared.$reading
-            .map { PowerSourceMode(reading: $0) }
-            .removeDuplicates()
-            .sink { [weak self] mode in
-                self?.resizeForPowerMode(mode)
-            }
         // The hosted view is mounted on demand to avoid reading processes or SMC on startup.
     }
 
@@ -79,11 +71,8 @@ import Combine
         openedKind = kind
         parentWindow = parent
         let visible = screen.visibleFrame
-        let width = SidePanelLayout.width
-        let desiredHeight = SidePanelLayout.height(
-            for: kind,
-            powerMode: PowerSourceMode(reading: ChipBarPowerFlowModel.shared.reading)
-        )
+        let width = SidePanelLayout.width(for: kind)
+        let desiredHeight = SidePanelLayout.height(for: kind)
         let height = min(desiredHeight, max(200, visible.height - 16))
         host.setFrameSize(NSSize(width: width, height: desiredHeight))
         let spacing: CGFloat = 9
@@ -134,23 +123,6 @@ import Combine
             panel.animator().alphaValue = 1
         } completionHandler: {
             Task { @MainActor [weak self] in self?.panel.invalidateShadow() }
-        }
-    }
-
-    private func resizeForPowerMode(_ mode: PowerSourceMode) {
-        guard openedKind == .power, panel.isVisible,
-              let screen = panel.screen ?? parentWindow?.screen ?? NSScreen.main else { return }
-        let desiredHeight = SidePanelLayout.height(for: .power, powerMode: mode)
-        let height = min(desiredHeight, max(200, screen.visibleFrame.height - 16))
-        guard abs(panel.frame.height - height) > 0.5 else { return }
-        let top = min(screen.visibleFrame.maxY - 8, parentWindow?.frame.maxY ?? panel.frame.maxY)
-        let y = max(screen.visibleFrame.minY + 8, top - height)
-        let target = NSRect(x: panel.frame.minX, y: y, width: SidePanelLayout.width, height: height)
-        host.setFrameSize(NSSize(width: SidePanelLayout.width, height: desiredHeight))
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.18
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            panel.animator().setFrame(target, display: true)
         }
     }
 
