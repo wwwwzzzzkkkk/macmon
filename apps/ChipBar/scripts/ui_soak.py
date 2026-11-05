@@ -34,9 +34,13 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='chipbar-ui-soak-') as directory:
         folder = Path(directory)
-        core = root / 'Sources/ChipBarCore/Metrics.swift'
+        core_sources = sorted(str(source) for source in
+                              (root / 'Sources/ChipBarCore').glob('*.swift'))
+        # ChipBarCore now owns process grouping, SSD, network and storage
+        # models in addition to Metrics.swift. Compiling only Metrics.swift
+        # makes the GUI benchmark fail before measuring any CPU load.
         subprocess.run(['xcrun', 'swiftc', '-O', '-emit-library', '-emit-module',
-                        '-module-name', 'ChipBarCore', str(core),
+                        '-module-name', 'ChipBarCore', *core_sources,
                         '-Xlinker', '-install_name', '-Xlinker', '@rpath/libChipBarCore.dylib',
                         '-o', 'libChipBarCore.dylib'], cwd=folder, check=True)
         sources = []
