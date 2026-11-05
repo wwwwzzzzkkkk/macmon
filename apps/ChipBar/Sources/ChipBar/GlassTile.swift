@@ -70,7 +70,11 @@ struct MenuChoiceSurface: ViewModifier {
 /// Wrap the dashboard in exactly one glass coordinator, without changing the
 /// legacy macOS view hierarchy or creating nested glass around chart strokes.
 struct DashboardGlassContainer<Content: View>: View {
-    @ViewBuilder let content: () -> Content
+    let content: () -> Content
+
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
+    }
 
     @ViewBuilder var body: some View {
         if #available(macOS 26.0, *) {

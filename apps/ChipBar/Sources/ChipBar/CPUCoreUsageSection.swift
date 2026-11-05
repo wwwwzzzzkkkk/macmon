@@ -72,7 +72,7 @@ struct CPUCoreUsageSection: View {
                                 Capsule().fill(.quaternary)
                                 Capsule().fill(coreTint(index).opacity(0.78))
                                     .frame(height: geo.size.height * min(1, max(0, percent / 100)))
-                                    .animation(reduceMotion ? nil : .easeOut(duration: 0.23), value: percent)
+                                    .animation(reduceMotion || !active ? nil : .easeOut(duration: 0.23), value: percent)
                             }
                             .frame(maxWidth: 9)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)

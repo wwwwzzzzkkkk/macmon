@@ -10,6 +10,7 @@ struct DashboardRunway: View {
     let subtitle: String
     let detail: String
     var pressureStatus: String? = nil
+    var active = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -33,7 +34,7 @@ struct DashboardRunway: View {
                     .stroke(color, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                     .saturation(1.18)
                     .rotationEffect(.degrees(-90))
-                    .animation(reduceMotion ? nil :
+                    .animation(reduceMotion || !active ? nil :
                         .spring(response: 0.55, dampingFraction: 1), value: fraction)
                 if percentage?.isFinite == true {
                     RunwayPercentage(value: fraction * 100)

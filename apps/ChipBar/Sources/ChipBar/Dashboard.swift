@@ -112,6 +112,11 @@ struct Dashboard: View {
         // during Settings transitions.
         .animation(ChipBarMotion.optional(ChipBarMotion.navigation, reduceMotion: reduceMotion),
                    value: showsDeviceAndSettings)
+        .transaction { transaction in
+            if !monitor.dashboardVisible || monitor.paused || monitor.sleeping {
+                transaction.disablesAnimations = true
+            }
+        }
     }
 
     private var monitoringScreen: some View {
@@ -297,18 +302,21 @@ struct Dashboard: View {
                 title: "CPU", percentage: monitor.connected ? monitor.sample?.cpuUtilization : nil,
                 color: Color(red: 0.36, green: 0.62, blue: 1.0),
                 subtitle: wattage(monitor.connected ? monitor.sample?.cpu : nil),
-                detail: temperatureSummary(monitor.connected ? monitor.sample?.cpuTemperature : nil))
+                detail: temperatureSummary(monitor.connected ? monitor.sample?.cpuTemperature : nil),
+                active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
             DashboardRunway(
                 title: "GPU", percentage: monitor.connected ? monitor.sample?.gpuUtilization : nil,
                 color: Color(red: 0.69, green: 0.56, blue: 0.99),
                 subtitle: wattage(monitor.connected ? monitor.sample?.gpu : nil),
-                detail: temperatureSummary(monitor.connected ? monitor.sample?.gpuTemperature : nil))
+                detail: temperatureSummary(monitor.connected ? monitor.sample?.gpuTemperature : nil),
+                active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
             DashboardRunway(
                 title: "内存", percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
                 color: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
                 subtitle: memoryUsedSummary,
                 detail: memoryTotalSummary,
-                pressureStatus: monitor.memoryPressure.title)
+                pressureStatus: monitor.memoryPressure.title,
+                active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
         }
     }
 
