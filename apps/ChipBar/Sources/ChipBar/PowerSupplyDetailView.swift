@@ -261,9 +261,19 @@ private struct PowerSankeyFlow: View {
                                 to: geometry.otherCenter)
             context.stroke(path, with: .color(.white.opacity(0.56)), style: lineStyle)
         }
-        context.fill(Path(roundedRect: CGRect(x: leftX, y: geometry.sourceTop,
-                                               width: barWidth, height: geometry.totalHeight),
-                          cornerRadius: 3), with: .color(amber))
+        // One rounded source rail, split into measured chip and estimated
+        // other-component colors, as in the reference. Clipping once avoids
+        // a visible seam or separate rounded caps at the internal division.
+        context.drawLayer { node in
+            let source = Path(roundedRect: CGRect(x: leftX, y: geometry.sourceTop,
+                                                   width: barWidth, height: geometry.totalHeight),
+                              cornerRadius: 3)
+            node.clip(to: source)
+            node.fill(source, with: .color(.white.opacity(0.5)))
+            node.fill(Path(CGRect(x: leftX, y: geometry.sourceTop,
+                                  width: barWidth, height: geometry.chipHeight)),
+                      with: .color(amber))
+        }
         context.fill(Path(roundedRect: CGRect(x: rightX, y: geometry.chipTop,
                                                width: barWidth, height: geometry.chipHeight),
                           cornerRadius: 3), with: .color(amber))
