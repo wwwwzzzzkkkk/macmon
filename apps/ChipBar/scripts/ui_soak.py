@@ -49,6 +49,33 @@ def main():
                 continue
             target = folder / source.name
             target.write_bytes(source.read_bytes())
+            if source.name == 'Monitor.swift':
+                # Only the *temporary* GUI probe can connect to a synthetic
+                # fixture on an Intel hosted runner. Production ChipBar keeps
+                # its arm64-only macmon discovery and supported platform.
+                original = target.read_text()
+                needle = '''        #else
+        return nil
+        #endif
+    }
+
+    private static func sysctlString'''
+                substitute = '''        #else
+        if let index = CommandLine.arguments.firstIndex(of: "-macmonPath"),
+           CommandLine.arguments.indices.contains(index + 1) {
+            let fixturePath = CommandLine.arguments[index + 1]
+            if FileManager.default.isExecutableFile(atPath: fixturePath) {
+                return fixturePath
+            }
+        }
+        return nil
+        #endif
+    }
+
+    private static func sysctlString'''
+                if original.count(needle) != 1:
+                    raise RuntimeError('Unexpected Monitor.resolvePath x86_64 fallback')
+                target.write_text(original.replace(needle, substitute))
             if args.chart_revision and source.name == 'Dashboard.swift':
                 target.write_bytes(subprocess.check_output(['git', 'show', f'{args.chart_revision}:Sources/ChipBar/Dashboard.swift'], cwd=root))
             if args.no_chart and source.name == 'Dashboard.swift':
