@@ -30,8 +30,43 @@ struct PowerSupplyDetailTests {
                                                  charging: false, watts: 0)) == .adapter)
         #expect(PowerSourceMode(reading: reading(hasBattery: true, adapter: true,
                                                  charging: false, watts: -5)) == .adapterAssisted)
-        #expect(SidePanelLayout.height(for: .power, powerMode: .adapterCharging)
-                > SidePanelLayout.height(for: .power, powerMode: .desktop))
+        #expect(SidePanelLayout.height(for: .power) == 410)
+        #expect(SidePanelLayout.width(for: .power) == 420)
+        #expect(SidePanelLayout.contentWidth(for: .power) - 24 == 372)
+        #expect(SidePanelLayout.width(for: .applications) == 314)
+        #expect(SidePanelLayout.width(for: .externalDisk) == 314)
+    }
+
+    @Test func sankeyRibbonsMatchMeasuredWattsAndSixteenPointGap() throws {
+        let distribution = PowerDistribution(internalWatts: 28.8, chipWatts: 6.4)
+        let layout = try #require(PowerSankeyGeometry.make(distribution: distribution))
+        #expect(abs(layout.totalHeight - 126.72) < 0.01)
+        #expect(abs(layout.chipHeight - 28.16) < 0.01)
+        #expect(abs(layout.otherHeight - 98.56) < 0.01)
+        #expect(abs(layout.totalHeight - layout.chipHeight - layout.otherHeight) < 0.01)
+        #expect(abs(layout.otherTop - layout.chipTop - layout.chipHeight - 16) < 0.01)
+        #expect(layout.sourceTop >= 0)
+        #expect(layout.otherTop + layout.otherHeight <= 190)
+    }
+
+    @Test func sankeyScaleCapsAtOneHundredFiftyPoints() throws {
+        let distribution = PowerDistribution(internalWatts: 200, chipWatts: 50)
+        let layout = try #require(PowerSankeyGeometry.make(distribution: distribution))
+        #expect(abs(layout.totalHeight - 150) < 0.001)
+        #expect(abs(layout.chipHeight - 37.5) < 0.001)
+        #expect(abs(layout.otherHeight - 112.5) < 0.001)
+        #expect(layout.otherTop + layout.otherHeight <= 190)
+    }
+
+    @Test func sankeyDoesNotDrawMissingOrImpossibleMeasurements() {
+        #expect(PowerSankeyGeometry.make(distribution:
+            PowerDistribution(internalWatts: nil, chipWatts: 6)) == nil)
+        #expect(PowerSankeyGeometry.make(distribution:
+            PowerDistribution(internalWatts: 20, chipWatts: nil)) == nil)
+        #expect(PowerSankeyGeometry.make(distribution:
+            PowerDistribution(internalWatts: 20, chipWatts: 25)) == nil)
+        #expect(PowerSankeyGeometry.make(distribution:
+            PowerDistribution(internalWatts: -1, chipWatts: 0)) == nil)
     }
 
     @Test func missingOrContradictoryReadingsAreNotFaked() {
