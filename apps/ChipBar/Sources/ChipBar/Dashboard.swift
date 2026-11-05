@@ -457,7 +457,10 @@ struct Dashboard: View {
                 if monitor.menuItems.contains(.power) {
                     ChipBarPowerSelection(selection: $monitor.menuMetric)
                 }
-                Toggle("菜单栏 SSD 温度", isOn: $monitor.ssd.menuTemperaturesEnabled)
+                Toggle("菜单栏 SSD 温度", isOn: Binding(
+                    get: { monitor.ssd.menuTemperaturesEnabled },
+                    set: { monitor.ssd.menuTemperaturesEnabled = $0 }
+                ))
                     .toggleStyle(ChipBarGlassToggleStyle())
                     .font(.caption.weight(.medium))
                     .accessibilityHint("没有外置硬盘连接时也可以随时关闭")
