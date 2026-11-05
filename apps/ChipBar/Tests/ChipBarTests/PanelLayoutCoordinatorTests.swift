@@ -23,8 +23,15 @@ import Testing
         try await Task.sleep(for: .milliseconds(240))
         #expect(fits == 0)
         coordinator.request()
-        try await Task.sleep(for: .milliseconds(240))
+        // A busy hosted macOS CI runner can delay the MainActor beyond
+        // minimumSpacing. Wait for the actual callback with a bounded
+        // deadline instead of assuming it ran within 240 ms.
+        for _ in 0..<100 {
+            if fits == 1 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
         #expect(fits == 1)
+        #expect(coordinator.applied == 1)
         coordinator.cancelPending()
     }
 
