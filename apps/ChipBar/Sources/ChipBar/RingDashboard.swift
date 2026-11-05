@@ -20,6 +20,11 @@ struct DashboardRunway: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Text(title)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(.secondary)
+                .frame(height: 20)
+                .padding(.bottom, 4)
             ZStack {
                 Circle()
                     .stroke(Color.primary.opacity(0.095), lineWidth: 6)
@@ -28,47 +33,42 @@ struct DashboardRunway: View {
                     .stroke(color, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(reduceMotion ? nil :
-                        .spring(response: 0.55, dampingFraction: 1.0), value: fraction)
-
-                VStack(spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .spring(response: 0.55, dampingFraction: 1), value: fraction)
+                if percentage?.isFinite == true {
+                    RunwayPercentage(value: fraction * 100)
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                } else {
+                    Text("—").font(.system(size: 17, weight: .medium))
                         .foregroundStyle(.secondary)
-                    if percentage?.isFinite == true {
-                        RunwayPercentage(value: fraction * 100)
-                            .font(.system(size: 17, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                            .animation(reduceMotion ? nil :
-                                .spring(response: 0.55, dampingFraction: 1.0), value: fraction)
-                    } else {
-                        Text("—")
-                            .font(.system(size: 17, weight: .medium, design: .rounded))
-                            .foregroundStyle(.secondary)
-                    }
                 }
             }
-            .frame(width: 69, height: 69)
-            .padding(.bottom, 8)
+            .frame(width: 65, height: 65)
+            .padding(.bottom, 10)
             .accessibilityHidden(true)
-
             Text(subtitle)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(.primary)
                 .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                // All three cards reserve an identical slot for wattage/RAM.
-                .frame(height: 17, alignment: .center)
-                .padding(.bottom, 3)
+                .minimumScaleFactor(0.75)
+                .frame(height: 18)
             Text(detail)
-                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .font(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
-                .frame(height: 14)
+                .frame(height: 16)
         }
         .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 5)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 15))
+        .overlay {
+            RoundedRectangle(cornerRadius: 15)
+                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.7)
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title)，\(percentage.map { String(format: "%.0f%%", $0) } ?? "占用不可用")，\(subtitle)，\(detail)" +
                             (pressureStatus.map { "，内存压力\($0)" } ?? ""))
@@ -96,28 +96,23 @@ struct DashboardANEStrip: View {
     let connected: Bool
 
     var body: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 7) {
             Image(systemName: "sparkle")
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color(red: 0.22, green: 0.65, blue: 0.79))
-                .frame(width: 24)
             Text("ANE")
-                .font(.subheadline.weight(.semibold))
-            Spacer()
-            Text("神经网络引擎功率")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                .font(.caption.weight(.medium))
+            Spacer(minLength: 2)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
                 AnimatedMetricValue(value: connected ? power : nil)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                Text("W")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                Text("W").font(.caption2).foregroundStyle(.secondary)
             }
+            .monospacedDigit()
         }
-        .padding(.horizontal, 12)
-        .frame(height: 42)
+        .padding(.horizontal, 11)
+        .frame(maxWidth: .infinity)
+        .frame(height: 43)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .combine)
     }

@@ -20,7 +20,7 @@ enum MemoryPressureRingStyle {
     static func tint(for level: MemoryPressureLevel) -> Color {
         switch tone(for: level) {
         case .neutral: return .secondary
-        case .green: return .green
+        case .green: return Color(red: 0.31, green: 0.87, blue: 0.77)
         case .yellow: return .yellow
         case .red: return .red
         }

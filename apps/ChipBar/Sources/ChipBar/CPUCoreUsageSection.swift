@@ -12,19 +12,18 @@ struct CPUCoreUsageSection: View {
         model.values.count == topology.namesByLogicalID.count
     }
 
-    private func coreShortName(_ id: Int) -> String {
-        guard verifiedCoreLabels else { return "\(id + 1)" }
-        switch topology.namesByLogicalID[id] {
-        case "超级核": return "超"
-        case "性能核": return "性"
-        case "能效核": return "能"
-        default: return "\(id + 1)"
-        }
-    }
-
     private func fullCoreName(_ id: Int) -> String {
         guard verifiedCoreLabels else { return "类型未确认" }
         return topology.namesByLogicalID[id] ?? "类型未确认"
+    }
+
+    private func tierColor(_ title: String) -> Color {
+        switch title {
+        case "超级核": return .orange
+        case "性能核": return .cyan
+        case "能效核": return Color(red: 0.31, green: 0.87, blue: 0.77)
+        default: return .accentColor
+        }
     }
 
     private func coreTint(_ id: Int) -> Color {
@@ -32,38 +31,35 @@ struct CPUCoreUsageSection: View {
         switch topology.namesByLogicalID[id] {
         case "超级核": return .orange
         case "性能核": return .cyan
-        case "能效核": return .green
+        case "能效核": return Color(red: 0.31, green: 0.87, blue: 0.77)
         default: return .accentColor
         }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Label("CPU 各核心占用", systemImage: "cpu")
-                    .font(.caption.weight(.medium))
-                Spacer()
-                Text(model.hasSample ? "\(model.values.count) 个逻辑核心" : "正在采样…")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
-            if !topology.levels.isEmpty {
-                HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 7) {
+                Text("CPU 各核心").font(.caption.weight(.semibold))
+                Spacer(minLength: 3)
+                if verifiedCoreLabels && !topology.levels.isEmpty {
                     ForEach(Array(topology.levels.enumerated()), id: \.offset) { _, tier in
-                        Text("\(tier.shortTitle) \(tier.count)")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        HStack(spacing: 3) {
+                            Circle()
+                                .fill(tierColor(tier.shortTitle))
+                                .frame(width: 6, height: 6)
+                            Text("\(tier.shortTitle) \(tier.count)")
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.78)
+                        }
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
                     }
-                    Spacer(minLength: 0)
-                    if !verifiedCoreLabels {
-                        Text("逐核类型未确认")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                    }
+                } else {
+                    Text(model.hasSample ? "\(model.values.count) 核" : "正在采样")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
-                .accessibilityElement(children: .combine)
             }
+            .accessibilityElement(children: .combine)
             HStack(alignment: .bottom, spacing: 2) {
                 if model.values.isEmpty {
                     Text("等待两次 CPU 计数器采样")
@@ -71,21 +67,15 @@ struct CPUCoreUsageSection: View {
                         .frame(maxWidth: .infinity).frame(height: 47)
                 } else {
                     ForEach(Array(model.values.enumerated()), id: \.offset) { index, percent in
-                        VStack(spacing: 3) {
-                            GeometryReader { geo in
-                                ZStack(alignment: .bottom) {
-                                    Capsule().fill(Color.primary.opacity(0.075))
-                                    Capsule().fill(coreTint(index).opacity(0.78))
-                                        .frame(height: geo.size.height * min(1, max(0, percent / 100)))
-                                        .animation(reduceMotion ? nil : .easeOut(duration: 0.23), value: percent)
-                                }
-                                .frame(maxWidth: 9)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            }.frame(height: 30)
-                            Text(coreShortName(index))
-                                .font(.system(size: 8, weight: .medium))
-                                .foregroundStyle(.secondary).lineLimit(1)
-                                .help("逻辑核心 \(index + 1) · \(fullCoreName(index))")
+                        GeometryReader { geo in
+                            ZStack(alignment: .bottom) {
+                                Capsule().fill(Color.primary.opacity(0.075))
+                                Capsule().fill(coreTint(index).opacity(0.78))
+                                    .frame(height: geo.size.height * min(1, max(0, percent / 100)))
+                                    .animation(reduceMotion ? nil : .easeOut(duration: 0.23), value: percent)
+                            }
+                            .frame(maxWidth: 9)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                         .frame(maxWidth: .infinity)
                         .help("逻辑核心 \(index + 1) · \(fullCoreName(index))：\(Int(percent.rounded()))%")

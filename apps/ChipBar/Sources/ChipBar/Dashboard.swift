@@ -66,6 +66,7 @@ struct Dashboard: View {
     @ObservedObject var monitor: Monitor
     @StateObject private var state: DashboardState
     @StateObject private var updater = ChipBarUpdater.shared
+    @StateObject private var powerReading = ChipBarPowerFlowModel.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
     private let appIcon = Bundle.main.url(forResource: "AppIcon", withExtension: "icns")
@@ -120,10 +121,14 @@ struct Dashboard: View {
             powerCards
             CPUCoreUsageSection(samplingInterval: monitor.interval,
                                 active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
-            DashboardANEStrip(power: monitor.sample?.ane, connected: monitor.connected)
+            HStack(spacing: 8) {
+                homeFanTile
+                DashboardANEStrip(power: monitor.sample?.ane, connected: monitor.connected)
+            }
             StorageCapacitySection(state: state)
             HStack(spacing: 8) {
-                sidePanelEntry("电源与功率", icon: "bolt.horizontal.circle", kind: .power)
+                sidePanelEntry("电源与功率", icon: "bolt.horizontal.circle", kind: .power,
+                               trailingValue: powerReading.reading.systemWatts)
                 sidePanelEntry("应用占用", icon: "square.stack.3d.up", kind: .applications)
             }
             errorPanel
@@ -202,9 +207,14 @@ struct Dashboard: View {
 
     /// Keep RAM capacity outside the shared ring box while leaving the
     /// memory usage percentage and macOS pressure-colored stroke unchanged.
-    private var memoryCapacitySummary: String {
-        guard monitor.connected, let memory = monitor.sample?.memory else { return "内存 —" }
-        return String(format: "%.1f / %.1f GB", memory.usedGiB, memory.totalGiB)
+    private var memoryUsedSummary: String {
+        guard monitor.connected, let memory = monitor.sample?.memory else { return "— GB" }
+        return String(format: "%.1f GB", memory.usedGiB)
+    }
+
+    private var memoryTotalSummary: String {
+        guard monitor.connected, let memory = monitor.sample?.memory else { return "共 — GB" }
+        return String(format: "共 %.1f GB", memory.totalGiB)
     }
 
     /// One and only one power history chart: the headline and real rolling
@@ -276,31 +286,29 @@ struct Dashboard: View {
     }
 
     @ViewBuilder private var powerCards: some View {
-        HStack(alignment: .top, spacing: 3) {
+        HStack(alignment: .top, spacing: 8) {
             DashboardRunway(
                 title: "CPU", percentage: monitor.connected ? monitor.sample?.cpuUtilization : nil,
-                color: accent,
+                color: Color(red: 0.36, green: 0.62, blue: 1.0),
                 subtitle: wattage(monitor.connected ? monitor.sample?.cpu : nil),
                 detail: temperatureSummary(monitor.connected ? monitor.sample?.cpuTemperature : nil))
             DashboardRunway(
                 title: "GPU", percentage: monitor.connected ? monitor.sample?.gpuUtilization : nil,
-                color: accent.opacity(0.78),
+                color: Color(red: 0.69, green: 0.56, blue: 0.99),
                 subtitle: wattage(monitor.connected ? monitor.sample?.gpu : nil),
                 detail: temperatureSummary(monitor.connected ? monitor.sample?.gpuTemperature : nil))
             DashboardRunway(
                 title: "内存", percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
                 color: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
-                subtitle: monitor.connected ? memoryCapacitySummary : "内存 —",
-                detail: "统一内存",
+                subtitle: memoryUsedSummary,
+                detail: memoryTotalSummary,
                 pressureStatus: monitor.memoryPressure.title)
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 5)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
     }
 
     private func sidePanelEntry(_ title: String, icon: String,
-                                kind: DashboardSidePanelKind) -> some View {
+                                kind: DashboardSidePanelKind,
+                                trailingValue: Double? = nil) -> some View {
         let selected = state.sidePanel == kind
         return Button {
             if kind == .applications && state.sidePanel != .applications {
@@ -318,6 +326,14 @@ struct Dashboard: View {
                     .font(.caption.weight(.medium))
                     .lineLimit(1)
                 Spacer(minLength: 2)
+                if kind == .power {
+                    Text(wattage(trailingValue))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .foregroundStyle(.primary)
+                }
                 Image(systemName: selected ? "chevron.right" : "rectangle.on.rectangle")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
@@ -333,7 +349,12 @@ struct Dashboard: View {
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(ChipBarPressStyle())
-        .accessibilityLabel("\(title)，\(selected ? "收起" : "在侧边卡片展开")")
+        .accessibilityLabel("\(title)，\(kind == .power ? wattage(trailingValue) : "")，\(selected ? "收起" : "在侧边卡片展开")")
+        .task(id: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping) {
+            guard kind == .power, monitor.dashboardVisible,
+                  !monitor.paused, !monitor.sleeping else { return }
+            await powerReading.watch()
+        }
     }
 
     private func wattage(_ power: Double?) -> String {
@@ -356,6 +377,28 @@ struct Dashboard: View {
                     .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
             }
 
+    }
+
+    private var homeFanTile: some View {
+        let fans = monitor.connected ? monitor.sample?.fans ?? [] : []
+        return HStack(spacing: 7) {
+            Image(systemName: "fanblades")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(accent)
+            Text("风扇")
+                .font(.caption.weight(.medium))
+            Spacer(minLength: 2)
+            Text(fans.isEmpty ? "— RPM" :
+                 fans.map { String(format: "%.0f", $0.rpm) }.joined(separator: "/") + " RPM")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.horizontal, 11)
+        .frame(maxWidth: .infinity)
+        .frame(height: 43)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private var fanOverview: some View {
@@ -419,6 +462,13 @@ struct Dashboard: View {
                 if monitor.menuItems.contains(.power) {
                     ChipBarPowerSelection(selection: $monitor.menuMetric)
                 }
+                Toggle("菜单栏 SSD 温度", isOn: Binding(
+                    get: { monitor.ssd.menuTemperaturesEnabled },
+                    set: { monitor.ssd.menuTemperaturesEnabled = $0 }
+                ))
+                    .toggleStyle(ChipBarGlassToggleStyle())
+                    .font(.caption.weight(.medium))
+                    .accessibilityHint("没有外置硬盘连接时也可以随时关闭")
             }
             .padding(12)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))

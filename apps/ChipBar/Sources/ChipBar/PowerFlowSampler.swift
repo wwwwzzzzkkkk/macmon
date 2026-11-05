@@ -60,7 +60,10 @@ actor ChipBarPowerSampler {
                 adapterWatts: adapter, batteryWatts: batteryWatts,
                 systemWatts: systemWatts,
                 sourceLabel: available ? "SMC 实时采样 · 系统侧为功率差估算" : "传感器暂不可用",
-                live: available, sourceKey: input == nil ? nil : "PDTR"
+                live: available,
+                sourceKey: available
+                    ? (battery.connected ? "PDTR + B0AC/B0AV" : "B0AC/B0AV")
+                    : nil
             )
         }
 
@@ -130,6 +133,7 @@ actor ChipBarPowerSampler {
 }
 
 @MainActor final class ChipBarPowerFlowModel: ObservableObject {
+    static let shared = ChipBarPowerFlowModel()
     @Published private(set) var reading = ChipBarPowerReading.unavailable
     private let sampler = ChipBarPowerSampler()
 

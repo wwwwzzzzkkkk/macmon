@@ -28,6 +28,31 @@ struct PowerDistribution {
     }
 }
 
+/// Choose topology from hardware state, never from a model-name string.
+enum PowerSourceMode: Equatable {
+    case desktop
+    case battery
+    case adapter
+    case adapterCharging
+    case adapterAssisted
+
+    init(reading: ChipBarPowerReading) {
+        guard reading.hasBattery else { self = .desktop; return }
+        guard reading.onAdapter else { self = .battery; return }
+        if reading.isCharging, (reading.batteryWatts ?? 0) > 0.5 {
+            self = .adapterCharging
+        } else if (reading.batteryWatts ?? 0) < -0.5 {
+            self = .adapterAssisted
+        } else {
+            self = .adapter
+        }
+    }
+
+    var showsBatteryBranch: Bool {
+        self == .adapterCharging || self == .adapterAssisted
+    }
+}
+
 private struct PowerTile: ViewModifier {
     func body(content: Content) -> some View {
         content.padding(12)
@@ -96,7 +121,7 @@ struct PowerSupplyDetailView: View {
     @ObservedObject var monitor: Monitor
     let active: Bool
     let close: () -> Void
-    @StateObject private var sampler = ChipBarPowerFlowModel()
+    @ObservedObject private var sampler = ChipBarPowerFlowModel.shared
 
     private let amber = Color(red: 0.93, green: 0.62, blue: 0.27)
     private var reading: ChipBarPowerReading { sampler.reading }
@@ -104,9 +129,19 @@ struct PowerSupplyDetailView: View {
         PowerDistribution(internalWatts: reading.systemWatts,
                           chipWatts: monitor.connected ? monitor.sample?.total : nil)
     }
+    private var mode: PowerSourceMode { PowerSourceMode(reading: reading) }
     private var inputWatts: Double? {
-        guard reading.onAdapter else { return nil }
+        guard reading.hasBattery, reading.onAdapter else { return nil }
         return reading.adapterWatts
+    }
+    private var batteryOutputWatts: Double? {
+        guard let watts = reading.batteryWatts, watts.isFinite, watts < 0 else { return nil }
+        return abs(watts)
+    }
+    private var chargingWatts: Double? {
+        guard mode == .adapterCharging,
+              let watts = reading.batteryWatts, watts.isFinite, watts >= 0 else { return nil }
+        return watts
     }
 
     var body: some View {
@@ -137,24 +172,53 @@ struct PowerSupplyDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("能量流向").font(.caption.weight(.semibold))
                 HStack(alignment: .center, spacing: 3) {
-                    EnergyNode(name: "外部供电", watts: inputWatts, amber: false)
-                    PowerDash(amber: false)
+                    if mode != .desktop {
+                        VStack(spacing: 5) {
+                            if mode == .battery {
+                                EnergyNode(name: "电池供电", watts: batteryOutputWatts,
+                                           amber: false)
+                            } else {
+                                EnergyNode(name: "外部供电", watts: inputWatts,
+                                           amber: false)
+                            }
+                            if mode.showsBatteryBranch {
+                                PowerDash(amber: false)
+                                    .rotationEffect(.degrees(mode == .adapterCharging ? 90 : -90))
+                                    .frame(height: 17)
+                                EnergyNode(
+                                    name: mode == .adapterCharging ? "电池充电" : "电池补充",
+                                    watts: mode == .adapterCharging
+                                        ? chargingWatts : batteryOutputWatts,
+                                    amber: false
+                                )
+                            }
+                        }
+                        PowerDash(amber: false)
+                    }
                     EnergyNode(name: "内部功率", watts: reading.systemWatts,
                                amber: true, highlighted: true)
                     PowerDash(amber: true)
                     VStack(spacing: 6) {
                         EnergyNode(name: "芯片", watts: breakdown.chipWatts, amber: false)
-                        EnergyNode(name: "其余部件",
-                                   watts: breakdown.otherWatts, amber: false)
+                        EnergyNode(name: "其余部件", watts: breakdown.otherWatts, amber: false)
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 112)
+                .frame(height: mode.showsBatteryBranch ? 128 : 112)
             }
             .modifier(PowerTile())
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("内部功率构成").font(.caption.weight(.semibold))
+                HStack(spacing: 8) {
+                    Text("内部功率构成").font(.caption.weight(.semibold))
+                    Spacer(minLength: 0)
+                    Circle().fill(amber).frame(width: 6, height: 6)
+                    Text("芯片")
+                    Circle().fill(Color.white.opacity(0.3)).frame(width: 6, height: 6)
+                    Text("其余部件")
+                }
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color.white.opacity(0.30))
@@ -165,15 +229,6 @@ struct PowerSupplyDetailView: View {
                     }
                 }
                 .frame(height: 8)
-                HStack(spacing: 4) {
-                    Circle().fill(amber).frame(width: 7, height: 7)
-                    Text("芯片 \(formatFraction(breakdown.chipFraction))")
-                    Spacer()
-                    Circle().fill(Color.white.opacity(0.30)).frame(width: 7, height: 7)
-                    Text("其余部件 \(formatFraction(breakdown.otherFraction))")
-                }
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
             }
             .modifier(PowerTile())
 
@@ -193,19 +248,8 @@ struct PowerSupplyDetailView: View {
             .font(.system(size: 11))
             .modifier(PowerTile())
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text("说明").font(.caption.weight(.semibold))
-                Text("这是内部 DC 功率读数，并非插座 AC 输入功耗。")
-                Text("其余部件 = 内部功率 − 芯片总功率（估算）。")
-            }
-            .font(.system(size: 10))
-            .foregroundStyle(.secondary)
-            .modifier(PowerTile())
         }
-        .task(id: active) {
-            guard active else { return }
-            await sampler.watch()
-        }
+        .help("内部 DC 功率不是插座 AC 输入功耗。其余部件为内部功率减去芯片总功率的估算值。")
     }
 
     private func readout(_ title: String, _ value: String) -> some View {
@@ -216,7 +260,4 @@ struct PowerSupplyDetailView: View {
         }
     }
 
-    private func formatFraction(_ fraction: Double?) -> String {
-        fraction.map { String(format: "%.0f%%", $0 * 100) } ?? "—"
-    }
 }
