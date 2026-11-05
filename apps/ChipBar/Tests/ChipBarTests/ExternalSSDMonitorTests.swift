@@ -92,6 +92,41 @@ import ChipBarCore
         #expect(!monitor.showsTemperatureInMenu(for: "disk4"))
     }
 
+    @Test func globalTemperatureVisibilityCanBeDisabledWithoutConnectedDisks() {
+        let preferences = defaults()
+        let monitor = ExternalSSDMonitor(defaults: preferences, start: false)
+        defer { monitor.shutdown() }
+        #expect(monitor.menuTemperaturesEnabled)
+        #expect(monitor.readings.isEmpty)
+
+        monitor.menuTemperaturesEnabled = false
+        #expect(monitor.selectedTemperatureReadouts.isEmpty)
+        #expect(monitor.menuSuffix.isEmpty)
+        #expect(preferences.bool(forKey: "ssdMenuGlobalEnabled") == false)
+
+        monitor.menuTemperaturesEnabled = true
+        #expect(monitor.menuTemperaturesEnabled)
+        #expect(preferences.bool(forKey: "ssdMenuGlobalEnabled"))
+    }
+
+    @Test func masterSwitchPreservesIndividualDrivePreferences() async throws {
+        let result = try result()
+        let preferences = defaults()
+        let monitor = ExternalSSDMonitor(defaults: preferences, probe: { _, _, _, _ in result })
+        defer { monitor.shutdown() }
+        try await awaitRead(monitor)
+        monitor.setTemperatureInMenu(true, for: "disk4")
+        #expect(monitor.selectedTemperatureReadouts.count == 1)
+
+        monitor.menuTemperaturesEnabled = false
+        #expect(monitor.selectedTemperatureReadouts.isEmpty)
+        #expect(monitor.menuSuffix.isEmpty)
+        #expect(!monitor.showsTemperatureInMenu(for: "disk4"))
+        monitor.menuTemperaturesEnabled = true
+        #expect(monitor.showsTemperatureInMenu(for: "disk4"))
+        #expect(monitor.selectedTemperatureReadouts.count == 1)
+    }
+
     @Test func customExecutableCannotUseSudoEvenIfSavedPreferenceIsTrue() async throws {
         let saved = defaults()
         saved.set(true, forKey: "ssdSudo")
