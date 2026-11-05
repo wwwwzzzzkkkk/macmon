@@ -115,6 +115,12 @@ struct Dashboard: View {
     }
 
     private var monitoringScreen: some View {
+        DashboardGlassContainer {
+            monitoringTiles
+        }
+    }
+
+    private var monitoringTiles: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
             hero
@@ -127,7 +133,7 @@ struct Dashboard: View {
             }
             StorageCapacitySection(state: state)
             HStack(spacing: 8) {
-                sidePanelEntry("电源与功率", icon: "bolt.horizontal.circle", kind: .power,
+                sidePanelEntry("电源", icon: "bolt.horizontal.circle", kind: .power,
                                trailingValue: powerReading.reading.systemWatts)
                 sidePanelEntry("应用占用", icon: "square.stack.3d.up", kind: .applications)
             }
@@ -282,7 +288,7 @@ struct Dashboard: View {
             .foregroundStyle(.secondary)
         }
         .padding(12)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+        .glassTile(radius: 26)
     }
 
     @ViewBuilder private var powerCards: some View {
@@ -340,13 +346,9 @@ struct Dashboard: View {
             }
             .padding(.horizontal, 11)
             .frame(height: 41)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(selected ? accent.opacity(0.42) : Color.primary.opacity(0.05),
-                                  lineWidth: 0.7)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 12))
+            .glassTile(radius: 21, tint: selected ? accent.opacity(0.13) : nil,
+                       interactive: true)
+            .contentShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
         }
         .buttonStyle(ChipBarPressStyle())
         .accessibilityLabel("\(title)，\(kind == .power ? wattage(trailingValue) : "")，\(selected ? "收起" : "在侧边卡片展开")")
@@ -398,7 +400,7 @@ struct Dashboard: View {
         .padding(.horizontal, 11)
         .frame(maxWidth: .infinity)
         .frame(height: 43)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+        .glassTile(radius: 26)
     }
 
     private var fanOverview: some View {
@@ -523,7 +525,6 @@ struct Dashboard: View {
                 Image(systemName: menuIcon(item))
                     .font(.system(size: 11))
                     .frame(width: 13)
-                    .foregroundStyle(enabled ? accent : Color.secondary)
                 Text(menuTitle(item))
                     .font(.system(size: 10, weight: .medium))
                     .lineLimit(1)
@@ -532,21 +533,14 @@ struct Dashboard: View {
                 if enabled {
                     Image(systemName: "checkmark")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(accent)
                 }
             }
-            .foregroundStyle(enabled ? Color.primary : Color.secondary)
-            .padding(.horizontal, 8)
+            .foregroundStyle(enabled ? Color.black : .primary)
+            .padding(.horizontal, 10)
             .frame(height: 34)
             .frame(maxWidth: .infinity)
-            .background(enabled ? accent.opacity(0.13) : Color.primary.opacity(0.035),
-                        in: RoundedRectangle(cornerRadius: 9))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9)
-                    .strokeBorder(enabled ? accent.opacity(0.30) : Color.primary.opacity(0.05),
-                                  lineWidth: 0.75)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 9))
+            .modifier(MenuChoiceSurface(selected: enabled))
+            .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(ChipBarPressStyle())
         .accessibilityLabel(item.title)

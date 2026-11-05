@@ -106,7 +106,7 @@ struct PowerMetricCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(9)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+        .glassTile(radius: 26)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title) 功率 \(powerDescription)，\(ringTitle) \(usageDescription)" +
                             (showsTemperature ? "，温度 \(temperatureText)" : "") +

@@ -27,10 +27,11 @@ struct DashboardRunway: View {
                 .padding(.bottom, 4)
             ZStack {
                 Circle()
-                    .stroke(Color.primary.opacity(0.095), lineWidth: 6)
+                    .stroke(.quaternary, lineWidth: 6)
                 Circle()
                     .trim(from: 0, to: fraction)
                     .stroke(color, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                    .saturation(1.18)
                     .rotationEffect(.degrees(-90))
                     .animation(reduceMotion ? nil :
                         .spring(response: 0.55, dampingFraction: 1), value: fraction)
@@ -64,11 +65,7 @@ struct DashboardRunway: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .padding(.horizontal, 5)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 15))
-        .overlay {
-            RoundedRectangle(cornerRadius: 15)
-                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.7)
-        }
+        .glassTile(radius: 26)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title)，\(percentage.map { String(format: "%.0f%%", $0) } ?? "占用不可用")，\(subtitle)，\(detail)" +
                             (pressureStatus.map { "，内存压力\($0)" } ?? ""))
@@ -113,7 +110,7 @@ struct DashboardANEStrip: View {
         .padding(.horizontal, 11)
         .frame(maxWidth: .infinity)
         .frame(height: 43)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+        .glassTile(radius: 26)
         .accessibilityElement(children: .combine)
     }
 }
