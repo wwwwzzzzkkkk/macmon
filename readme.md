@@ -3,51 +3,78 @@
 
   # ChipBar
 
-  **让 Apple Silicon 的功率、温度和应用资源占用，一眼可见。**
+  **Apple Silicon 的原生 macOS 菜单栏监控工具**
 
-  原生 macOS 菜单栏监控工具 · 紧凑 Liquid Glass 面板 · 无需为基础功率监控授予管理员权限
+  一眼查看芯片功率、CPU / GPU 与内存状态、逐核心负载、风扇、应用占用和外接硬盘。
 
-  [![ChipBar Release](https://img.shields.io/badge/ChipBar-v2.0.3-167f9f?style=flat-square)](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.3)
-  ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-555?style=flat-square)
+  [![ChipBar v3.1.1](https://img.shields.io/badge/ChipBar-v3.1.1-25a7a1?style=flat-square)](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.1.1)
   ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-555?style=flat-square)
+  ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-555?style=flat-square)
+  ![SwiftUI + AppKit](https://img.shields.io/badge/SwiftUI_%2B_AppKit-native-555?style=flat-square)
 
-  **[下载最新版](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.3)** · **[功能与使用手册](apps/ChipBar/README.md)** · **[问题反馈](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+  **[下载 v3.1.1](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.1.1)** · **[完整使用说明](apps/ChipBar/README.md)** · **[版本更新记录](apps/ChipBar/CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
 </div>
 
 ---
 
-## 产品预览
+## v3.1.1 · 现在的 ChipBar 界面
 
-<div align="center">
-  <img src="apps/ChipBar/preview.png" alt="ChipBar 原生 macOS 菜单栏监控面板，包含功率与温度等信息" width="680" />
-  <p><sub>监控面板 · 仓库中保存的应用实际截图，样式与数值可能因安装版本、设备而不同</sub></p>
-  <img src="apps/ChipBar/preview-settings.png" alt="ChipBar 浅色模式与设置页产品截图" width="680" />
-  <p><sub>浅色模式与设置页 · 现有截图素材；新版设置页采用二级页面布局</sub></p>
-</div>
+ChipBar 使用原生 SwiftUI + AppKit 和磁贴式玻璃面板；主面板宽度约 **378 pt**。下方描述来自 v3.1.1 的实际界面结构，而不是旧版设计图。
 
-## 一块面板，查看重要的 Mac 指标
-
-| 功能 | 可以查看什么 |
+| 位置 | 最新界面与交互 |
 | --- | --- |
-| ⚡ **芯片功率** | CPU / GPU / ANE 分项功率和合计功率（W），以及最近 10 分钟趋势 |
-| ◉ **圆环仪表** | CPU/GPU 活跃率与内存已用比例；内存环以绿／黄／红对应系统内存压力；已用／总容量以小号字体显示在顶部总功率旁边 |
-| ▥ **CPU 各核心占用** | 逐逻辑核心 CPU 忙碌比例的紧凑柱状图；仅在监控面板可见时更新，不需要管理员权限 |
-| 🧩 **应用资源排行** | 逐应用 CPU、GPU、**物理内存占用**、ANE 内存，自动合并可识别的辅助进程；支持前三名 / 前五名 |
-| 🌡️ **状态与温度** | CPU/GPU 功率旁显示温度；「设备与设置」展示风扇 RPM、Mac 基础信息和 SSD 状态 |
-| ⇅ **实时传输速率** | 菜单栏显示网络上下行、磁盘读写、外接磁盘读写速率 |
-| 💾 **内置与外接容量** | 首页同一「储存空间」区域展示内置与外接磁盘的可用、已使用、总容量与进度条；避免 APFS 共享空间重复计数 |
-| 💽 **外接 NVMe SSD** | 容量直接显示于首页；可在「设备与设置」查看可选 SSD 温度、SMART 和整盘实时 I/O 速度 |
-| ✨ **原生 macOS 体验** | 370 pt 紧凑面板、macOS 26+ 原生 Liquid Glass、旧系统磨砂材质、深浅模式与减少动态效果适配 |
+| **首页顶部** | 芯片总功率、CPU / GPU / ANE 分项功率、最近约 10 分钟功率趋势 |
+| **三个独立圆环磁贴** | 蓝色 CPU、紫色 GPU、薄荷青绿内存；各自显示占用百分比、对应功率或内存容量，以及温度／总容量 |
+| **CPU 各核心** | 紧凑柱状图，核类型已确认时在标题旁统一用彩色图例标注，不再逐柱重复缩写 |
+| **风扇 + ANE** | 同一行两个等宽磁贴，分别显示 RPM 和 ANE 功率 |
+| **储存空间** | 内置 Macintosh HD 容量卡片；已连接的每个外置磁盘各一张可点击卡片，断开时隐藏 |
+| **底部入口** | 「电源与功率」直接预览内部功率；「应用占用」打开独立侧边卡片 |
+| **设备与设置** | 2 × 2 硬件概览、风扇、采样间隔、八个菜单栏显示项目、菜单栏 SSD 温度总开关、应用更新 |
 
-> **功率定义：**“芯片合计”是 CPU + GPU + ANE 的芯片功率读数，**不是整台 Mac 从插座获取的电功率**。应用 GPU 百分比来自驱动时间统计；应用 ANE 项是记账内存，不是神经网络引擎的运算利用率。硬件和系统不支持的数据会标记为不可用。
+### 二级卡片：信息不重复
 
-## 安装
+- **电源与功率：** 展示内部系统功率与芯片／其余部件的能量构成，不重复首页 CPU、GPU、ANE 功率或功率曲线。Mac mini 只显示适用的内部功率结构；MacBook 自动区分电池、适配器、充电分流或电池辅助供电。无法可靠读取的值以「—」呈现。
+- **应用占用：** 在独立玻璃卡片中切换 CPU、GPU、物理内存、ANE 内存排行，默认最多五个应用；支持合并可识别的辅助进程。
+- **外置硬盘：** 点击任意外置卷的主页容量磁贴，查看该卷的容量、同一物理磁盘的温度和型号、读取／写入速率，以及该磁盘的菜单栏温度开关。Macintosh HD 不会跳转到外置硬盘页。
+- **设置：** 菜单栏选项以三列磁贴选择，最后的磁盘速率项目占两列；即使没有连接外置硬盘，也可以关闭 SSD 温度的菜单栏总开关。
 
-**方式一：下载应用**（Apple Silicon，macOS 13 或更高）
+<details>
+<summary>查看仓库保留的旧版界面截图（非 v3.1.1）</summary>
 
-前往 **[ChipBar 最新正式版本](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v2.0.3)**，下载 `ChipBar-macOS-arm64.zip`，解压后将 `ChipBar.app` 拖到“应用程序”，退出旧版后启动新版。ChipBar 使用独立安装的 [macmon](https://github.com/vladkens/macmon) 采集芯片指标。
+<p align="center">
+  <img src="apps/ChipBar/preview.png" alt="ChipBar 早期监控面板截图，布局可能与 v3.1.1 不同" width="650" />
+  <br />
+  <sub>历史首页截图：仅用于了解产品风格，不代表 v3.1.1 的磁贴排版。</sub>
+</p>
 
-**方式二：Homebrew（推荐，自动安装 macmon 依赖）**
+<p align="center">
+  <img src="apps/ChipBar/preview-settings.png" alt="ChipBar 早期设置页截图，内容可能与 v3.1.1 不同" width="650" />
+  <br />
+  <sub>历史设置截图：最新版已经调整设置结构与外置硬盘导航。</sub>
+</p>
+</details>
+
+## 主要功能
+
+| 分类 | 功能 |
+| --- | --- |
+| **实时功率** | 芯片总功率、CPU / GPU / ANE 功率、历史曲线；另在电源页提供可读取的内部 DC 功率 |
+| **利用率与温度** | CPU / GPU 活跃度、内存占用与内存压力、CPU / GPU 温度、逐核心负载与风扇 RPM |
+| **应用资源** | CPU、GPU 驱动时间、Physical Footprint 内存及可用的 ANE 内存记账排行 |
+| **网络与磁盘** | 菜单栏网络上下行、磁盘读取／写入速率；首页内部与外接卷空间 |
+| **外接 NVMe** | 多磁盘独立详情、型号、可用空间、真实读写速率、可选 SMART 温度与菜单栏温度开关 |
+| **自定义与适配** | 八个菜单栏内容项、功率指标选择、采样频率、深浅模式、减少动态效果适配 |
+| **性能与隐私** | 可见时按需刷新图表与应用排行；监控和偏好数据留在本机，不提供云同步 |
+
+**读数须知：** 芯片总功率是芯片内部各项读数的合计，不等于整台电脑的插座 AC 功耗。电源页的内部功率取决于机型与 SMC 传感器；「其余部件」是内部功率减去芯片总功率的**估算值**。应用级 ANE 指标是内存记账，**不是** ANE 运算利用率。无法读取时不会填入虚构数值。
+
+## 安装与更新
+
+支持 **Apple Silicon (arm64)、macOS 13 或以上版本**。基础指标来自独立安装的 [macmon](https://github.com/vladkens/macmon)。
+
+**GitHub 安装包：** 进入 **[ChipBar v3.1.1 Release](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.1.1)**，下载 `ChipBar-macOS-arm64.zip`；退出旧版，解压并将 `ChipBar.app` 放到「应用程序」。请确认已安装 macmon。
+
+**Homebrew（自动处理 macmon 依赖）：**
 
 ```bash
 brew tap --custom-remote wwwwzzzzkkkk/chipbar https://github.com/wwwwzzzzkkkk/macmon.git
@@ -62,24 +89,17 @@ brew update
 brew upgrade --cask wwwwzzzzkkkk/chipbar/chipbar
 ```
 
-> 安装包采用本地 ad-hoc 签名，**尚未 Apple 公证**。如系统拦截，请确认来源可信后到“系统设置 → 隐私与安全性”按提示允许打开。SSD 温度需要可选的 `smartmontools` 与硬盘盒 SMART 透传支持；基础功率监控无需 sudo。
-
-## 你可能关心的细节
-
-- **菜单栏可以自己选**：功率、CPU/GPU 活跃度、内存、CPU 温度、风扇、网络和磁盘速率都可以自由开关；保持原来的双排紧凑排版。
-- **应用内存不是仅看主进程**：按可识别的应用进程及其辅助进程汇总 Physical Footprint，必要时使用带 `≈` 标记的 RSS 近似值；可能与活动监视器逐行读数或“App 内存”系统分类不同。
-- **只做本机监控**：偏好设置在本机，趋势数据只存在内存里；没有跨 Mac 远程汇总功能。采样故障会重试，睡眠/暂停时按状态停止采集。
-- **性能友好的展示**：菜单栏同步刷新，面板关闭时不绘制趋势；SSD 和应用级采样分别采用有界的读取周期。
+> ChipBar 的发行包采用本地 ad-hoc 签名，**尚未经过 Apple 公证**。如 macOS 阻止打开，请先确认下载来源可信，再依系统提示到「系统设置 → 隐私与安全性」允许。SSD SMART 温度功能另需 `smartmontools` 和硬盘盒的传感器透传支持；没有传感器时仍可使用空间与速率功能。
 
 ## 项目与源码
 
-**ChipBar** 是 `macmon` 仓库的 **`chipbar` 分支**下的原生 SwiftUI / AppKit 客户端，代码在 **[`apps/ChipBar/`](apps/ChipBar/)**；Rust `macmon` 的上游主线位于独立的 `main` 分支。芯片指标依赖 [vladkens/macmon](https://github.com/vladkens/macmon)，感谢原作者与贡献者。
+ChipBar 是本仓库 **`chipbar` 分支**下的 SwiftUI / AppKit 原生客户端，位于 **[apps/ChipBar](apps/ChipBar/)**。仓库还保留 Rust macmon 的 `main` 分支；ChipBar 的主要芯片数据来自独立的 [vladkens/macmon](https://github.com/vladkens/macmon)。感谢原作者和贡献者。
 
-**[完整功能、指标口径与安装说明](apps/ChipBar/README.md)** · **[源码目录](apps/ChipBar/Sources/)** · **[SSD 兼容说明](apps/ChipBar/docs/EXTERNAL_SSD.md)** · **[更新记录](apps/ChipBar/CHANGELOG.md)** · **[发布页面](https://github.com/wwwwzzzzkkkk/macmon/releases)**
+**[使用与指标说明](apps/ChipBar/README.md)** · **[外置 SSD 兼容说明](apps/ChipBar/docs/EXTERNAL_SSD.md)** · **[更新记录](apps/ChipBar/CHANGELOG.md)** · **[GitHub Releases](https://github.com/wwwwzzzzkkkk/macmon/releases)**
 
 <details>
-<summary>English summary</summary>
+<summary>English overview</summary>
 
-**ChipBar** is a compact native Apple Silicon menu-bar monitor for macOS 13+. It displays CPU/GPU/ANE power, temperatures, utilization gauges, recent power trends, per-application CPU/GPU/memory activity, network/disk throughput, and optional external NVMe SSD telemetry. Powered by an independently installed `macmon` executable, with SwiftUI and AppKit presentation. ChipBar's development branch is `chipbar`, with its Swift source under `apps/ChipBar/`. Not Apple-notarized; readings depend on hardware and macOS support.
+**ChipBar v3.1.1** is a native Apple Silicon macOS menu-bar monitor (macOS 13+). Its compact tile dashboard displays CPU, GPU and memory gauges, chip power and trends, CPU-core activity, fans, ANE power and storage. Side panels show app resource rankings, hardware-dependent internal power flow, and per-volume external-drive details. Preferences provide eight menu-bar items and an SSD-temperature master switch that remains accessible when no drive is mounted. Readings depend on hardware and available sensors; the app is not notarized. The existing repository screenshots are historical, not current v3.1.1 captures.
 
 </details>
