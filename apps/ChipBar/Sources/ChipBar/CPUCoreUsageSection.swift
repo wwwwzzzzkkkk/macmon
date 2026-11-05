@@ -41,7 +41,7 @@ struct CPUCoreUsageSection: View {
             HStack(spacing: 7) {
                 Text("CPU 各核心").font(.caption.weight(.semibold))
                 Spacer(minLength: 3)
-                if !topology.levels.isEmpty {
+                if verifiedCoreLabels && !topology.levels.isEmpty {
                     ForEach(Array(topology.levels.enumerated()), id: \.offset) { _, tier in
                         HStack(spacing: 3) {
                             Circle()
