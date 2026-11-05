@@ -69,10 +69,10 @@ struct CPUCoreUsageSection: View {
                     ForEach(Array(model.values.enumerated()), id: \.offset) { index, percent in
                         GeometryReader { geo in
                             ZStack(alignment: .bottom) {
-                                Capsule().fill(Color.primary.opacity(0.075))
+                                Capsule().fill(.quaternary)
                                 Capsule().fill(coreTint(index).opacity(0.78))
                                     .frame(height: geo.size.height * min(1, max(0, percent / 100)))
-                                    .animation(reduceMotion ? nil : .easeOut(duration: 0.23), value: percent)
+                                    .animation(reduceMotion || !active ? nil : .easeOut(duration: 0.23), value: percent)
                             }
                             .frame(maxWidth: 9)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -87,7 +87,7 @@ struct CPUCoreUsageSection: View {
             }.frame(height: 47)
         }
         .padding(.horizontal, 10).padding(.vertical, 9)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+        .glassTile(radius: 26)
         .task(id: "\(samplingInterval)-\(active)") {
             guard active else { return }
             await model.watch(intervalMillis: samplingInterval)

@@ -305,7 +305,7 @@ private struct StorageVolumeCard: View {
     private var capacityRunway: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.primary.opacity(0.10))
+                Capsule().fill(.quaternary)
                 Capsule().fill(accent.opacity(0.82))
                     .frame(width: geometry.size.width * usedFraction)
             }
@@ -366,11 +366,7 @@ private struct StorageVolumeCard: View {
         // distributed equally above and below, including empty-data states.
         .frame(height: 96, alignment: .center)
         .padding(10)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
-        .overlay {
-            RoundedRectangle(cornerRadius: 13)
-                .strokeBorder(Color.primary.opacity(0.055), lineWidth: 0.6)
-        }
+        .glassTile(radius: 26, interactive: showsChevron)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilitySummary)
     }

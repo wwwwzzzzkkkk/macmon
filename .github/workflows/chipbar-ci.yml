@@ -41,10 +41,17 @@ jobs:
         run: python3 scripts/integration.py
       - name: Package and verify signature
         run: python3 scripts/version.py package
+      # A GUI-hosted profile is best-effort: macOS runners may have no active
+      # WindowServer session. Never gate a valid signed release on GUI access.
+      - name: Compare panel-open and panel-closed CPU load (GUI, best effort)
+        continue-on-error: true
+        timeout-minutes: 8
+        run: python3 scripts/ui_soak.py --seconds 72 --spacing-ms 1000 --cpu-compare --output dist/ui-profile.json
       - uses: actions/upload-artifact@v6
         with:
           name: ChipBar-arm64-${{ github.sha }}
           path: |
             apps/ChipBar/dist/ChipBar-macOS-arm64.zip
             apps/ChipBar/dist/SHA256SUMS
+            apps/ChipBar/dist/ui-profile.cpu.json
           retention-days: 14

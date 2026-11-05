@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-11-06
+
+- 升级 macOS 26+ 原生 Liquid Glass 和 macOS 27 系统玻璃交互：透明 NSPanel + 30 pt 连续圆角的 NSGlassEffectView；macOS 13–25 回退到 NSVisualEffectView 的 hudWindow/behindWindow 材质。
+- 新增共享 glassTile(radius:tint:interactive:)：原生玻璃可选择 tint/interactive，旧系统采用 ultraThinMaterial、渐变边缘及轻阴影；系统开启“减少透明度”时回退为实心背景。
+- 首页功率主卡、CPU/GPU/内存三个圆环、核心负载、风扇、ANE、内部及外接存储和底部入口统一玻璃磁贴，并放在一个 spacing=10 的 GlassEffectContainer；图表、图例和进度线不再重复叠加玻璃。
+- 统一磁贴 26 pt 连续圆角、底部按钮胶囊形态，动态文字遵循 primary/secondary；圆环轨道使用 quaternary，进度弧饱和度略增。
+- 设置页菜单栏项目选中态为白色实心胶囊加深色文字和图标，未选中保持玻璃；Zark 等外置磁盘、内部功率和应用占用入口允许交互式玻璃反馈。
+- 首页内部功率入口标题从“电源与功率”缩短至“电源”，为实时瓦数留出空间。
+- 继续保持面板关闭时取消采样任务并卸载 SwiftUI Dashboard；减少透明度和减少动态效果兼容。未修改硬件指标、功率换算或磁盘数据源。
+
 ## [3.1.1] - 2026-11-05
 
 - 修复无外置硬盘时找不到 SSD 菜单栏温度开关的问题：在“设备与设置”恢复常驻的 SSD 温度总开关，断开磁盘仍可关闭；独立磁盘选择保持不变并在重新开启后恢复。
