@@ -1,116 +1,99 @@
-# ChipBar · Apple Silicon 菜单栏监控
+# ChipBar v3.1.1 · Apple Silicon 菜单栏监控
 
-> **ChipBar v3.0.0** · macOS 13+ · Apple Silicon（arm64） · SwiftUI + AppKit  
-> 在一个 370 pt 的原生菜单栏面板中，查看功率、温度、CPU/GPU 活跃度、系统内存、应用排行和可选的外置 SSD 状态。
+> macOS 13+ · Apple Silicon (arm64) · 原生 SwiftUI + AppKit · macOS 26+ Liquid Glass
+>
+> 最新界面采用三个独立圆环磁贴、紧凑的 CPU 各核心图、风扇与 ANE 并排布局，以及“电源与功率 / 应用占用 / 外置硬盘”独立二级卡片。
 
-**[返回产品主页](../../README.md)** · **[下载正式版](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.0.0)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+**[GitHub 产品主页](../../readme.md)** · **[下载 v3.1.1](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.1.1)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
 
-## 产品截图
+## 界面与导航 · v3.1.1
 
-<div align="center">
-  <img src="preview.png" width="650" alt="ChipBar 监控面板实拍截图：芯片功率、状态与历史趋势" />
-  <p><sub>菜单栏监控面板 · 仓库保存的原生截图；不同版本及设备的显示内容可能不同</sub></p>
-  <img src="preview-settings.png" width="650" alt="ChipBar 浅色界面与设置截图" />
-  <p><sub>浅色模式与设置截图 · 当前版本已采用独立设置二级页</sub></p>
-</div>
+### 1. 主监控面板（约 378 pt 宽）
 
-
-## 3.0.0 · 独立资源卡片与实时功率流
-
-- 首页保留芯片总功率、CPU/GPU/内存圆环、逐核心占用、ANE 和内外置储存空间。原应用排行改为“应用占用”入口，点击会在主面板旁展开独立的系统 Liquid Glass 窗口，保留原有指标切换动画与最多五名应用排行。
-- “电源与功率”入口展开独立的动态功率流卡片。MacBook 使用 AppleSMC 的 PDTR/B0AC/B0AV 及系统电池状态，分别显示适配器输入、充放电及由两者推算的系统侧负载；Mac mini 等无电池设备尝试 PSTR、PDTR、PD0R 的内部系统功率。**这些数据不是插座端交流输入功率，传感器不可用时显示 —。**
-- 侧边面板优先在右侧展开，空间不足时在左侧展开；侧边关闭后停止额外读取，不会为主面板增加持续的后台功率采样。
-- 充电功率读取参考 MIT 许可的 [PowerFlow](https://github.com/dylansantwani/powerflow)，许可文本位于 [THIRD_PARTY_POWERSENSORS_LICENSE.md](THIRD_PARTY_POWERSENSORS_LICENSE.md)。
-
-## 为什么使用 ChipBar？
-
-ChipBar 专为希望**在工作时随时了解 Mac 资源状态**的用户设计。不需要反复打开活动监视器或终端，就能从菜单栏看到芯片功率、处理器活跃度、风扇速度或传输速率；点击菜单栏，则可以展开更详细的原生监控面板。
-
-它适合日常办公、视频剪辑、程序编译、本地模型推理、外接 NVMe SSD 长时间读写等场景。它是本机状态观察工具，不提供远程设备汇总、数据同步或电池/插座用电计量。
-
-## 功能详解
-
-### 1. 实时芯片功率
-
-| 信息 | 内容 |
+| 布局 | 内容 |
 | --- | --- |
-| **芯片合计** | CPU、GPU 和 ANE 功率之和，单位 W |
-| **CPU / GPU / ANE** | 三项独立功率卡片，支持有效的 0 W 和缺失值显示 |
-| **最近 10 分钟趋势** | 选择芯片合计、CPU、GPU 或 ANE 查看功率折线及时间段平均值 |
-| **设备信息** | 显示硬件 / 芯片名称、连接与暂停状态 |
+| **页头与功率趋势** | 芯片型号／当前连接状态、CPU / GPU / ANE 功率磁贴、芯片总功率及最近约十分钟的趋势图；支持切换趋势指标 |
+| **三张独立圆环磁贴** | 蓝色 CPU 活跃度、紫色 GPU 活跃度、薄荷青绿内存占用；各卡分别展示百分比及功率、温度或已用／总内存 |
+| **CPU 各核心负载** | 横向分布的逐逻辑核心柱状图；核心类型可靠识别时，在标题旁使用颜色圆点与各类型数量的图例，不逐柱重复“性／超”等标记 |
+| **风扇 + ANE** | 风扇转速与 ANE 功率分占同一行两个等宽磁贴 |
+| **存储空间** | 内置 Macintosh HD 容量卡片；每个已连接外置磁盘各自显示容量、读写速率并可点击进入自己的详情 |
+| **快捷入口** | “电源与功率”入口直接显示内部功率；“应用占用”入口打开进程排行侧边卡片 |
 
-这里的芯片合计功率**不是整机从交流插座获得的功率**，也不等同于电脑的总能耗。芯片传感器的可用性由设备、macOS 和已安装的 macmon 决定。
+三个环形数值不是功率百分比：CPU / GPU 使用活跃度，内存使用已用容量比例。内存环颜色反映系统内存压力，**不是**“内存使用率达到某个固定百分比就变红”。测不到的硬件数据会显示为不可用。
 
-### 2. 圆环利用率、内存与温度
+### 2. 「电源与功率」独立卡片
 
-- **CPU 活跃度 / GPU 活跃度**：各以紧凑的 0–100% 圆环呈现，数字与弧线同步动画；不把功率 W 当作百分比。
-- **逐逻辑核心 CPU 利用率**：圆环下方显示每个逻辑核心的忙碌比例柱图，悬停查看当前百分比。仅在面板可见、未暂停时按所选间隔更新，不把编号当作性能核／能效核类型。
-- **系统 RAM**：内存圆环中央显示已用百分比；已用／总容量移至顶部芯片合计功率旁边的小号文字；环线颜色直接对应 macOS 内存压力（正常绿、偏高黄、紧张红，未知为中性色），已用比例高不等于内存压力高。原独立内存行已移除。
-- **CPU / GPU 温度**：显示 macmon 能提供的温度，无法读取时明确标为不可用。
-- **风扇转速**：显示有效的 RPM，多个风扇的值按实际读数展示。
+首页已经显示 CPU、GPU、ANE 功率与历史曲线，这里**不重复**。侧边卡片只包含内部供电信息：
 
-数值刷新时使用柔和的弹簧过渡；系统开启“减少动态效果”时减少相应动画。功率历史最多保留约 10 分钟，退出即清空。
+- **能量流向：** 琥珀色高亮内部功率；右侧分为芯片与其余部件。没有可信读数的节点显示“—”，而不是推算不存在的外部 AC 功耗。
+- **根据设备适配：** 无电池的 Mac mini 不显示无意义的外部供电节点；MacBook 使用电池时显示“电池供电”，连接适配器时显示适配器供电，充电时同时显示系统与电池支路；插电但电池仍放电时按辅助供电处理。
+- **内部功率构成：** 琥珀色代表芯片，浅灰色代表其余部件；只展示堆叠比例条及简明图例，不重复标百分比行。
+- **读数信息：** 实际 SMC 传感器来源、每秒采样、在线状态。测量注意事项保留在提示信息中，不再用整块说明磁贴占空间。
 
-### 内置与外接储存可用空间
+桌面设备尝试的内部功率传感器包括 `PSTR`、`PDTR`、`PD0R`；MacBook 还依赖电池、适配器状态以及机型支持的 SMC 读数。**内部 DC 功率不是插座端 AC 功耗。**「其余部件」= 内部功率 − 芯片总功率，属于**估算**；当读数缺失或彼此矛盾时不绘制虚假的构成结果。
 
-主面板同一「储存空间」区域显示 **内置启动盘与已挂载外接 SSD / 磁盘**的可用容量、已使用容量和总容量，分别使用进度条展示空间占用；不必进入二级页面。
+### 3. 「应用占用」独立卡片
 
-- 通过系统 `DiskArbitration` 确认磁盘为**内置设备**，并从 macOS 的 APFS Data 数据卷读取当前用户可用的文件系统空间；必要时回退到启动卷。不把外接硬盘或网络磁盘冒充为内置空间。
-- **只读取一份卷容量**，不会把同一 APFS 容器内的 System、Data 和其他共享卷重复累加。显示值是卷容量与当前可用空间，并非 NAND 闪存原始容量、剩余寿命或所有储存设备容量之和。
-- 大约每 30 秒重新读取一次；不安装辅助程序、不调用管理员权限、不运行 SMART 命令。无法可靠确认内置启动磁盘时显示「不可用」，不会填入虚假数值。
-- 外接已挂载卷通过原生 Disk Arbitration / IOKit 读取容量，不依赖 SMART 温度功能；APFS 同盘共享容量不累加，单位按照 macOS 十进制磁盘容量格式显示。
+点击首页入口后，在独立玻璃侧边卡片中选择四种指标，默认展示最多五个应用。页面移除了面向开发者的长段采样说明和无意义的固定高度留白。
 
-### 3. 「应用占用」：CPU / GPU / 内存 / ANE
+| 指标 | 口径 |
+| --- | --- |
+| **CPU** | 通过逐进程 CPU 时间差计算；一个逻辑核心约为 100%，多核应用可能超过 100% |
+| **GPU** | 驱动公开的逐进程 GPU 时间统计，**不是**把全机 GPU 百分比按应用分摊 |
+| **内存** | 优先使用进程 Physical Footprint，并尽可能合并同一应用辅助进程；读取不可用时采用明确标注的 RSS 近似 |
+| **ANE** | 系统公开的应用级 ANE 内存记账，**不是**神经网络引擎算力利用率 |
 
-点击主面板“应用占用”入口后，在旁边的独立玻璃卡片中默认显示资源排行**前五名**，点击“收起”可查看**前三名**。四项可以随时切换：
+应用名称与图标来自系统可识别的进程关系；有些独立服务可能无法归属到某个应用包。短时间重开会复用近期结果；只在需要时进行应用采样，避免菜单栏长期运行时不必要的负担。
 
-| 选项 | 指标含义 | 需要了解 |
-| --- | --- | --- |
-| **CPU** | 逐进程 CPU 时间差与采样间隔计算出的占比 | 一个逻辑核心约为 100%，多核应用可能超过 100% |
-| **GPU** | AGX 驱动暴露的逐进程 GPU 时间占比 | 可能超过 100%，不是将整机 GPU 占用率按应用分摊 |
-| **内存** | 逐进程 Physical Footprint（物理内存足迹）按应用合并，自动显示 MB/GB | 无法读取足迹时可用 RSS 近似，带 `≈`；与活动监视器的系统“App 内存”分类不相同 |
-| **ANE** | 系统记账的应用级 ANE 内存 | **不是 ANE 运算利用率**，系统没有提供时显示不可用 |
+### 4. 「外置硬盘」独立卡片
 
-按可识别的应用包和辅助进程分组汇总；独立进程或不能可靠确定所属应用的服务可能单独列出。同一应用涉及多个 Renderer / Helper 时，其总数可能明显大于活动监视器里单独的主进程。
+首页**只有检测到实际挂载的外置卷**才显示对应容量磁贴。每个磁盘的磁贴可以单独点击；内置 Macintosh HD 仍为只读容量展示，不会进入外置盘页。
 
-应用资源采样仅在面板需要时进行，至少间隔约 2 秒；面板短时间内重新打开会复用最多 10 秒的最近读数，不保存历史。
+外置磁盘详情沿用现有玻璃磁贴设计，包括：
 
-**实际使用验证：** 在 Apple M5 Pro 的诊断构建中，Google Chrome 和 ChatGPT 的应用内存已读取出 GB 级汇总值，并与活动监视器分层查看的相关子进程数量级基本吻合。两者采样时间及进程归属口径不同，不应期望逐字节一致。
+- 卷名、SMART 能识别的 SSD 型号、已用百分比、醒目的可用容量、总容量和 8 pt 占用进度条。
+- 温度、读取、写入三个等宽小磁贴。读写速率与首页**共享同一套磁盘采样数据**，不是单独估算的另一组数字。
+- **“在菜单栏显示”**原生开关，针对当前外接物理磁盘保存温度显示偏好。多盘各自拥有独立详情与选择；当前磁盘断开后对应入口会消失。
 
-### 4. 菜单栏自定义
+空间与磁盘速率由 macOS 原生 API 读取，不需要 SMART。**温度与型号是否可用，取决于 `smartmontools`、硬盘接口及桥接芯片是否透传**；无法读取时显示“—”。Zark、ZHITAI 和其他磁盘型号仅是可能的实际设备读数，应用不会硬编码特定品牌、容量、温度或速度。设备重新连接后物理盘编号有可能变化，此时可能需要重新检查该盘的菜单栏温度偏好。
 
-菜单栏保留紧凑的双行排版，可在**设置 → 菜单栏项目**中自由选择需要常驻显示的项目：
+### 5. 「设备与设置」页面
 
-- Logo、芯片功率、CPU / GPU 利用率、系统内存、CPU 温度与风扇 RPM。
-- 网络上传 / 下载速率；内置与外接磁盘合计的读取 / 写入速率，以及外接磁盘单独的读写速率。
-- 可选的外置 SSD 温度读数。
+设置仍采用原有紧凑磁贴风格，包含：
 
-菜单栏数值按选定采样节奏同步刷新，尽量减少数字宽度变化导致的位置跳动。展开面板为了保持简洁**不重复展示网络速率**，这些指标仍可单独保留在菜单栏。
+- **设备信息：** 芯片与机型，2 × 2 硬件概览（系统版本、统一内存、CPU 核心及核类型），下方只保留风扇转速状态。
+- **采样频率：** 可选择受支持的硬件刷新间隔，权衡读数更新与资源开销。
+- **菜单栏显示：** 三列共 **8 个**项目：图标、功率、CPU/GPU 活跃度、内存、CPU 温度、风扇、网络、磁盘速率；最后一项跨两列。功率项目另有指标分段选项。
+- **SSD 温度总开关：** 始终可操作，**即使没有连接任何外置盘**，也可以关闭菜单栏 SSD 温度。关闭总开关不会清空单块磁盘已保存的偏好。
+- **更新检查：** 显示当前版本与应用更新状态，可按界面提示检查新版。
 
-### 5. 外接 NVMe SSD
+外置磁盘的详细状态与逐盘开关已经移至自己的磁盘二级页，设置里不再重复一块大型 SSD 详情卡片。
 
-SSD 监控是**可选功能**，用户开启后可在面板中查看：
+### 截图说明
 
-- 外接物理磁盘型号与当前温度（°C）；可用 / 总空间直接显示在主页储存区域。
-- 磁盘真实读取 / 写入速率（MB/s），与接口标称带宽不同。
-- 在「设备与设置」中的 SSD 详情查看温度传感器及 SMART 状态。
-- 多块 SSD 的发现与离线状态；SMART 读数过期或无透传时不会伪造温度。
+现有仓库保留 `preview.png` 和 `preview-settings.png` 两张历史截图，但它们展示的是**较早版本**，不应当视为 v3.1.1 的真实界面截图。为避免误导，新版 UI 的结构以以上说明和源码为准；可在本机重新截取 v3.1.1 实际界面后替换图片。
 
-磁盘速度和空间使用 macOS 本机接口，可不依赖 `smartctl`；**SMART / 温度**需额外安装 `smartmontools`，并要求 SSD 与硬盘盒支持透传。温度通常约每 30 秒按轮读取，实时读写速度在面板可见时才持续采样。详见 **[SSD 安装、权限和兼容说明](docs/EXTERNAL_SSD.md)**。
+<details>
+<summary>展开旧版界面参考图</summary>
 
-### 6. Liquid Glass 与交互细节
+<p align="center">
+  <img src="preview.png" width="640" alt="ChipBar 旧版主面板参考图" />
+  <br />
+  <sub>历史主面板截图，并非 v3.1.1。</sub>
+</p>
 
-- macOS 26+ 使用系统 `NSGlassEffectView`；较早版本使用 `NSVisualEffectView`，并适配深色 / 浅色模式。
-- **394 pt 紧凑主面板**；窗口依屏幕可用空间调整高度，内容多时支持滚动。
-- 进入「设备与设置」后切换到**统一的二级页面**，显示 Mac 基础信息、风扇、SSD / SMART 和刷新率与菜单栏偏好；左上角「返回」回到监控面板。
-- 页面切换采用淡入和方向滑动，固定同一玻璃窗口高度，减少反复重算面板导致的跳动。
-- 支持显示 / 隐藏、暂停 / 恢复；点击其他地方或按 Esc 关闭面板。
+<p align="center">
+  <img src="preview-settings.png" width="640" alt="ChipBar 旧版设置页参考图" />
+  <br />
+  <sub>历史设置页截图，并非 v3.1.1。</sub>
+</p>
+</details>
 
-## 安装和更新
+## 安装与更新
+
+**系统要求：** Apple Silicon Mac、macOS 13 或以上；基础芯片数据由独立的 [macmon](https://github.com/vladkens/macmon) 提供。部分传感器在不同 Mac 芯片和 macOS 版本上可能不可用。
 
 ### Homebrew（推荐）
-
-需要 Apple Silicon Mac、macOS 13+、Homebrew。
 
 ```bash
 brew tap --custom-remote wwwwzzzzkkkk/chipbar https://github.com/wwwwzzzzkkkk/macmon.git
@@ -118,40 +101,40 @@ brew install --cask wwwwzzzzkkkk/chipbar/chipbar
 open -a ChipBar
 ```
 
-ChipBar 的 Cask 依赖独立的 `macmon` formula；Homebrew 会处理该依赖。
+该 Cask 会声明独立的 macmon 依赖。更新：
 
 ```bash
 brew update
 brew upgrade --cask wwwwzzzzkkkk/chipbar/chipbar
 ```
 
-### 手动下载安装包
+### 手动安装
 
-从 **[GitHub Releases](https://github.com/wwwwzzzzkkkk/macmon/releases)** 下载最新的 `ChipBar-macOS-arm64.zip`，解压后将 `ChipBar.app` 放进应用程序文件夹。**请先彻底退出旧版再启动新版本**。手动下载需要自行安装受支持的 macmon 可执行程序，并确保 ChipBar 能自动发现。
+1. 打开 **[v3.1.1 正式发布页](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.1.1)**，下载 `ChipBar-macOS-arm64.zip`（发布页同时提供 `SHA256SUMS`）。
+2. 退出正在运行的旧 ChipBar。
+3. 解压后将 `ChipBar.app` 移入「应用程序」，启动新版。手动安装请另行确保 macmon 可用。
 
-本项目的二进制使用 ad-hoc 本地签名，**没有 Developer ID 签名或 Apple 公证**；如 macOS 提示阻止打开，应先确认下载来源，再依系统提示在“隐私与安全性”允许打开。
+发布包采用**本地 ad-hoc 签名，并未经过 Apple Developer ID 公证**。如 macOS 阻止打开，请核对下载来源与校验值后依系统提示允许。ChipBar 不为基础功率监控安装常驻 root 服务。
 
 ### 首次使用
 
-1. 启动后点击菜单栏中的 ChipBar 读数。
-2. 查看芯片合计、CPU/GPU/ANE、利用率、内存和温度。
-3. 点击“应用占用”打开右侧独立卡片，再在 CPU、GPU、内存或 ANE 间切换排行。
-4. 在「设备与设置」选择 1 / 2 / 5 / 10 秒硬件刷新间隔及常驻菜单栏项目。
-5. 如果使用外置 NVMe SSD，可开启相应监控；温度功能按需安装 `smartmontools`。
+1. 点击菜单栏中的 ChipBar 指标打开主页。
+2. 查看功率、三个独立圆环、逐核心负载以及风扇／ANE。
+3. 点击「电源与功率」或「应用占用」查看对应侧边页；已挂载外置盘还可点击各自的容量卡片。
+4. 打开「设备与设置」选择菜单栏指标和采样间隔；即使没有外置盘，也可关闭 SSD 温度总开关。
+5. 需要 SSD 温度时安装 `smartmontools`，并核对硬盘与硬盘盒 SMART 兼容性，详见 **[外接 NVMe SSD 指南](docs/EXTERNAL_SSD.md)**。
 
-## 技术原理与隐私
+## 指标边界、隐私与性能
 
-ChipBar 是 Apple Silicon 的 SwiftUI / AppKit 原生客户端，使用独立运行的 [macmon](https://github.com/vladkens/macmon) 通过 JSON 流获得主要硬件指标。应用、磁盘、网络的相关数据由 macOS 本地接口读取。
+- **芯片功率**和**内部系统功率**是不同读数。macmon 提供芯片指标，设备内部供电使用可用的 AppleSMC 传感器；这两者都不能替代墙插电表。
+- **网络与磁盘速度**是采样周期内的传输速率，单位 MB/s 等。首次采样建立计数器基线；没有足够数据时不会把“未知”伪装成 0。
+- **内存**既展示已用容量，也用状态色传达系统内存压力。应用级内存统计并不完全等同于活动监视器的整机内存分类。
+- **按需采样：** 主面板隐藏、睡眠或暂停时，部分高成本视图和采样会停止或降低频率；SSD 温度探测有独立周期，具体见 [SSD 指南](docs/EXTERNAL_SSD.md)。
+- **本地隐私：** 趋势数据与应用排行留在本机，常规运行不向云端上传监控历史，也不提供远程设备管理。
 
-- **基础功率读取**不需要管理员权限，不安装常驻 root 服务，也不需要开启 HTTP 服务器。
-- **SMART 权限**取决于实际硬盘与 macOS；对已有非交互授权仅按用户已保存的兼容配置使用，不会静默授予权限。
-- **偏好设置保存在本机**；趋势和应用排行不上传服务器，不保存跨次启动的监控历史。
-- 面板关闭后会停止不必要的重绘及部分采样；睡眠、暂停及退出时依不同数据源处理采样生命周期。
-- 程序不能代替专业电力测量仪器、完整的 Activity Monitor 或设备硬件诊断软件。
+## 技术实现与开发
 
-## 开发者指南
-
-代码位于 `apps/ChipBar`，与仓库中 Rust macmon 的 `main` 分支分别维护。建议使用 Xcode 或相应 Apple Command Line Tools / Swift 环境。
+ChipBar 代码位于本仓库 `chipbar` 分支的 `apps/ChipBar` 目录中。Rust macmon 上游主体仍保存在独立的 `main` 分支。客户端通过 SwiftUI 组合磁贴、图表、页面，借助 AppKit 管理菜单栏和原生侧边 `NSPanel`，并使用 macOS 本机接口读取外置卷信息。
 
 ```bash
 git clone --branch chipbar https://github.com/wwwwzzzzkkkk/macmon.git
@@ -162,35 +145,26 @@ cd macmon/apps/ChipBar
 open dist/ChipBar.app
 ```
 
-独立执行构建脚本会生成 arm64 的 `.app`。实际 CI 还会执行打包、签名校验、故障检查与 Homebrew Cask 更新。详见 **[验证记录](VALIDATION.md)**、**[变更历史](CHANGELOG.md)**、**[开发协作约定](AGENTS.md)**。
-
-### 源码模块
-
-| 文件 | 职责 |
+| 源码模块 | 职责 |
 | --- | --- |
-| `Sources/ChipBar/App.swift` | App 入口、诊断命令、截图与 UI 测试入口 |
-| `Sources/ChipBar/Monitor.swift` / `StreamClient.swift` | macmon 流、状态、过期检测与重试 |
-| `Sources/ChipBar/Dashboard.swift` / `MenuController.swift` | 菜单栏、原生玻璃面板与设置导航 |
-| `Sources/ChipBar/MetricRing.swift` / `PowerTrendPlot.swift` | 动画利用率圆环与功率趋势 |
-| `Sources/ChipBar/ApplicationActivitySampler.swift` / `ApplicationUsageSection.swift` | CPU、GPU、物理内存与 ANE 的逐应用排行 |
-| `Sources/ChipBar/SSDSection.swift` / `ExternalSSDMonitor.swift` | 外接 NVMe SSD 展示、检测与温度 |
-| `Sources/ChipBarCore/` | 指标解析、数据格式化、进程分组和辅助工具 |
+| `Dashboard.swift` / `RingDashboard.swift` / `CPUCoreUsageSection.swift` | 主界面、三圆环磁贴及逐核心图例 |
+| `SidePanelView.swift` / `SidePanelController.swift` | 独立玻璃侧边页与窗口尺寸、导航 |
+| `PowerSupplyDetailView.swift` / `PowerFlowSampler.swift` | Mac mini / MacBook 供电拓扑、内部功率测量与估算构成 |
+| `ApplicationActivitySampler.swift` / `ApplicationUsageSection.swift` | 逐应用 CPU / GPU / 内存 / ANE 排行 |
+| `StorageCapacitySection.swift` / `ExternalDiskDetailView.swift` | 内外置容量卡片、卷级导航与磁盘详情 |
+| `ExternalSSDMonitor.swift` / `SSDSection.swift` | 可选 SMART 温度、菜单栏温度偏好及探测逻辑 |
+| `Monitor.swift` / `MenuController.swift` | macmon 流、更新周期、菜单栏、玻璃窗口生命周期 |
 
-### 本机数据诊断
+### 本机诊断
 
 ```bash
-# 真实芯片数据采样
 dist/ChipBar.app/Contents/MacOS/ChipBar --diagnose
-
-# 应用 CPU/GPU/内存/ANE 进程数据（JSON）
 dist/ChipBar.app/Contents/MacOS/ChipBar --diagnose-apps
-
-# 可选 SSD 只读诊断
 dist/ChipBar.app/Contents/MacOS/ChipBar --diagnose-ssd
 ```
 
-`--diagnose-apps` 输出每个应用的原始内存字节数、显示值、是否使用 RSS 近似、分组进程数量，便于与活动监视器逐项核对。请注意诊断文本可能包含当前运行应用的名称，分享前请自行审阅。
+诊断输出可能包含运行中的应用名称和本机设备信息，分享前请自行审阅。完整变更见 [CHANGELOG.md](CHANGELOG.md)，硬件兼容与 SMART 权限细节见 [docs/EXTERNAL_SSD.md](docs/EXTERNAL_SSD.md)。
 
 ## 致谢
 
-ChipBar 建立在 [vladkens/macmon](https://github.com/vladkens/macmon) 的实时 Apple Silicon 指标采样能力之上。感谢上游作者与开源贡献者。ChipBar 原生菜单栏界面、应用分组和 SSD 展示维护于本仓库的 `chipbar` 分支。
+ChipBar 基于 [vladkens/macmon](https://github.com/vladkens/macmon) 的 Apple Silicon 指标采样能力构建。电源传感器读取也参考了 MIT 许可项目 [PowerFlow](https://github.com/dylansantwani/powerflow)，相关许可说明见 [THIRD_PARTY_POWERSENSORS_LICENSE.md](THIRD_PARTY_POWERSENSORS_LICENSE.md)。感谢相关开源项目的作者与贡献者。
