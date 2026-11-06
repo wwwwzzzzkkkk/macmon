@@ -470,7 +470,13 @@ struct Dashboard: View {
                     }
                 }
                 if monitor.menuItems.contains(.power) {
-                    ChipBarPowerSelection(selection: $monitor.menuMetric)
+                    LiquidGlassSegmentedSelector(
+                        selection: $monitor.menuMetric,
+                        options: PowerMetric.allCases.map {
+                            LiquidGlassSegment(value: $0, title: $0.title)
+                        },
+                        accessibilityLabel: "菜单栏功率指标"
+                    )
                 }
                 Toggle("菜单栏 SSD 温度", isOn: Binding(
                     get: { monitor.ssd.menuTemperaturesEnabled },
