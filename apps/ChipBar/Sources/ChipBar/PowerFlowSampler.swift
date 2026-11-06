@@ -24,6 +24,13 @@ struct ChipBarPowerReading: Equatable, Sendable {
     )
 }
 
+/// The SMC/DC power rail is slower-changing than chip activity; poll it
+/// independently from the user-configured macmon CPU/GPU sampling interval.
+enum PowerSamplingCadence {
+    static let seconds = 3
+    static let nanoseconds: UInt64 = 3_000_000_000
+}
+
 actor ChipBarPowerSampler {
     private var smc: SMCReader?
     private var missed = 0
@@ -142,7 +149,7 @@ actor ChipBarPowerSampler {
             let result = await sampler.read()
             guard !Task.isCancelled else { return }
             reading = result
-            do { try await Task.sleep(nanoseconds: 1_000_000_000) }
+            do { try await Task.sleep(nanoseconds: PowerSamplingCadence.nanoseconds) }
             catch { return }
         }
     }
