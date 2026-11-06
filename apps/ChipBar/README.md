@@ -1,12 +1,12 @@
-# ChipBar v3.2.1 · Apple Silicon 菜单栏监控
+# ChipBar v3.2.2 · Apple Silicon 菜单栏监控
 
 > macOS 13+ · Apple Silicon (arm64) · 原生 SwiftUI + AppKit · macOS 26+ Liquid Glass
 >
 > 最新界面采用三个独立圆环磁贴、紧凑的 CPU 各核心图、风扇与 ANE 并排布局，以及“电源与功率 / 应用占用 / 外置硬盘”独立二级卡片。
 
-**[GitHub 产品主页](../../readme.md)** · **[下载 v3.2.1](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.2.1)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+**[GitHub 产品主页](../../readme.md)** · **[下载 v3.2.2](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.2.2)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
 
-## 界面与导航 · v3.2.1
+## 界面与导航 · v3.2.2
 
 ### 1. 主监控面板（约 378 pt 宽）
 
@@ -21,15 +21,15 @@
 
 三个环形数值不是功率百分比：CPU / GPU 使用活跃度，内存使用已用容量比例。内存环颜色反映系统内存压力，**不是**“内存使用率达到某个固定百分比就变红”。测不到的硬件数据会显示为不可用。
 
-### 2. 「电源与功率」桑基图侧卡（v3.2.1）
+### 2. 「电源与功率」桑基图侧卡（v3.2.2）
 
-首页已经显示 CPU、GPU、ANE 功率与历史曲线，这里**不重复**。二级页采用约 420 pt 宽的独立玻璃侧卡，保留顶部返回按钮、传感器在线状态、实时胶囊，下面只有 **“功率流向”** 和 **SMC 来源说明** 两张磁贴。
+首页已经显示 CPU、GPU、ANE 功率与历史曲线，这里**不重复**。二级页采用约 420 pt 宽的独立玻璃侧卡，保留顶部返回按钮、传感器在线状态、实时胶囊，下面仅保留一张 **“功率流向”** 磁贴，已移除最下方的文字说明。
 
-- **桑基图：** 190 pt 高的 SwiftUI Canvas，左侧内部功率按实际瓦数流向右侧芯片、其余部件两个节点。流带使用三次贝塞尔曲线与琥珀／灰白渐变；芯片流带带 8 pt 琥珀色柔光。
+- **桑基图：** 190 pt 高的 SwiftUI Canvas，左侧内部功率按实际瓦数流向右侧芯片、其余部件两个节点。流带使用三次贝塞尔曲线与琥珀／高对比度中性色渐变；芯片流带带 8 pt 琥珀色柔光。
 - **比例与布局：** 每瓦 4.4 pt，高度最多 150 pt；右侧两个节点间隔 16 pt。侧卡内部绘图区域约 372 pt，其他二级卡片仍采用原来的紧凑宽度。
-- **动画：** 两条流带中线的圆头虚线以约 1.1 秒为周期流动；“减少动态效果”、采样暂停或面板关闭时不再刷新动画。
+- **动画：** 每秒功率更新时，流带高度与功率／占比数字以约 0.7 秒平滑过渡；数值标签固定位置，避免上下跳动。两条流带的圆头虚线以约 1.1 秒为周期流动，减少动态效果、采样暂停或面板关闭时不持续刷新。
 - **实时标签：** 内部系统功率、芯片功率、其余部件估算功率与各自占比。MacBook 电池供电时来源文字会随实际状态变化；Mac mini 不会凭空显示插座 AC 功率。
-- **说明：** 自动显示该机型真实的 SMC PSTR / PDTR / 电池通道来源。内部 DC 功率**不是**插座 AC 输入功耗；“其余部件”是内部功率减去芯片总功率的**估算值**，无效读数不绘制虚构流带。
+- **读数边界：** 内部 DC 功率**不是**插座 AC 输入功耗；“其余部件”由内部功率减去芯片总功率**估算**，无效读数不绘制虚构流带。底部数据源说明磁贴已移除，但原有 SMC 传感器采样方式保持不变。
 
 支持 VoiceOver 一次朗读内部功率、芯片功率和其余部件估算功率。图中没有独立的功率构成进度条，也不含重复的 CPU/GPU 曲线。
 
@@ -72,7 +72,7 @@
 
 ### 截图说明
 
-现有仓库保留 `preview.png` 和 `preview-settings.png` 两张历史截图，但它们展示的是**较早版本**，不应当视为 v3.2.1 的真实界面截图。为避免误导，新版 UI 的结构以以上说明和源码为准；可在本机重新截取 v3.2.1 实际界面后替换图片。
+现有仓库保留 `preview.png` 和 `preview-settings.png` 两张历史截图，但它们展示的是**较早版本**，不应当视为 v3.2.2 的真实界面截图。为避免误导，新版 UI 的结构以以上说明和源码为准；可在本机重新截取 v3.2.2 实际界面后替换图片。
 
 <details>
 <summary>展开旧版界面参考图</summary>
@@ -80,13 +80,13 @@
 <p align="center">
   <img src="preview.png" width="640" alt="ChipBar 旧版主面板参考图" />
   <br />
-  <sub>历史主面板截图，并非 v3.2.1。</sub>
+  <sub>历史主面板截图，并非 v3.2.2。</sub>
 </p>
 
 <p align="center">
   <img src="preview-settings.png" width="640" alt="ChipBar 旧版设置页参考图" />
   <br />
-  <sub>历史设置页截图，并非 v3.2.1。</sub>
+  <sub>历史设置页截图，并非 v3.2.2。</sub>
 </p>
 </details>
 
@@ -111,7 +111,7 @@ brew upgrade --cask wwwwzzzzkkkk/chipbar/chipbar
 
 ### 手动安装
 
-1. 打开 **[v3.2.1 正式发布页](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.2.1)**，下载 `ChipBar-macOS-arm64.zip`（发布页同时提供 `SHA256SUMS`）。
+1. 打开 **[v3.2.2 正式发布页](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.2.2)**，下载 `ChipBar-macOS-arm64.zip`（发布页同时提供 `SHA256SUMS`）。
 2. 退出正在运行的旧 ChipBar。
 3. 解压后将 `ChipBar.app` 移入「应用程序」，启动新版。手动安装请另行确保 macmon 可用。
 
