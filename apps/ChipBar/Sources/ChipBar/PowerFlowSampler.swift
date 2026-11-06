@@ -142,12 +142,17 @@ actor ChipBarPowerSampler {
 @MainActor final class ChipBarPowerFlowModel: ObservableObject {
     static let shared = ChipBarPowerFlowModel()
     @Published private(set) var reading = ChipBarPowerReading.unavailable
+    // Chip and system DC numbers are latched into one 3-second power frame.
+    // The dashboard's independent 1/2/5/10 s macmon updates cannot jitter
+    // the Sankey between SMC readings.
+    @Published private(set) var chipWattsAtReading: Double?
     private let sampler = ChipBarPowerSampler()
 
-    func watch() async {
+    func watch(chipPower: @MainActor @escaping () -> Double?) async {
         while !Task.isCancelled {
             let result = await sampler.read()
             guard !Task.isCancelled else { return }
+            chipWattsAtReading = chipPower()
             reading = result
             do { try await Task.sleep(nanoseconds: PowerSamplingCadence.nanoseconds) }
             catch { return }
