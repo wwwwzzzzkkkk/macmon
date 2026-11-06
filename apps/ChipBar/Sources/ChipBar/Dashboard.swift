@@ -363,7 +363,9 @@ struct Dashboard: View {
         .task(id: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping) {
             guard kind == .power, monitor.dashboardVisible,
                   !monitor.paused, !monitor.sleeping else { return }
-            await powerReading.watch()
+            await powerReading.watch(chipPower: {
+                monitor.connected ? monitor.sample?.total : nil
+            })
         }
     }
 
