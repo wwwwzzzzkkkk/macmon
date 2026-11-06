@@ -96,11 +96,46 @@ struct PowerSankeyGeometry {
 
 /// The chart is drawn into a single Canvas. Its animated dashed lines are
 /// invalidated only while the side panel is actually mounted and active.
-private struct PowerSankeyFlow: View {
+private struct PowerSankeyFlow: View, Animatable {
     let distribution: PowerDistribution
     let externalWatts: Double?
     let sourceTitle: String
     let active: Bool
+
+    // These three values are interpolated by SwiftUI between one-second samples.
+    // Canvas geometry and every displayed number use the SAME intermediate frame.
+    // This avoids abrupt geometry/label jumps without smoothing the sensor model.
+    private var animatedInternalWatts: Double
+    private var animatedChipWatts: Double
+    private var animatedExternalWatts: Double
+
+    init(distribution: PowerDistribution, externalWatts: Double?,
+         sourceTitle: String, active: Bool) {
+        self.distribution = distribution
+        self.externalWatts = externalWatts
+        self.sourceTitle = sourceTitle
+        self.active = active
+        animatedInternalWatts = distribution.internalWatts ?? 0
+        animatedChipWatts = distribution.chipWatts ?? 0
+        animatedExternalWatts = externalWatts ?? 0
+    }
+
+    var animatableData: AnimatablePair<Double, AnimatablePair<Double, Double>> {
+        get { AnimatablePair(animatedInternalWatts,
+                            AnimatablePair(animatedChipWatts, animatedExternalWatts)) }
+        set {
+            animatedInternalWatts = newValue.first
+            animatedChipWatts = newValue.second.first
+            animatedExternalWatts = newValue.second.second
+        }
+    }
+
+    private var displayedDistribution: PowerDistribution {
+        // An invalid sensor pair must stay unavailable, even during a transition.
+        guard distribution.otherWatts != nil else { return distribution }
+        return PowerDistribution(internalWatts: animatedInternalWatts,
+                                 chipWatts: animatedChipWatts)
+    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -129,7 +164,7 @@ private struct PowerSankeyFlow: View {
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(value(distribution.internalWatts))
+                Text(value(displayedDistribution.internalWatts))
                     .font(.system(size: 32, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
@@ -140,7 +175,7 @@ private struct PowerSankeyFlow: View {
             }
             HStack(spacing: 3) {
                 Text(sourceTitle)
-                Text(value(externalWatts))
+                Text(value(externalWatts == nil ? nil : animatedExternalWatts))
             }
             .font(.system(size: 10))
             .foregroundStyle(.secondary)
@@ -243,8 +278,9 @@ private struct PowerSankeyFlow: View {
             let path = ribbon(x0: startX, x1: rightX,
                               sourceTop: sourceOtherTop, targetTop: geometry.otherTop,
                               height: geometry.otherHeight)
-            fillBand(path, start: .white.opacity(0.07),
-                     end: .white.opacity(0.26), glow: false)
+            // Semantic contrast: the lower band stays legible on both light and dark glass.
+            fillBand(path, start: Color.primary.opacity(0.26),
+                     end: Color.primary.opacity(0.50), glow: false)
         }
 
         let lineStyle = StrokeStyle(lineWidth: 2, lineCap: .round,
@@ -259,7 +295,7 @@ private struct PowerSankeyFlow: View {
             let path = flowLine(x0: startX, x1: rightX,
                                 from: sourceOtherTop + geometry.otherHeight / 2,
                                 to: geometry.otherCenter)
-            context.stroke(path, with: .color(.white.opacity(0.56)), style: lineStyle)
+            context.stroke(path, with: .color(Color.primary.opacity(0.72)), style: lineStyle)
         }
         // One rounded source rail, split into measured chip and estimated
         // other-component colors, as in the reference. Clipping once avoids
@@ -269,7 +305,7 @@ private struct PowerSankeyFlow: View {
                                                    width: barWidth, height: geometry.totalHeight),
                               cornerRadius: 3)
             node.clip(to: source)
-            node.fill(source, with: .color(.white.opacity(0.5)))
+            node.fill(source, with: .color(Color.primary.opacity(0.62)))
             node.fill(Path(CGRect(x: leftX, y: geometry.sourceTop,
                                   width: barWidth, height: geometry.chipHeight)),
                       with: .color(amber))
@@ -279,12 +315,12 @@ private struct PowerSankeyFlow: View {
                           cornerRadius: 3), with: .color(amber))
         context.fill(Path(roundedRect: CGRect(x: rightX, y: geometry.otherTop,
                                                width: barWidth, height: geometry.otherHeight),
-                          cornerRadius: 3), with: .color(.white.opacity(0.5)))
+                          cornerRadius: 3), with: .color(Color.primary.opacity(0.62)))
     }
 
     var body: some View {
         GeometryReader { proxy in
-            let geometry = PowerSankeyGeometry.make(distribution: distribution)
+            let geometry = PowerSankeyGeometry.make(distribution: displayedDistribution)
             ZStack(alignment: .topLeading) {
                 if let geometry {
                     TimelineView(.animation(minimumInterval: 1.0 / 30.0,
@@ -302,16 +338,14 @@ private struct PowerSankeyFlow: View {
                 }
                 leftLabel
                     .position(x: 41, y: 95)
-                outputLabel("芯片", watts: distribution.chipWatts,
-                            percent: distribution.chipFraction,
+                outputLabel("芯片", watts: displayedDistribution.chipWatts,
+                            percent: displayedDistribution.chipFraction,
                             tint: amber, estimated: false)
-                    .position(x: proxy.size.width - 44,
-                              y: geometry?.chipCenter ?? 56)
-                outputLabel("其余部件", watts: distribution.otherWatts,
-                            percent: distribution.otherFraction,
-                            tint: Color.white.opacity(0.7), estimated: true)
-                    .position(x: proxy.size.width - 44,
-                              y: geometry?.otherCenter ?? 140)
+                    .position(x: proxy.size.width - 44, y: 56)
+                outputLabel("其余部件", watts: displayedDistribution.otherWatts,
+                            percent: displayedDistribution.otherFraction,
+                            tint: Color.primary.opacity(0.72), estimated: true)
+                    .position(x: proxy.size.width - 44, y: 142)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
@@ -326,6 +360,7 @@ struct PowerSupplyDetailView: View {
     let active: Bool
     let close: () -> Void
     @ObservedObject private var sampler = ChipBarPowerFlowModel.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var reading: ChipBarPowerReading { sampler.reading }
     private var breakdown: PowerDistribution {
@@ -344,10 +379,6 @@ struct PowerSupplyDetailView: View {
         }
         guard reading.hasBattery, reading.onAdapter else { return nil }
         return reading.adapterWatts
-    }
-
-    private var sensorSource: String {
-        reading.sourceKey.map { "SMC \($0)" } ?? "SMC —"
     }
 
     var body: some View {
@@ -387,22 +418,16 @@ struct PowerSupplyDetailView: View {
                 }
                 PowerSankeyFlow(distribution: breakdown, externalWatts: supplyWatts,
                                 sourceTitle: supplyTitle, active: active && reading.live)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.70),
+                               value: breakdown.internalWatts)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.70),
+                               value: breakdown.chipWatts)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.70),
+                               value: supplyWatts)
             }
             .padding(12)
             .glassTile(radius: 26)
 
-            HStack(alignment: .top, spacing: 9) {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                Text("数据来自 \(sensorSource)，为内部 DC 功率读数，并非插座 AC 输入功耗。其余部件 = 内部功率 − 芯片总功率。")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .glassTile(radius: 26)
         }
     }
 }
