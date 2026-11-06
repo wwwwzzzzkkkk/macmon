@@ -393,7 +393,8 @@ struct PowerSupplyDetailView: View {
                 .accessibilityLabel("返回主页面")
                 VStack(alignment: .leading, spacing: 2) {
                     Text("电源与功率").font(.headline)
-                    Text(reading.live ? "传感器在线 · 每秒采样" : "等待传感器 · 每秒采样")
+                    Text(reading.live ? "传感器在线 · \(PowerSamplingCadence.seconds) 秒采样" :
+                         "等待传感器 · \(PowerSamplingCadence.seconds) 秒采样")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
