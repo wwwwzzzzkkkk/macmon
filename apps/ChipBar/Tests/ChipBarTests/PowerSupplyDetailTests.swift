@@ -30,7 +30,8 @@ struct PowerSupplyDetailTests {
                                                  charging: false, watts: 0)) == .adapter)
         #expect(PowerSourceMode(reading: reading(hasBattery: true, adapter: true,
                                                  charging: false, watts: -5)) == .adapterAssisted)
-        #expect(SidePanelLayout.height(for: .power) == 410)
+        // The information tile was removed in v3.2.2; the side panel is compact.
+        #expect(SidePanelLayout.height(for: .power) == 322)
         #expect(SidePanelLayout.width(for: .power) == 420)
         #expect(SidePanelLayout.contentWidth(for: .power) - 24 == 372)
         #expect(SidePanelLayout.width(for: .applications) == 314)
