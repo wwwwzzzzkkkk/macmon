@@ -3,6 +3,11 @@ import Testing
 @testable import ChipBar
 
 struct PowerSupplyDetailTests {
+    @Test func smcSamplingCadenceIsThreeSecondsAndSeparateFromMacmonInterval() {
+        #expect(PowerSamplingCadence.seconds == 3)
+        #expect(PowerSamplingCadence.nanoseconds == 3_000_000_000)
+    }
+
     @Test func internalRailDifferenceIsCalculatedOnlyWhenValid() {
         let normal = PowerDistribution(internalWatts: 25, chipWatts: 16)
         #expect(normal.otherWatts == 9)
