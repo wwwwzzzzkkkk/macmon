@@ -365,7 +365,7 @@ struct PowerSupplyDetailView: View {
     private var reading: ChipBarPowerReading { sampler.reading }
     private var breakdown: PowerDistribution {
         PowerDistribution(internalWatts: reading.systemWatts,
-                          chipWatts: monitor.connected ? monitor.sample?.total : nil)
+                          chipWatts: sampler.chipWattsAtReading)
     }
     private var mode: PowerSourceMode { PowerSourceMode(reading: reading) }
     private var supplyTitle: String {
