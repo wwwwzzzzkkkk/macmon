@@ -42,7 +42,7 @@ python3 - "$WIDGET" "$VERSION" "$STAGE" <<'PYWIDGET'
 import plistlib
 import sys
 from pathlib import Path
-widget, version, stage = map(Path, sys.argv[1:])
+widget, version, stage = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
 info = {
     "CFBundleIdentifier": "local.chipbar.monitor.widgets",
     "CFBundleName": "ChipBar Widgets",
