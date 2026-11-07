@@ -1,7 +1,6 @@
 import SwiftUI
 import QuartzCore
 import ChipBarCore
-import UniformTypeIdentifiers
 
 enum DashboardLayout {
     static let width: CGFloat = 378
@@ -148,6 +147,7 @@ struct Dashboard: View {
                           systemImage: tileLayout.editing ? "checkmark.circle.fill" : "square.grid.2x2")
                         .font(.caption2.weight(.medium))
                 }
+                .frame(width: 65, alignment: .trailing)
                 .buttonStyle(ChipBarPressStyle())
                 .accessibilityLabel(tileLayout.editing ? "完成磁贴排列" : "自定义磁贴排列")
             }
@@ -155,6 +155,7 @@ struct Dashboard: View {
             ChipBarAdaptiveTileLayout {
                 ForEach(tileLayout.visible) { tile in
                     homeTile(tile)
+                        .disabled(tileLayout.editing)
                         .overlay(alignment: .topTrailing) {
                             if tileLayout.editing {
                                 Image(systemName: "line.3.horizontal")
@@ -179,55 +180,52 @@ struct Dashboard: View {
                             }
                         }
                         .scaleEffect(tileLayout.settling == tile ? 0.94 :
-                                     tileLayout.highlighted == tile ? 1.035 : 1)
-                        .offset(y: tileLayout.highlighted == tile ? -3 : 0)
-                        .shadow(color: .black.opacity(tileLayout.highlighted == tile ? 0.23 : 0),
+                                     tileLayout.highlighted == tile && tileLayout.dragging == nil
+                                     ? 1.035 : 1)
+                        .offset(y: tileLayout.highlighted == tile &&
+                                   tileLayout.dragging == nil ? -3 : 0)
+                        .shadow(color: .black.opacity(tileLayout.highlighted == tile &&
+                                                      tileLayout.dragging == nil ? 0.22 : 0),
                                 radius: 13, y: 6)
-                        .opacity(tileLayout.dragging == tile ? 0.38 : 1)
+                        .opacity(tileLayout.dragging == tile ? 0.24 : 1)
                         .zIndex(tileLayout.highlighted == tile ? 5 : 0)
                         .contentShape(Rectangle())
-                        .onLongPressGesture(minimumDuration: 0.45) {
-                            tileLayout.select(tile, reduceMotion: reduceMotion)
+                        .background {
+                            GeometryReader { proxy in
+                                Color.clear.preference(
+                                    key: ChipBarTileFramePreference.self,
+                                    value: [tile: proxy.frame(in: .named("chipbar.tileMosaic"))])
+                            }
                         }
-                        .onDrag {
-                            tileLayout.beginDrag(tile, reduceMotion: reduceMotion)
-                            return NSItemProvider(object: tile.rawValue as NSString)
-                        } preview: {
-                            Label(tile.title, systemImage: tile.symbol)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.primary)
-                                .frame(width: tile.columns == 6 ? 240 :
-                                       tile.columns == 3 ? 136 : 95, height: 55)
-                                .glassTile(radius: 22)
-                                .shadow(color: .black.opacity(0.23), radius: 18, y: 8)
-                        }
-                        .onDrop(of: [UTType.plainText.identifier, UTType.utf8PlainText.identifier],
-                                delegate: ChipBarTileDropDelegate(
-                                    target: tile, layout: tileLayout, reduceMotion: reduceMotion))
-                        .accessibilityHint("长按并拖动重新排列；松手后磁贴自动落位")
+                        // One uninterrupted gesture controls press, pickup,
+                        // pointer tracking and release. The pointer itself is
+                        // never animated and never starts an NSItemProvider
+                        // drag session inside the glass NSPanel.
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 0,
+                                        coordinateSpace: .named("chipbar.tileMosaic"))
+                                .onChanged { value in
+                                    tileLayout.trackPress(tile, point: value.location,
+                                                          reduceMotion: reduceMotion)
+                                }
+                                .onEnded { _ in
+                                    tileLayout.endPress(tile, reduceMotion: reduceMotion)
+                                }
+                        )
+                        .accessibilityHint("长按约半秒进入排列模式，然后按住直接移动；松手弹性落位")
                         .chipBarTileSpan(tile.columns)
                 }
+            }
+            .coordinateSpace(name: "chipbar.tileMosaic")
+            .overlay(alignment: .topLeading) {
+                ChipBarFloatingDragTile(motion: tileLayout.pointer)
+            }
+            .onPreferenceChange(ChipBarTileFramePreference.self) { frames in
+                tileLayout.tileFrames = frames
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .animation(reduceMotion ? nil : .spring(response: 0.33, dampingFraction: 0.90),
                        value: tileLayout.arrangement)
-
-            if tileLayout.editing {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.down.to.line")
-                    Text("拖到这里 · 放在末尾")
-                }
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-                .frame(height: 30)
-                .background(Color.primary.opacity(0.045),
-                            in: RoundedRectangle(cornerRadius: 12))
-                .onDrop(of: [UTType.plainText.identifier, UTType.utf8PlainText.identifier],
-                        delegate: ChipBarTileEndDropDelegate(
-                            layout: tileLayout, reduceMotion: reduceMotion))
-                .transition(.opacity.combined(with: .scale(scale: 0.94)))
-            }
 
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
