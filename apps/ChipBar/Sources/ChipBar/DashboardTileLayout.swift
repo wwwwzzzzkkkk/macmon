@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Stable identifiers: never persist an array index or a localized title.
 enum DashboardTile: String, CaseIterable, Identifiable {
@@ -66,16 +65,24 @@ struct DashboardTileArrangement: Equatable {
     var visible: [DashboardTile] { order.filter { !hidden.contains($0) } }
 
     mutating func move(_ dragged: DashboardTile, before target: DashboardTile) {
+        move(dragged, relativeTo: target, after: false)
+    }
+
+    mutating func move(_ dragged: DashboardTile, relativeTo target: DashboardTile,
+                       after: Bool) {
         guard dragged != target,
               let source = order.firstIndex(of: dragged),
               order.contains(target) else { return }
-        order.remove(at: source)
-        guard let destination = order.firstIndex(of: target) else { return }
-        order.insert(dragged, at: destination)
+        var candidate = order
+        candidate.remove(at: source)
+        guard let targetIndex = candidate.firstIndex(of: target) else { return }
+        candidate.insert(dragged, at: targetIndex + (after ? 1 : 0))
+        if candidate != order { order = candidate }
     }
 
     mutating func moveToEnd(_ dragged: DashboardTile) {
         guard let index = order.firstIndex(of: dragged) else { return }
+        guard index != order.count - 1 else { return }
         order.remove(at: index)
         order.append(dragged)
     }
@@ -85,13 +92,39 @@ struct DashboardTileArrangement: Equatable {
     }
 }
 
+/// Pointer updates are isolated from the main dashboard's published state.
+@MainActor final class ChipBarTilePointerMotion: ObservableObject {
+    @Published private(set) var location: CGPoint?
+    @Published private(set) var draggedTile: DashboardTile?
+    @Published private(set) var size: CGSize = .zero
+
+    func begin(tile: DashboardTile, location: CGPoint, size: CGSize) {
+        draggedTile = tile
+        self.size = size
+        self.location = location
+    }
+
+    func follow(_ point: CGPoint) {
+        guard location != point else { return }
+        location = point
+    }
+
+    func clear() {
+        location = nil
+        draggedTile = nil
+    }
+}
+
 final class DashboardTileLayoutModel: ObservableObject {
     static let shared = DashboardTileLayoutModel()
     static let orderKey = "chipbar.dashboard.tile-order.v1"
     static let hiddenKey = "chipbar.dashboard.hidden-tiles.v1"
 
     @Published private(set) var arrangement: DashboardTileArrangement {
-        didSet { persist() }
+        didSet {
+            // Save once per release, not on every pointer/hover event.
+            if dragging == nil { persist() }
+        }
     }
     @Published var editing = false {
         didSet { if oldValue != editing { layoutRevision &+= 1 } }
@@ -102,7 +135,12 @@ final class DashboardTileLayoutModel: ObservableObject {
     @Published var dragging: DashboardTile?
     @Published var highlighted: DashboardTile?
     @Published var settling: DashboardTile?
+    let pointer = ChipBarTilePointerMotion()
+    // Frame preferences are layout measurements, not published model changes.
+    // Only reorder boundaries need to refresh the main Dashboard tree.
+    var tileFrames: [DashboardTile: CGRect] = [:]
     private var landingID = UUID()
+    private var lastReflowPoint: CGPoint?
 
     private let defaults: UserDefaults
 
@@ -123,24 +161,91 @@ final class DashboardTileLayoutModel: ObservableObject {
         }
     }
 
-    func beginDrag(_ tile: DashboardTile, reduceMotion: Bool) {
+    func cancelSelection(reduceMotion: Bool) {
+        guard dragging == nil else { return }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.85)) {
+            highlighted = nil
+        }
+    }
+
+    func beginDrag(_ tile: DashboardTile, at point: CGPoint, reduceMotion: Bool) {
         withAnimation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.78)) {
             editing = true
             highlighted = tile
             dragging = tile
             settling = nil
         }
+        lastReflowPoint = point
+        pointer.begin(tile: tile, location: point,
+                      size: tileFrames[tile]?.size ?? CGSize(width: 112, height: 85))
+    }
+
+    /// Pointer tracking does not emit Dashboard objectWillChange. Reflow only
+    /// when crossing another tile's midpoint; no system NSItemProvider session
+    /// or macOS drag preview has to activate in the borderless menu panel.
+    func updateDrag(_ tile: DashboardTile, at point: CGPoint, reduceMotion: Bool) {
+        guard dragging == tile else { return }
+        pointer.follow(point)
+
+        let candidates = tileFrames.filter { $0.key != tile && !arrangement.hidden.contains($0.key) }
+        guard !candidates.isEmpty else { return }
+        // Prevent oscillation when the hovered target itself animates away.
+        if let lastReflowPoint,
+           hypot(point.x - lastReflowPoint.x, point.y - lastReflowPoint.y) < 12 {
+            return
+        }
+
+        if let last = candidates.max(by: { $0.value.maxY < $1.value.maxY }),
+           point.y > last.value.maxY + 12 {
+            if arrangement.order.last != tile {
+                withAnimation(reduceMotion ? nil :
+                              .spring(response: 0.31, dampingFraction: 0.88)) {
+                    moveToEnd(tile)
+                }
+                lastReflowPoint = point
+            }
+            return
+        }
+
+        guard let closest = candidates.min(by: { first, second in
+            Self.distanceSquared(point, to: first.value) <
+                Self.distanceSquared(point, to: second.value)
+        }) else { return }
+        let rect = closest.value
+        let after: Bool = rect.width >= 240
+            ? point.y > rect.midY
+            : point.x > rect.midX
+        let current = arrangement.order.firstIndex(of: tile)
+        let other = arrangement.order.firstIndex(of: closest.key)
+        guard let current, let other else { return }
+        let destination = other + (after ? (current > other ? 1 : 0) :
+                                  (current < other ? -1 : 0))
+        guard destination != current else { return }
+        withAnimation(reduceMotion ? nil :
+                      .spring(response: 0.31, dampingFraction: 0.88)) {
+            arrangement.move(tile, relativeTo: closest.key, after: after)
+        }
+        lastReflowPoint = point
+    }
+
+    private static func distanceSquared(_ point: CGPoint, to rect: CGRect) -> CGFloat {
+        let x = max(rect.minX, min(rect.maxX, point.x))
+        let y = max(rect.minY, min(rect.maxY, point.y))
+        return pow(x - point.x, 2) + pow(y - point.y, 2)
     }
 
     func finishDrop(reduceMotion: Bool) {
         guard let tile = dragging else { return }
         let token = UUID()
         landingID = token
+        pointer.clear()
+        lastReflowPoint = nil
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.07)) {
             dragging = nil
             highlighted = nil
             settling = tile
         }
+        persist()
         layoutRevision &+= 1
         // Two joined phases: compress on contact, then spring to the exact
         // resting frame. A token prevents a quick second drag from being
@@ -157,6 +262,8 @@ final class DashboardTileLayoutModel: ObservableObject {
 
     func finishEditing(reduceMotion: Bool) {
         landingID = UUID()
+        pointer.clear()
+        lastReflowPoint = nil
         withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.84)) {
             editing = false
             highlighted = nil
@@ -188,6 +295,9 @@ final class DashboardTileLayoutModel: ObservableObject {
         highlighted = nil
         settling = nil
         landingID = UUID()
+        pointer.clear()
+        tileFrames = [:]
+        lastReflowPoint = nil
         layoutRevision &+= 1
     }
 
@@ -266,51 +376,48 @@ struct ChipBarAdaptiveTileLayout: Layout {
     }
 }
 
-/// SwiftUI/NSItemProvider handles the native drag preview. Reordering on
-/// dropEntered animates neighboring tiles out of the way; no timer, snapshot
-/// renderer or additional sensor sampler runs during dragging.
-struct ChipBarTileDropDelegate: DropDelegate {
-    let target: DashboardTile
-    let layout: DashboardTileLayoutModel
-    let reduceMotion: Bool
-
-    func dropEntered(info: DropInfo) {
-        guard let dragged = layout.dragging, dragged != target else { return }
-        withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.88)) {
-            layout.move(dragged, before: target)
-        }
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        guard layout.dragging != nil else { return false }
-        layout.finishDrop(reduceMotion: reduceMotion)
-        return true
+/// Each tile reports its stable slot rectangle in the mosaic coordinate
+/// space. These preferences are read without publishing per-frame state.
+struct ChipBarTileFramePreference: PreferenceKey {
+    static var defaultValue: [DashboardTile: CGRect] = [:]
+    static func reduce(value: inout [DashboardTile: CGRect],
+                       nextValue: () -> [DashboardTile: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
     }
 }
 
-/// Catch the trailing empty space so the final tile can be placed last, not
-/// merely before the existing last tile.
-struct ChipBarTileEndDropDelegate: DropDelegate {
-    let layout: DashboardTileLayoutModel
-    let reduceMotion: Bool
+struct ChipBarFloatingDragTile: View {
+    @ObservedObject var motion: ChipBarTilePointerMotion
 
-    func dropEntered(info: DropInfo) {
-        guard let tile = layout.dragging else { return }
-        withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.88)) {
-            layout.moveToEnd(tile)
+    var body: some View {
+        GeometryReader { _ in
+            if let tile = motion.draggedTile, let location = motion.location {
+                VStack(spacing: 8) {
+                    Image(systemName: tile.symbol)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text(tile.title)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                .frame(width: motion.size.width, height: motion.size.height)
+                .background(.regularMaterial,
+                            in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(Color.accentColor.opacity(0.80), lineWidth: 1.8)
+                }
+                .shadow(color: .black.opacity(0.25), radius: 18, y: 8)
+                .scaleEffect(1.035)
+                .position(x: location.x, y: location.y - 5)
+                // Never spring the cursor; only neighboring tile layout is
+                // animated. The selected tile stays directly under the mouse.
+                .transaction { $0.animation = nil }
+            }
         }
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
-
-    func performDrop(info: DropInfo) -> Bool {
-        guard layout.dragging != nil else { return false }
-        layout.finishDrop(reduceMotion: reduceMotion)
-        return true
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
