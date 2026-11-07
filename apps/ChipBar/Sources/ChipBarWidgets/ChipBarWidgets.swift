@@ -246,12 +246,12 @@ private struct ChipBarWidgetContent: View {
                 Text("暂无应用占用快照").foregroundStyle(.secondary).font(.caption)
             } else {
                 VStack(alignment: .leading, spacing: 5) {
-                    ForEach(Array(names.enumerated()), id: \.offset) { index, name in
+                    ForEach(Array(names.enumerated()), id: \.offset) { item in
                         HStack {
-                            Text(name).lineLimit(1)
+                            Text(item.element).lineLimit(1)
                             Spacer()
-                            if index < values.count {
-                                Text(String(format: "%.0f%%", values[index]))
+                            if item.offset < values.count {
+                                Text(String(format: "%.0f%%", values[item.offset]))
                                     .monospacedDigit()
                             }
                         }
@@ -303,10 +303,10 @@ private struct CoreBars: View {
     var body: some View {
         GeometryReader { geometry in
             HStack(alignment: .bottom, spacing: 2) {
-                ForEach(Array(values.enumerated()), id: \.offset) { _, value in
+                ForEach(Array(values.enumerated()), id: \.offset) { item in
                     RoundedRectangle(cornerRadius: 2)
                         .fill(Color.blue.opacity(0.85))
-                        .frame(height: max(3, geometry.size.height * CGFloat(min(100, value)) / 100))
+                        .frame(height: max(3, geometry.size.height * CGFloat(min(100, item.element)) / 100))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
