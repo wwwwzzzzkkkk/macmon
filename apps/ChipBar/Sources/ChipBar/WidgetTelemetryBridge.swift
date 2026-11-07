@@ -8,9 +8,8 @@ import ChipBarCore
 @MainActor final class WidgetTelemetryBridge {
     static let shared = WidgetTelemetryBridge()
 
-    static let groupID = "group.local.chipbar.widgets"
-    static let snapshotKey = "chipbar.widget.telemetry.v1"
-    static let widgetKindPrefix = "local.chipbar.telemetry."
+    // Ad-hoc releases cannot claim an Apple Team ID app-group entitlement.
+    // Use the extension's own sandbox file and avoid unentitled group access.
     private static let extensionID = "local.chipbar.monitor.widgets"
 
     private var lastWrite: Date?
@@ -70,11 +69,9 @@ import ChipBarCore
             values["applicationCPU"] = top.map { $0.cpuPercent ?? 0 }
         }
 
-        // Developer-signed installations can use the registered App Group.
-        // Our publicly downloadable ad-hoc build cannot assume a provisioning
-        // profile, so also write a bounded JSON file to the WidgetKit
-        // extension's sandbox container. The host app is not sandboxed.
-        UserDefaults(suiteName: Self.groupID)?.set(values, forKey: Self.snapshotKey)
+        // The unsandboxed host writes only non-sensitive, read-only telemetry
+        // to the widget extension's sandbox Application Support directory.
+        // Never request an App Group without a matching Team ID entitlement.
         let destination = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Containers/\(Self.extensionID)/Data/Library/Application Support/ChipBar")
             .appendingPathComponent("telemetry.json")
