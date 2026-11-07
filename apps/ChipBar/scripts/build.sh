@@ -27,36 +27,34 @@ with (Path(app) / "Contents/Info.plist").open("wb") as stream:
     plistlib.dump(metadata, stream)
 PYINFO
 
-# Install the real WidgetKit extension in the macOS application bundle.
-# SwiftPM builds the menu-bar executable; the .appex has its own @main entry
-# point, extension Info.plist, sandbox identity, signature and OS lifecycle.
-# On CI an arm64 extension is cross-compiled using the same Xcode/macOS SDK.
+# Build WidgetKit as an actual Xcode app-extension target, never a bare
+# swiftc executable hand-wrapped as .appex. The latter can compile and sign
+# successfully while chronod rejects or exits during widget registration.
+# The real target embeds extension runtime metadata and XPC launch semantics.
+WIDGET_PRODUCTS="$STAGE/widget-products"
+xcodebuild \
+  -project WidgetExtension/ChipBarWidgets.xcodeproj \
+  -target ChipBarWidgets \
+  -configuration Release \
+  -sdk macosx \
+  ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+  SYMROOT="$WIDGET_PRODUCTS" \
+  CODE_SIGNING_ALLOWED=NO \
+  CURRENT_PROJECT_VERSION="$VERSION" MARKETING_VERSION="$VERSION" \
+  build
+BUILT_WIDGET="$WIDGET_PRODUCTS/Release/ChipBarWidgets.appex"
+test -x "$BUILT_WIDGET/Contents/MacOS/ChipBarWidgets" || {
+  echo "ERROR: Xcode did not create ChipBarWidgets.appex" >&2
+  exit 1
+}
+mkdir -p "$APP/Contents/PlugIns"
+ditto --norsrc --noextattr "$BUILT_WIDGET" "$APP/Contents/PlugIns/ChipBarWidgets.appex"
 WIDGET="$APP/Contents/PlugIns/ChipBarWidgets.appex"
-mkdir -p "$WIDGET/Contents/MacOS" "$WIDGET/Contents/Resources"
-SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
-xcrun swiftc -O -parse-as-library -application-extension \
-  -sdk "$SDK_PATH" -target arm64-apple-macosx13.0 \
-  Sources/ChipBarWidgets/ChipBarWidgets.swift \
-  -o "$WIDGET/Contents/MacOS/ChipBarWidgets"
-python3 - "$WIDGET" "$VERSION" "$STAGE" <<'PYWIDGET'
+python3 - "$STAGE" <<'PYWIDGET'
 import plistlib
 import sys
 from pathlib import Path
-widget, version, stage = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
-info = {
-    "CFBundleIdentifier": "local.chipbar.monitor.widgets",
-    "CFBundleName": "ChipBar Widgets",
-    "CFBundleDisplayName": "ChipBar Widgets",
-    "CFBundleExecutable": "ChipBarWidgets",
-    "CFBundlePackageType": "XPC!",
-    "CFBundleShortVersionString": str(version),
-    "CFBundleVersion": str(version),
-    "LSMinimumSystemVersion": "13.0",
-    "NSExtension": {"NSExtensionPointIdentifier": "com.apple.widgetkit-extension"}
-}
-with (widget / "Contents/Info.plist").open("wb") as stream:
-    plistlib.dump(info, stream)
-with (stage / "widget.entitlements").open("wb") as stream:
+with (Path(sys.argv[1]) / "widget.entitlements").open("wb") as stream:
     plistlib.dump({"com.apple.security.app-sandbox": True}, stream)
 PYWIDGET
 
