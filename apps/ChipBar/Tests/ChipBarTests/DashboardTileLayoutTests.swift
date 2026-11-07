@@ -39,6 +39,34 @@ struct DashboardTileLayoutTests {
         #expect(arrangement.visible[arrangement.visible.count - 2] == .powerTrend)
     }
 
+    @Test func lastDropSlotMovesTileToExactEnd() {
+        var arrangement = DashboardTileArrangement()
+        arrangement.moveToEnd(.powerTrend)
+        #expect(arrangement.visible.last == .powerTrend)
+        #expect(arrangement.visible.first == .cpu)
+        #expect(Set(arrangement.visible).count == DashboardTile.allCases.count)
+    }
+
+    @Test func longPressLiftAndLandingReturnToIdleState() {
+        let suite = "chipbar.tile.motion.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = DashboardTileLayoutModel(defaults: defaults)
+        model.select(.cpu, reduceMotion: true)
+        #expect(model.editing)
+        #expect(model.highlighted == .cpu)
+        model.beginDrag(.cpu, reduceMotion: true)
+        #expect(model.dragging == .cpu)
+        model.move(.cpu, before: .gpu)
+        model.finishDrop(reduceMotion: true)
+        #expect(model.dragging == nil)
+        #expect(model.highlighted == nil)
+        #expect(model.settling == .cpu)
+        model.finishEditing(reduceMotion: true)
+        #expect(!model.editing)
+        #expect(model.settling == nil)
+    }
+
     @Test func visibilityCanBeChangedWithoutDestroyingSavedPosition() {
         var arrangement = DashboardTileArrangement()
         arrangement.move(.ane, before: .cpu)
