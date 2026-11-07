@@ -73,6 +73,34 @@ class VersionTests(unittest.TestCase):
                     run.assert_not_called()
                 self.assertFalse((root / "dist" / version.ASSET).exists())
 
+    def test_widget_extension_is_required_and_must_identify_widgetkit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = Path(temp)
+            widget = app / "Contents/PlugIns/ChipBarWidgets.appex"
+            with self.assertRaises(ValueError):
+                version.validate_widget(app, "3.3.0")
+            executable = widget / "Contents/MacOS/ChipBarWidgets"
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b"widget-executable")
+            plist_path = widget / "Contents/Info.plist"
+            metadata = {
+                "CFBundleIdentifier": "local.chipbar.monitor.widgets",
+                "CFBundleVersion": "3.3.0",
+                "NSExtension": {
+                    "NSExtensionPointIdentifier": "com.apple.widgetkit-extension"
+                }
+            }
+            with plist_path.open("wb") as stream:
+                plistlib.dump(metadata, stream)
+            version.validate_widget(app, "3.3.0")
+            with self.assertRaises(ValueError):
+                version.validate_widget(app, "3.2.4")
+            metadata["NSExtension"]["NSExtensionPointIdentifier"] = "com.apple.unknown"
+            with plist_path.open("wb") as stream:
+                plistlib.dump(metadata, stream)
+            with self.assertRaises(ValueError):
+                version.validate_widget(app, "3.3.0")
+
     def test_icon_missing_corrupt_or_incomplete_blocks_packaging(self):
         with tempfile.TemporaryDirectory() as temp:
             app = Path(temp)
