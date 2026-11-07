@@ -57,27 +57,20 @@ private enum ChipBarWidgetTile: String, CaseIterable {
 /// The companion app publishes a sanitized snapshot only to its own App Group.
 /// The widget neither polls macmon nor accesses the SMC or running processes.
 private struct WidgetTelemetry {
-    static let group = "group.local.chipbar.widgets"
-    static let key = "chipbar.widget.telemetry.v1"
-
+    // The distributed binary is ad-hoc signed and intentionally has no
+    // application-groups entitlement. Looking up an unentitled group in
+    // WidgetKit can make chronod reject the entire extension before its
+    // widgets become visible in the gallery.
     let fields: [String: Any]
     static var current: WidgetTelemetry {
-        let groupValues = UserDefaults(suiteName: group)?.dictionary(forKey: key) ?? [:]
-        // In ad-hoc builds the unsandboxed host writes a minimal JSON snapshot
-        // into this extension's own Application Support container. Prefer the
-        // freshest valid snapshot; never substitute fake "live" readings.
         let directory = FileManager.default.urls(for: .applicationSupportDirectory,
                                                   in: .userDomainMask).first
         let url = directory?.appendingPathComponent("ChipBar/telemetry.json")
-        var localValues: [String: Any] = [:]
-        if let url, let data = try? Data(contentsOf: url),
-           data.count <= 128 * 1024,
-           let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            localValues = decoded
-        }
-        let groupTime = (groupValues["timestamp"] as? NSNumber)?.doubleValue ?? 0
-        let localTime = (localValues["timestamp"] as? NSNumber)?.doubleValue ?? 0
-        return WidgetTelemetry(fields: localTime > groupTime ? localValues : groupValues)
+        guard let url, let data = try? Data(contentsOf: url),
+              data.count <= 128 * 1024,
+              let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return WidgetTelemetry(fields: [:]) }
+        return WidgetTelemetry(fields: decoded)
     }
 
     func number(_ key: String) -> Double? {
