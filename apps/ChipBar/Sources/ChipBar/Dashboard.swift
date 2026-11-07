@@ -67,7 +67,7 @@ struct Dashboard: View {
     @ObservedObject var monitor: Monitor
     @StateObject private var state: DashboardState
     @StateObject private var updater = ChipBarUpdater.shared
-    @StateObject private var tileLayout = DashboardTileLayoutModel()
+    @ObservedObject private var tileLayout = DashboardTileLayoutModel.shared
     @StateObject private var powerReading = ChipBarPowerFlowModel.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
