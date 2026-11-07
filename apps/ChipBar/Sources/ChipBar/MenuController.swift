@@ -583,6 +583,9 @@ import ChipBarCore
         resetScrollForPage = true
         withTransaction(Transaction(animation: nil)) {
             dashboardState.resetForOpening()
+            // The layout order is persistent, but a new opening must not
+            // retain a selected/lifted tile or an unfinished drag.
+            DashboardTileLayoutModel.shared.finishEditing(reduceMotion: true)
         }
         if !dashboardMounted {
             hostingView.rootView = AnyView(Dashboard(monitor: monitor, state: dashboardState))
