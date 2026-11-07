@@ -52,11 +52,15 @@ struct DashboardTileLayoutTests {
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let model = DashboardTileLayoutModel(defaults: defaults)
+        let initialHeightRevision = model.layoutRevision
         model.select(.cpu, reduceMotion: true)
         #expect(model.editing)
         #expect(model.highlighted == .cpu)
-        model.beginDrag(.cpu, reduceMotion: true)
+        #expect(model.layoutRevision == initialHeightRevision)
+        // Selecting a tile must not refit the AppKit glass panel.
+        model.beginDrag(.cpu, at: CGPoint(x: 40, y: 40), reduceMotion: true)
         #expect(model.dragging == .cpu)
+        #expect(model.layoutRevision == initialHeightRevision)
         model.move(.cpu, before: .gpu)
         model.finishDrop(reduceMotion: true)
         #expect(model.dragging == nil)
@@ -65,6 +69,46 @@ struct DashboardTileLayoutTests {
         model.finishEditing(reduceMotion: true)
         #expect(!model.editing)
         #expect(model.settling == nil)
+    }
+
+    @Test func editModePressMovesWithCursorAndReflowsOnlyOnTargetChange() {
+        let suite = "chipbar.tile.pointer.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = DashboardTileLayoutModel(defaults: defaults)
+        model.tileFrames = [
+            .cpu: CGRect(x: 0, y: 0, width: 100, height: 90),
+            .gpu: CGRect(x: 110, y: 0, width: 100, height: 90)
+        ]
+        let revision = model.layoutRevision
+        model.editing = true
+        #expect(model.layoutRevision == revision)
+        model.trackPress(.cpu, point: CGPoint(x: 50, y: 45), reduceMotion: true)
+        #expect(model.dragging == .cpu)
+        #expect(model.pointer.location == CGPoint(x: 50, y: 45))
+        model.trackPress(.cpu, point: CGPoint(x: 180, y: 45), reduceMotion: true)
+        #expect(model.pointer.location == CGPoint(x: 180, y: 45))
+        #expect(model.arrangement.visible[1] == .gpu)
+        #expect(model.arrangement.visible[2] == .cpu)
+        #expect(model.layoutRevision == revision)
+        model.endPress(.cpu, reduceMotion: true)
+        #expect(model.dragging == nil)
+        #expect(model.pointer.draggedTile == nil)
+        #expect(model.layoutRevision == revision + 1)
+        let reloaded = DashboardTileLayoutModel(defaults: defaults)
+        #expect(reloaded.visible[1] == .gpu)
+        #expect(reloaded.visible[2] == .cpu)
+    }
+
+    @Test func shortPressDoesNotAccidentallyStartTheTileEditor() {
+        let suite = "chipbar.tile.click.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = DashboardTileLayoutModel(defaults: defaults)
+        model.trackPress(.cpu, point: CGPoint(x: 30, y: 30), reduceMotion: true)
+        model.endPress(.cpu, reduceMotion: true)
+        #expect(!model.editing)
+        #expect(model.dragging == nil)
     }
 
     @Test func visibilityCanBeChangedWithoutDestroyingSavedPosition() {
