@@ -1,6 +1,7 @@
 import SwiftUI
 import QuartzCore
 import ChipBarCore
+import UniformTypeIdentifiers
 
 enum DashboardLayout {
     static let width: CGFloat = 378
@@ -66,6 +67,7 @@ struct Dashboard: View {
     @ObservedObject var monitor: Monitor
     @StateObject private var state: DashboardState
     @StateObject private var updater = ChipBarUpdater.shared
+    @StateObject private var tileLayout = DashboardTileLayoutModel()
     @StateObject private var powerReading = ChipBarPowerFlowModel.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
@@ -125,28 +127,108 @@ struct Dashboard: View {
         }
     }
 
+    /// Reorderable six-track mosaic. Stable tile identities preserve
+    /// animated gauges and background sampling when tiles move.
     private var monitoringTiles: some View {
         VStack(alignment: .leading, spacing: 10) {
-            header
-            hero
-            powerCards
-            CPUCoreUsageSection(samplingInterval: monitor.interval,
-                                active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
             HStack(spacing: 8) {
-                homeFanTile
-                DashboardANEStrip(power: monitor.sample?.ane, connected: monitor.connected)
+                header
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    withAnimation(ChipBarMotion.optional(ChipBarMotion.selection,
+                                                         reduceMotion: reduceMotion)) {
+                        tileLayout.editing.toggle()
+                        tileLayout.dragging = nil
+                    }
+                } label: {
+                    Label(tileLayout.editing ? "完成" : "排列",
+                          systemImage: tileLayout.editing ? "checkmark.circle.fill" : "square.grid.2x2")
+                        .font(.caption2.weight(.medium))
+                }
+                .buttonStyle(ChipBarPressStyle())
+                .accessibilityLabel(tileLayout.editing ? "完成磁贴排列" : "自定义磁贴排列")
             }
-            StorageCapacitySection(state: state)
-            HStack(spacing: 8) {
-                sidePanelEntry("电源", icon: "bolt.horizontal.circle", kind: .power,
-                               trailingValue: powerReading.reading.systemWatts)
-                sidePanelEntry("应用占用", icon: "square.stack.3d.up", kind: .applications)
+
+            ChipBarAdaptiveTileLayout {
+                ForEach(tileLayout.visible) { tile in
+                    homeTile(tile)
+                        .chipBarTileSpan(tile.columns)
+                        .overlay(alignment: .topTrailing) {
+                            if tileLayout.editing {
+                                Image(systemName: "line.3.horizontal")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                                    .padding(5)
+                                    .background(.regularMaterial, in: Capsule())
+                                    .padding(5)
+                                    .allowsHitTesting(false)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onLongPressGesture(minimumDuration: 0.45) {
+                            tileLayout.editing = true
+                        }
+                        .onDrag {
+                            tileLayout.editing = true
+                            tileLayout.dragging = tile
+                            return NSItemProvider(object: tile.rawValue as NSString)
+                        }
+                        .onDrop(of: [UTType.utf8PlainText.identifier],
+                                delegate: ChipBarTileDropDelegate(target: tile, layout: tileLayout))
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .animation(reduceMotion ? nil : .spring(response: 0.33, dampingFraction: 0.90),
+                       value: tileLayout.arrangement)
+
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
             footer
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private func homeTile(_ tile: DashboardTile) -> some View {
+        switch tile {
+        case .powerTrend:
+            hero
+        case .cpu:
+            DashboardRunway(
+                title: "CPU", percentage: monitor.connected ? monitor.sample?.cpuUtilization : nil,
+                color: Color(red: 0.36, green: 0.62, blue: 1.0),
+                subtitle: wattage(monitor.connected ? monitor.sample?.cpu : nil),
+                detail: temperatureSummary(monitor.connected ? monitor.sample?.cpuTemperature : nil),
+                active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
+        case .gpu:
+            DashboardRunway(
+                title: "GPU", percentage: monitor.connected ? monitor.sample?.gpuUtilization : nil,
+                color: Color(red: 0.69, green: 0.56, blue: 0.99),
+                subtitle: wattage(monitor.connected ? monitor.sample?.gpu : nil),
+                detail: temperatureSummary(monitor.connected ? monitor.sample?.gpuTemperature : nil),
+                active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
+        case .memory:
+            DashboardRunway(
+                title: "内存", percentage: monitor.connected ? monitor.sample?.memory?.usedPercent : nil,
+                color: MemoryPressureRingStyle.tint(for: monitor.memoryPressure),
+                subtitle: memoryUsedSummary, detail: memoryTotalSummary,
+                pressureStatus: monitor.memoryPressure.title,
+                active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
+        case .cpuCores:
+            CPUCoreUsageSection(samplingInterval: monitor.interval,
+                                active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
+        case .fan:
+            homeFanTile
+        case .ane:
+            DashboardANEStrip(power: monitor.sample?.ane, connected: monitor.connected)
+        case .storage:
+            StorageCapacitySection(state: state)
+        case .powerSupply:
+            sidePanelEntry("电源", icon: "bolt.horizontal.circle", kind: .power,
+                           trailingValue: powerReading.reading.systemWatts)
+        case .applications:
+            sidePanelEntry("应用占用", icon: "square.stack.3d.up", kind: .applications)
+        }
     }
 
     /// The only secondary page: system facts, hardware details and settings.
@@ -156,6 +238,7 @@ struct Dashboard: View {
             settingsNavigation
             MacHardwareInformationSection(chip: monitor.sample?.chip ?? monitor.hardware)
             fanOverview
+            ChipBarTileSettings(layout: tileLayout)
             settingsPanel
         }
         .frame(maxWidth: .infinity, alignment: .leading)
