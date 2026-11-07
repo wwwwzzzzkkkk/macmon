@@ -331,6 +331,7 @@ enum NetworkSamplingPolicy {
                         history: self.history, intervalMillis: self.interval)
                 }
                 self.sample = sample
+                WidgetTelemetryBridge.shared.publish(sample, history: self.history)
                 self.lastReceived = Date()
                 if !self.connected { self.connected = true }
                 if self.error != nil { self.error = nil }
