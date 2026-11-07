@@ -74,6 +74,12 @@ struct DashboardTileArrangement: Equatable {
         order.insert(dragged, at: destination)
     }
 
+    mutating func moveToEnd(_ dragged: DashboardTile) {
+        guard let index = order.firstIndex(of: dragged) else { return }
+        order.remove(at: index)
+        order.append(dragged)
+    }
+
     mutating func setVisible(_ tile: DashboardTile, _ visible: Bool) {
         if visible { hidden.remove(tile) } else { hidden.insert(tile) }
     }
@@ -88,6 +94,9 @@ final class DashboardTileLayoutModel: ObservableObject {
     }
     @Published var editing = false
     @Published var dragging: DashboardTile?
+    @Published var highlighted: DashboardTile?
+    @Published var settling: DashboardTile?
+    private var landingID = UUID()
 
     private let defaults: UserDefaults
 
@@ -99,6 +108,60 @@ final class DashboardTileLayoutModel: ObservableObject {
     }
 
     var visible: [DashboardTile] { arrangement.visible }
+
+    func select(_ tile: DashboardTile, reduceMotion: Bool) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.7)) {
+            editing = true
+            highlighted = tile
+            settling = nil
+        }
+    }
+
+    func beginDrag(_ tile: DashboardTile, reduceMotion: Bool) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.78)) {
+            editing = true
+            highlighted = tile
+            dragging = tile
+            settling = nil
+        }
+    }
+
+    func finishDrop(reduceMotion: Bool) {
+        guard let tile = dragging else { return }
+        let token = UUID()
+        landingID = token
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.07)) {
+            dragging = nil
+            highlighted = nil
+            settling = tile
+        }
+        // Two joined phases: compress on contact, then spring to the exact
+        // resting frame. A token prevents a quick second drag from being
+        // cleared by the preceding landing animation.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(75))
+            guard let self, self.landingID == token else { return }
+            withAnimation(reduceMotion ? nil :
+                          .spring(response: 0.34, dampingFraction: 0.67)) {
+                self.settling = nil
+            }
+        }
+    }
+
+    func finishEditing(reduceMotion: Bool) {
+        landingID = UUID()
+        withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.84)) {
+            editing = false
+            highlighted = nil
+            dragging = nil
+            settling = nil
+        }
+    }
+
+    func moveToEnd(_ dragged: DashboardTile) {
+        guard !arrangement.hidden.contains(dragged) else { return }
+        arrangement.moveToEnd(dragged)
+    }
 
     func move(_ dragged: DashboardTile, before target: DashboardTile) {
         guard !arrangement.hidden.contains(dragged), !arrangement.hidden.contains(target) else { return }
@@ -113,6 +176,9 @@ final class DashboardTileLayoutModel: ObservableObject {
         arrangement = DashboardTileArrangement()
         editing = false
         dragging = nil
+        highlighted = nil
+        settling = nil
+        landingID = UUID()
     }
 
     private func persist() {
@@ -196,10 +262,11 @@ struct ChipBarAdaptiveTileLayout: Layout {
 struct ChipBarTileDropDelegate: DropDelegate {
     let target: DashboardTile
     let layout: DashboardTileLayoutModel
+    let reduceMotion: Bool
 
     func dropEntered(info: DropInfo) {
         guard let dragged = layout.dragging, dragged != target else { return }
-        withAnimation(.spring(response: 0.30, dampingFraction: 0.90)) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.88)) {
             layout.move(dragged, before: target)
         }
     }
@@ -209,7 +276,30 @@ struct ChipBarTileDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        layout.dragging = nil
+        guard layout.dragging != nil else { return false }
+        layout.finishDrop(reduceMotion: reduceMotion)
+        return true
+    }
+}
+
+/// Catch the trailing empty space so the final tile can be placed last, not
+/// merely before the existing last tile.
+struct ChipBarTileEndDropDelegate: DropDelegate {
+    let layout: DashboardTileLayoutModel
+    let reduceMotion: Bool
+
+    func dropEntered(info: DropInfo) {
+        guard let tile = layout.dragging else { return }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.88)) {
+            layout.moveToEnd(tile)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard layout.dragging != nil else { return false }
+        layout.finishDrop(reduceMotion: reduceMotion)
         return true
     }
 }
