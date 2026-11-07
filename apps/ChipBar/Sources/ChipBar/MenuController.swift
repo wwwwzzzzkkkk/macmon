@@ -108,6 +108,9 @@ import ChipBarCore
     init(monitor: Monitor) {
         self.monitor = monitor
         super.init()
+        // First app launch after an update gives PlugInKit a chance to elect
+        // the actual Xcode-built extension, without blocking menu startup.
+        ChipBarWidgetRegistrationModel.shared.ensureOnFirstLaunch()
         if let button = statusItem.button {
             compactMenu.autoresizingMask = [.width, .height]
             compactMenu.setAccessibilityElement(false)
