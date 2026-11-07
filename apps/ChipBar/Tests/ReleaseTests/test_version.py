@@ -73,6 +73,21 @@ class VersionTests(unittest.TestCase):
                     run.assert_not_called()
                 self.assertFalse((root / "dist" / version.ASSET).exists())
 
+    def test_widget_descriptors_never_use_interpolated_descriptions(self):
+        # The widget extension is queried before the gallery can list tiles.
+        # LocalizedStringKey interpolation inside WidgetConfiguration.description
+        # can fatalError during getAllDescriptors with Cocoa IPC code 4099.
+        source = (Path(__file__).resolve().parents[2] /
+                  "Sources/ChipBarWidgets/ChipBarWidgets.swift").read_text()
+        import re
+        lines = re.findall(r'^\s*\.description\([^\n]*', source, re.MULTILINE)
+        self.assertEqual(len(lines), 1, "Expected one WidgetKit gallery description")
+        for line in lines:
+            self.assertRegex(line, r'^\s*\.description\("[^"]*"\)')
+            self.assertNotIn(chr(92) + "(", line, "No interpolation in WidgetKit description")
+        self.assertIn("var galleryTitle: LocalizedStringKey", source)
+        self.assertNotIn('.configurationDisplayName("ChipBar · ' + chr(92) + '(', source)
+
     def test_widget_extension_is_required_and_must_identify_widgetkit(self):
         with tempfile.TemporaryDirectory() as temp:
             app = Path(temp)
