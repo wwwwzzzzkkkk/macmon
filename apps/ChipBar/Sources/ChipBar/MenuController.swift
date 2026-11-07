@@ -498,6 +498,13 @@ import ChipBarCore
     private func refresh(forceLayout: Bool = false) {
         if forceLayout { layoutCoordinator.cancelPending() }
         guard dashboardMounted, forceLayout || panel.isVisible else { return }
+        // Sensor/status updates may arrive during a tile lift. Do not ask
+        // NSHostingView.fittingSize to reflow a live spring animation and
+        // inadvertently recenter the entire glass window while dragging.
+        if !forceLayout && DashboardTileLayoutModel.shared.editing &&
+           !dashboardState.showSettings && !dashboardState.showSystemDetails {
+            return
+        }
         guard forceLayout || disclosureTransition == nil else { return }
         guard !navigationResizeInFlight else { return }
         let switchingPage = resetScrollForPage
