@@ -157,6 +157,7 @@ struct StorageCapacitySection: View {
                 // whole-drive rate rather than claiming per-volume counters.
                 let rates = externalRates(for: item.diskID)
                 Button {
+                    guard !DashboardTileLayoutModel.shared.editing else { return }
                     state.selectedExternalVolumeID = item.id
                     state.sidePanel = .externalDisk
                 } label: {
