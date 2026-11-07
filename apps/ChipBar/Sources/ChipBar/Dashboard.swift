@@ -317,7 +317,7 @@ struct Dashboard: View {
             .font(.caption)
             Text(widgetRegistration.status)
                 .font(.caption2)
-                .foregroundStyle(widgetRegistration.registered ? .secondary : .orange)
+                .foregroundStyle(widgetRegistration.registered ? Color.secondary : Color.orange)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
             Text("修复后关闭并重新打开系统小组件库；如仍无法添加，请检查扩展签名及 macOS 的 WidgetKit 日志。")
