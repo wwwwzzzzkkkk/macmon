@@ -97,11 +97,17 @@ struct DashboardTileArrangement: Equatable {
     @Published private(set) var location: CGPoint?
     @Published private(set) var draggedTile: DashboardTile?
     @Published private(set) var size: CGSize = .zero
+    private(set) var pickupOffset: CGPoint = .zero
 
     func begin(tile: DashboardTile, location: CGPoint, size: CGSize) {
         draggedTile = tile
         self.size = size
+        pickupOffset = .zero
         self.location = location
+    }
+
+    func setPickupOffset(_ value: CGPoint) {
+        pickupOffset = value
     }
 
     func follow(_ point: CGPoint) {
@@ -112,6 +118,7 @@ struct DashboardTileArrangement: Equatable {
     func clear() {
         location = nil
         draggedTile = nil
+        pickupOffset = .zero
     }
 }
 
@@ -126,9 +133,7 @@ final class DashboardTileLayoutModel: ObservableObject {
             if dragging == nil { persist() }
         }
     }
-    @Published var editing = false {
-        didSet { if oldValue != editing { layoutRevision &+= 1 } }
-    }
+    @Published var editing = false
     // Only structural boundaries trigger AppKit height measurement; animated
     // reorders between those boundaries stay entirely inside SwiftUI Layout.
     @Published private(set) var layoutRevision = 0
@@ -141,6 +146,12 @@ final class DashboardTileLayoutModel: ObservableObject {
     var tileFrames: [DashboardTile: CGRect] = [:]
     private var landingID = UUID()
     private var lastReflowPoint: CGPoint?
+    private var pendingPress: Task<Void, Never>?
+    private var pressTile: DashboardTile?
+    private var pressStart: CGPoint?
+    private var pressLast: CGPoint?
+    private var pressCancelled = false
+    private var pressToken = UUID()
 
     private let defaults: UserDefaults
 
@@ -178,6 +189,10 @@ final class DashboardTileLayoutModel: ObservableObject {
         lastReflowPoint = point
         pointer.begin(tile: tile, location: point,
                       size: tileFrames[tile]?.size ?? CGSize(width: 112, height: 85))
+        if let frame = tileFrames[tile] {
+            pointer.setPickupOffset(CGPoint(x: point.x - frame.midX,
+                                            y: point.y - frame.midY))
+        }
     }
 
     /// Pointer tracking does not emit Dashboard objectWillChange. Reflow only
@@ -239,10 +254,79 @@ final class DashboardTileLayoutModel: ObservableObject {
         return dx * dx + dy * dy
     }
 
+    /// One continuous DragGesture(minimumDistance: 0) owns the whole press.
+    /// Before edit mode it behaves like a long-press recognizer without using
+    /// a second system gesture. In edit mode every press picks up immediately.
+    /// A small early movement cancels only the pending long-press, allowing
+    /// a normal tap/scroll instead of engaging the tile editor.
+    func trackPress(_ tile: DashboardTile, point: CGPoint, reduceMotion: Bool) {
+        if pressTile != tile {
+            cancelPendingPress()
+            pressTile = tile
+            pressStart = point
+            pressLast = point
+            pressCancelled = false
+            if editing {
+                beginDrag(tile, at: point, reduceMotion: reduceMotion)
+            } else {
+                let token = pressToken
+                pendingPress = Task { @MainActor [weak self] in
+                    do { try await Task.sleep(for: .milliseconds(440)) }
+                    catch { return }
+                    guard let self, self.pressToken == token,
+                          self.pressTile == tile, !self.pressCancelled else { return }
+                    self.select(tile, reduceMotion: reduceMotion)
+                    // The user may keep this same mouse press and begin moving.
+                    // The next mouseDragged event seamlessly starts the drag.
+                }
+            }
+            return
+        }
+        pressLast = point
+        if dragging == tile {
+            updateDrag(tile, at: point, reduceMotion: reduceMotion)
+            return
+        }
+        guard let start = pressStart else { return }
+        let displacement = hypot(point.x - start.x, point.y - start.y)
+        if highlighted == tile && editing && displacement > 3 {
+            pendingPress?.cancel()
+            pendingPress = nil
+            beginDrag(tile, at: point, reduceMotion: reduceMotion)
+            updateDrag(tile, at: point, reduceMotion: reduceMotion)
+        } else if !editing && displacement > 8 {
+            pressCancelled = true
+            pendingPress?.cancel()
+            pendingPress = nil
+        }
+    }
+
+    func endPress(_ tile: DashboardTile, reduceMotion: Bool) {
+        guard pressTile == tile else { return }
+        cancelPendingPress()
+        if dragging == tile {
+            finishDrop(reduceMotion: reduceMotion)
+        } else if highlighted == tile {
+            // A completed long press without dragging simply enters edit mode.
+            cancelSelection(reduceMotion: reduceMotion)
+        }
+    }
+
+    private func cancelPendingPress() {
+        pendingPress?.cancel()
+        pendingPress = nil
+        pressToken = UUID()
+        pressTile = nil
+        pressStart = nil
+        pressLast = nil
+        pressCancelled = false
+    }
+
     func finishDrop(reduceMotion: Bool) {
         guard let tile = dragging else { return }
         let token = UUID()
         landingID = token
+        cancelPendingPress()
         pointer.clear()
         lastReflowPoint = nil
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.07)) {
@@ -267,6 +351,7 @@ final class DashboardTileLayoutModel: ObservableObject {
 
     func finishEditing(reduceMotion: Bool) {
         landingID = UUID()
+        cancelPendingPress()
         pointer.clear()
         lastReflowPoint = nil
         withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.84)) {
@@ -300,6 +385,7 @@ final class DashboardTileLayoutModel: ObservableObject {
         highlighted = nil
         settling = nil
         landingID = UUID()
+        cancelPendingPress()
         pointer.clear()
         tileFrames = [:]
         lastReflowPoint = nil
@@ -415,7 +501,8 @@ struct ChipBarFloatingDragTile: View {
                 }
                 .shadow(color: .black.opacity(0.25), radius: 18, y: 8)
                 .scaleEffect(1.035)
-                .position(x: location.x, y: location.y - 5)
+                .position(x: location.x - motion.pickupOffset.x,
+                          y: location.y - motion.pickupOffset.y - 5)
                 // Never spring the cursor; only neighboring tile layout is
                 // animated. The selected tile stays directly under the mouse.
                 .transaction { $0.animation = nil }
