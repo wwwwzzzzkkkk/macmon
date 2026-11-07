@@ -58,6 +58,15 @@ jobs:
         run: ./scripts/test.sh
       - name: Build arm64 app
         run: ./scripts/build.sh
+      - name: Verify embedded macOS WidgetKit extension
+        run: |
+          WIDGET="dist/ChipBar.app/Contents/PlugIns/ChipBarWidgets.appex"
+          test -x "$WIDGET/Contents/MacOS/ChipBarWidgets"
+          lipo -archs "$WIDGET/Contents/MacOS/ChipBarWidgets" | grep -qw arm64
+          test "$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$WIDGET/Contents/Info.plist")" = "com.apple.widgetkit-extension"
+          test "$(plutil -extract CFBundleVersion raw "$WIDGET/Contents/Info.plist")" = "$(cat VERSION)"
+          codesign --verify --strict "$WIDGET"
+          codesign --verify --deep --strict dist/ChipBar.app
       - name: Verify distributed architecture
         run: lipo -archs dist/ChipBar.app/Contents/MacOS/ChipBar | grep -qw arm64
       - name: Build host-native integration test binary
