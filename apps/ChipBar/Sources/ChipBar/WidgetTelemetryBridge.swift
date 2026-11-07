@@ -10,7 +10,8 @@ import ChipBarCore
 
     static let groupID = "group.local.chipbar.widgets"
     static let snapshotKey = "chipbar.widget.telemetry.v1"
-    static let widgetKind = "local.chipbar.telemetry"
+    static let widgetKindPrefix = "local.chipbar.telemetry."
+    private static let extensionID = "local.chipbar.monitor.widgets"
 
     private var lastWrite: Date?
     private var lastReload: Date?
@@ -20,9 +21,6 @@ import ChipBarCore
     func publish(_ sample: Sample, history: [Sample]) {
         let now = Date()
         if let lastWrite, now.timeIntervalSince(lastWrite) < 60 { return }
-        guard let preferences = UserDefaults(suiteName: Self.groupID) else { return }
-        lastWrite = now
-
         var values: [String: Any] = [
             "timestamp": now.timeIntervalSince1970
         ]
@@ -72,13 +70,31 @@ import ChipBarCore
             values["applicationCPU"] = top.map { $0.cpuPercent ?? 0 }
         }
 
-        preferences.set(values, forKey: Self.snapshotKey)
+        // Developer-signed installations can use the registered App Group.
+        // Our publicly downloadable ad-hoc build cannot assume a provisioning
+        // profile, so also write a bounded JSON file to the WidgetKit
+        // extension's sandbox container. The host app is not sandboxed.
+        UserDefaults(suiteName: Self.groupID)?.set(values, forKey: Self.snapshotKey)
+        let destination = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Containers/\(Self.extensionID)/Data/Library/Application Support/ChipBar")
+            .appendingPathComponent("telemetry.json")
+        do {
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+            let data = try JSONSerialization.data(withJSONObject: values, options: [])
+            try data.write(to: destination, options: .atomic)
+        } catch {
+            // The user may not yet have installed/activated the extension.
+            // Keep the widget path best-effort; do not interrupt monitoring.
+        }
+        lastWrite = now
 
-        // At most one timeline invalidation per 15 minutes, and the OS may
-        // defer it. Initial publication prompts the first widget snapshot.
+        // Each of the ten widget kinds has an independent timeline; update
+        // them as a group, respecting WidgetKit's OS-controlled budget.
         if lastReload.map({ now.timeIntervalSince($0) >= 15 * 60 }) ?? true {
             lastReload = now
-            WidgetCenter.shared.reloadTimelines(ofKind: Self.widgetKind)
+            WidgetCenter.shared.reloadAllTimelines()
         }
     }
 }
