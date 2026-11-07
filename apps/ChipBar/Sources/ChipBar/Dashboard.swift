@@ -155,7 +155,6 @@ struct Dashboard: View {
             ChipBarAdaptiveTileLayout {
                 ForEach(tileLayout.visible) { tile in
                     homeTile(tile)
-                        .chipBarTileSpan(tile.columns)
                         .overlay(alignment: .topTrailing) {
                             if tileLayout.editing {
                                 Image(systemName: "line.3.horizontal")
@@ -202,10 +201,11 @@ struct Dashboard: View {
                                 .glassTile(radius: 22)
                                 .shadow(color: .black.opacity(0.23), radius: 18, y: 8)
                         }
-                        .onDrop(of: [UTType.utf8PlainText.identifier],
+                        .onDrop(of: [UTType.plainText.identifier, UTType.utf8PlainText.identifier],
                                 delegate: ChipBarTileDropDelegate(
                                     target: tile, layout: tileLayout, reduceMotion: reduceMotion))
                         .accessibilityHint("长按并拖动重新排列；松手后磁贴自动落位")
+                        .chipBarTileSpan(tile.columns)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -223,7 +223,7 @@ struct Dashboard: View {
                 .frame(height: 30)
                 .background(Color.primary.opacity(0.045),
                             in: RoundedRectangle(cornerRadius: 12))
-                .onDrop(of: [UTType.utf8PlainText.identifier],
+                .onDrop(of: [UTType.plainText.identifier, UTType.utf8PlainText.identifier],
                         delegate: ChipBarTileEndDropDelegate(
                             layout: tileLayout, reduceMotion: reduceMotion))
                 .transition(.opacity.combined(with: .scale(scale: 0.94)))
@@ -286,9 +286,30 @@ struct Dashboard: View {
             MacHardwareInformationSection(chip: monitor.sample?.chip ?? monitor.hardware)
             fanOverview
             ChipBarTileSettings(layout: tileLayout)
+            desktopWidgetSettings
             settingsPanel
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var desktopWidgetSettings: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("桌面与通知中心小组件", systemImage: "square.on.square.dashed")
+                .font(.subheadline.weight(.semibold))
+            Text("ChipBar 的十个监控模块可分别作为 macOS 原生小组件添加。")
+                .font(.caption2)
+            Text("在桌面点右键 → 编辑小组件 → 搜索 ChipBar，选择模块和尺寸；通知中心也可在“编辑小组件”中添加。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("小组件显示系统调度的最近一次快照，并非每秒刷新。打开 ChipBar 可查看实时数据。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
     }
 
     private var settingsNavigation: some View {
