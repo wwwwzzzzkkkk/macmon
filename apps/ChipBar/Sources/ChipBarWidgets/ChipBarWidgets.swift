@@ -128,13 +128,31 @@ private struct ChipBarWidgetProvider: TimelineProvider {
     }
 }
 
-private struct ChipBarTelemetryWidget: Widget {
-    let tile: ChipBarWidgetTile
-    init(_ tile: ChipBarWidgetTile) { self.tile = tile }
+// WidgetKit requires each Widget type to be default-initializable. An
+// instance-only tile argument cannot satisfy Widget.init() and fails the
+// distributed extension build. A distinct marker type preserves each tile's
+// identity when WidgetKit reconstructs it on its own.
+private protocol ChipBarWidgetModule {
+    static var tile: ChipBarWidgetTile { get }
+}
+private enum PowerTrendWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .powerTrend }
+private enum CPUWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .cpu }
+private enum GPUWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .gpu }
+private enum MemoryWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .memory }
+private enum CPUCoresWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .cpuCores }
+private enum FanWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .fan }
+private enum ANEWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .ane }
+private enum StorageWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .storage }
+private enum PowerSupplyWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .powerSupply }
+private enum ApplicationsWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .applications }
+
+private struct ChipBarTelemetryWidget<Module: ChipBarWidgetModule>: Widget {
+    init() {}
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "local.chipbar.telemetry.\(tile.rawValue)",
-                            provider: ChipBarWidgetProvider()) { entry in
+        let tile = Module.tile
+        return StaticConfiguration(kind: "local.chipbar.telemetry.\(tile.rawValue)",
+                                   provider: ChipBarWidgetProvider()) { entry in
             ChipBarWidgetContent(entry: entry, tile: tile)
         }
         .configurationDisplayName("ChipBar · \(tile.title)")
@@ -328,15 +346,15 @@ private struct ChipBarWidgetBackground: ViewModifier {
 struct ChipBarWidgets: WidgetBundle {
     @WidgetBundleBuilder
     var body: some Widget {
-        ChipBarTelemetryWidget(.powerTrend)
-        ChipBarTelemetryWidget(.cpu)
-        ChipBarTelemetryWidget(.gpu)
-        ChipBarTelemetryWidget(.memory)
-        ChipBarTelemetryWidget(.cpuCores)
-        ChipBarTelemetryWidget(.fan)
-        ChipBarTelemetryWidget(.ane)
-        ChipBarTelemetryWidget(.storage)
-        ChipBarTelemetryWidget(.powerSupply)
-        ChipBarTelemetryWidget(.applications)
+        ChipBarTelemetryWidget<PowerTrendWidgetModule>()
+        ChipBarTelemetryWidget<CPUWidgetModule>()
+        ChipBarTelemetryWidget<GPUWidgetModule>()
+        ChipBarTelemetryWidget<MemoryWidgetModule>()
+        ChipBarTelemetryWidget<CPUCoresWidgetModule>()
+        ChipBarTelemetryWidget<FanWidgetModule>()
+        ChipBarTelemetryWidget<ANEWidgetModule>()
+        ChipBarTelemetryWidget<StorageWidgetModule>()
+        ChipBarTelemetryWidget<PowerSupplyWidgetModule>()
+        ChipBarTelemetryWidget<ApplicationsWidgetModule>()
     }
 }
