@@ -30,6 +30,7 @@ import ChipBarCore
     private var panelMaterial: PanelMaterialView!
     private var subscription: AnyCancellable?
     private var layoutSubscription: AnyCancellable?
+    private var tileEditorSubscription: AnyCancellable?
     private lazy var layoutCoordinator = PanelLayoutCoordinator { [weak self] in
         self?.refresh()
     }
@@ -42,6 +43,11 @@ import ChipBarCore
     private var settingsNavigationSubscription: AnyCancellable?
     private var systemDisclosureSubscription: AnyCancellable?
     private var navigationViewportHeight: CGFloat?
+    // While the user is editing/reordering, retain the exact glass-window
+    // viewport size for the rest of the current menu session. Only the
+    // scrollable document may grow; selecting/dragging must never recenter the
+    // NSPanel or shift the entire page vertically.
+    private var tileEditViewportHeight: CGFloat?
     /// The system disclosure predicts the first expansion immediately and
     /// caches measured heights for subsequent openings in the same process.
     private var systemCollapsedDocumentHeight: CGFloat?
@@ -207,6 +213,14 @@ import ChipBarCore
             // delay to disclosure, glass or spring animation timing.
             self.layoutCoordinator.request()
         }
+        tileEditorSubscription = DashboardTileLayoutModel.shared.$editing
+            .dropFirst()
+            .sink { [weak self] editing in
+                guard let self, editing, self.panelRequestedVisible,
+                      self.tileEditViewportHeight == nil else { return }
+                self.tileEditViewportHeight = self.panel.frame.height
+            }
+
         // Synchronous main-thread state delivery: resetForOpening() happens
         // before the panel is presented, so it cannot queue stale navigation.
         // The application ranking lives in its own NSPanel, so changing it
@@ -499,7 +513,11 @@ import ChipBarCore
         if let key = homeLayoutKey {
             cachedHomeLayout = (key, height)
         }
-        let size = NSSize(width: DashboardLayout.width, height: min(navigationViewportHeight ?? height, maximumHeight))
+        let onHome = !dashboardState.showSettings && !dashboardState.showSystemDetails
+        let pinnedHeight = onHome ? tileEditViewportHeight : nil
+        let size = NSSize(width: DashboardLayout.width,
+                          height: min(navigationViewportHeight ?? pinnedHeight ?? height,
+                                      maximumHeight))
         // A short destination page still needs a full viewport-sized document,
         // otherwise NSClipView can retain an invalid origin on the next return.
         let documentHeight = max(height, size.height)
@@ -579,6 +597,7 @@ import ChipBarCore
         navigationToken = UUID()
         navigationResizeInFlight = false
         navigationViewportHeight = nil
+        tileEditViewportHeight = nil
         disclosureTransition = nil
         resetScrollForPage = true
         withTransaction(Transaction(animation: nil)) {
@@ -636,6 +655,7 @@ import ChipBarCore
     }
 
     private func hidePanel(animated: Bool = true) {
+        tileEditViewportHeight = nil
         autoDismissal?.cancel(); autoDismissal = nil
         mouseDownTarget = nil
         mouseReleaseCleanup?.cancel(); mouseReleaseCleanup = nil
