@@ -23,6 +23,25 @@ private enum ChipBarWidgetTile: String, CaseIterable {
         }
     }
 
+    /// The descriptor-query path evaluates WidgetConfiguration before any
+    /// timeline is rendered. WidgetKit's .description(_:) cannot handle
+    /// LocalizedStringKey interpolation and can fatalError during that query.
+    /// Keep gallery metadata backed by direct, static localization keys.
+    var galleryTitle: LocalizedStringKey {
+        switch self {
+        case .powerTrend: return "ChipBar · 芯片功率趋势"
+        case .cpu: return "ChipBar · CPU"
+        case .gpu: return "ChipBar · GPU"
+        case .memory: return "ChipBar · 内存"
+        case .cpuCores: return "ChipBar · CPU 各核心"
+        case .fan: return "ChipBar · 风扇"
+        case .ane: return "ChipBar · ANE"
+        case .storage: return "ChipBar · 储存空间"
+        case .powerSupply: return "ChipBar · 内部功率"
+        case .applications: return "ChipBar · 应用占用"
+        }
+    }
+
     var symbol: String {
         switch self {
         case .powerTrend: return "chart.xyaxis.line"
@@ -148,8 +167,11 @@ private struct ChipBarTelemetryWidget<Module: ChipBarWidgetModule>: Widget {
                                    provider: ChipBarWidgetProvider()) { entry in
             ChipBarWidgetContent(entry: entry, tile: tile)
         }
-        .configurationDisplayName("ChipBar · \(tile.title)")
-        .description("在桌面或通知中心查看 \(tile.title) 的最近一次监测快照。")
+        .configurationDisplayName(tile.galleryTitle)
+        // Deliberately a literal: interpolated .description values can trap
+        // with "Formatted text for description is not supported" during
+        // chronod's getAllDescriptors query, leaving the gallery empty.
+        .description("在桌面或通知中心查看 ChipBar 的最近一次监测快照。")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
