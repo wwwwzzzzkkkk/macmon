@@ -159,6 +159,20 @@ def validate_icon(app, metadata):
         raise ValueError("ICNS 图标缺少必要的显示尺寸。")
 
 
+def validate_widget(app, version):
+    widget = app / "Contents/PlugIns/ChipBarWidgets.appex"
+    executable = widget / "Contents/MacOS/ChipBarWidgets"
+    plist = widget / "Contents/Info.plist"
+    if not executable.is_file() or executable.stat().st_size == 0 or not plist.is_file():
+        raise ValueError("3.3.0 必须包含真正的 ChipBarWidgets.appex；拒绝发布只有 SwiftUI 磁贴的应用。")
+    with plist.open("rb") as stream:
+        metadata = plistlib.load(stream)
+    if (metadata.get("CFBundleIdentifier") != "local.chipbar.monitor.widgets"
+        or metadata.get("CFBundleVersion") != version
+        or metadata.get("NSExtension", {}).get("NSExtensionPointIdentifier") != "com.apple.widgetkit-extension"):
+        raise ValueError("ChipBarWidgets.appex 的 Bundle ID、版本或 WidgetKit 扩展点不正确。")
+
+
 def package():
     version = current_version()
     app = ROOT / "dist/ChipBar.app"
@@ -167,6 +181,7 @@ def package():
     if metadata.get("CFBundleShortVersionString") != version or metadata.get("CFBundleVersion") != version:
         raise ValueError("应用版本与 VERSION 不一致，请重新构建。")
     validate_icon(app, metadata)
+    validate_widget(app, version)
     path = ROOT / "dist" / ASSET
     # Preserve executable mode but omit Finder/File Provider metadata from the ZIP.
     with tempfile.TemporaryDirectory(prefix="chipbar-package-") as staging:
@@ -177,7 +192,8 @@ def package():
                 raise ValueError("应用 ZIP 完整性检查失败。")
         extracted = Path(staging) / "verify"
         run("ditto", "-x", "-k", str(archive), str(extracted))
-        run("codesign", "--verify", "--strict", str(extracted / "ChipBar.app"))
+        validate_widget(extracted / "ChipBar.app", version)
+        run("codesign", "--verify", "--deep", "--strict", str(extracted / "ChipBar.app"))
         path.write_bytes(archive.read_bytes())
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     (ROOT / "dist/SHA256SUMS").write_text(f"{digest}  {ASSET}\n")
