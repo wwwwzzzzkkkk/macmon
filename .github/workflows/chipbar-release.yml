@@ -14,7 +14,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  # v3.2.2 release retry: the compact 322 pt power panel now matches the regression test.
+  # v3.3.0 release retry: each WidgetKit tile now implements Widget.init().
   # This workflow update re-triggers release on the repaired chipbar commit.
   # Separate from stalled legacy macOS 15 release jobs. Tag creation stays immutable.
   # Per-commit group prevents orphaned queue entries blocking future verified releases.
