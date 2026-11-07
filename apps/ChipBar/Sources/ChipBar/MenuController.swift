@@ -69,6 +69,7 @@ import ChipBarCore
         var connected: Bool
         var volumeIDs: [String]
         var externalIDs: [String]
+        var tileLayoutRevision: Int
     }
     private var cachedHomeLayout: (key: HomeLayoutKey, height: CGFloat)?
 
@@ -79,7 +80,8 @@ import ChipBarCore
         return HomeLayoutKey(status: monitor.status, error: monitor.error,
                              connected: monitor.connected,
                              volumeIDs: storage.volumes.map(\.id),
-                             externalIDs: (storage.activity?.external ?? []).sorted())
+                             externalIDs: (storage.activity?.external ?? []).sorted(),
+                             tileLayoutRevision: DashboardTileLayoutModel.shared.layoutRevision)
     }
 
     private func openProfileMark(_ phase: String, since start: TimeInterval) {
@@ -193,6 +195,8 @@ import ChipBarCore
             monitor.ssd.$status.dropFirst().removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
             monitor.ssd.$readings.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             dashboardState.$ssdDetailsHeight.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            DashboardTileLayoutModel.shared.$layoutRevision.dropFirst()
+                .removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
             NotificationCenter.default.publisher(for: .chipBarStorageLayoutDidChange)
                 .map { _ in () }.eraseToAnyPublisher()
         ])
