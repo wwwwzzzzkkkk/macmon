@@ -155,7 +155,9 @@ struct Dashboard: View {
             ChipBarAdaptiveTileLayout {
                 ForEach(tileLayout.visible) { tile in
                     homeTile(tile)
-                        .disabled(tileLayout.editing)
+                        // Keep the hit target active during the same mouse
+                        // press that turns edit mode on. Disabling the entire
+                        // subtree can cancel an in-flight DragGesture.
                         .overlay(alignment: .topTrailing) {
                             if tileLayout.editing {
                                 Image(systemName: "line.3.horizontal")
@@ -474,6 +476,7 @@ struct Dashboard: View {
                                 trailingValue: Double? = nil) -> some View {
         let selected = state.sidePanel == kind
         return Button {
+            guard !tileLayout.editing else { return }
             if kind == .applications && state.sidePanel != .applications {
                 // The sidecar may show five rows without growing the main window.
                 state.showApplications = true
