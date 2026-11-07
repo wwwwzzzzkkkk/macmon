@@ -86,13 +86,19 @@ struct DashboardTileArrangement: Equatable {
 }
 
 final class DashboardTileLayoutModel: ObservableObject {
+    static let shared = DashboardTileLayoutModel()
     static let orderKey = "chipbar.dashboard.tile-order.v1"
     static let hiddenKey = "chipbar.dashboard.hidden-tiles.v1"
 
     @Published private(set) var arrangement: DashboardTileArrangement {
         didSet { persist() }
     }
-    @Published var editing = false
+    @Published var editing = false {
+        didSet { if oldValue != editing { layoutRevision &+= 1 } }
+    }
+    // Only structural boundaries trigger AppKit height measurement; animated
+    // reorders between those boundaries stay entirely inside SwiftUI Layout.
+    @Published private(set) var layoutRevision = 0
     @Published var dragging: DashboardTile?
     @Published var highlighted: DashboardTile?
     @Published var settling: DashboardTile?
@@ -135,6 +141,7 @@ final class DashboardTileLayoutModel: ObservableObject {
             highlighted = nil
             settling = tile
         }
+        layoutRevision &+= 1
         // Two joined phases: compress on contact, then spring to the exact
         // resting frame. A token prevents a quick second drag from being
         // cleared by the preceding landing animation.
@@ -169,7 +176,9 @@ final class DashboardTileLayoutModel: ObservableObject {
     }
 
     func setVisible(_ tile: DashboardTile, _ visible: Bool) {
+        guard arrangement.hidden.contains(tile) == visible else { return }
         arrangement.setVisible(tile, visible)
+        layoutRevision &+= 1
     }
 
     func reset() {
@@ -179,6 +188,7 @@ final class DashboardTileLayoutModel: ObservableObject {
         highlighted = nil
         settling = nil
         landingID = UUID()
+        layoutRevision &+= 1
     }
 
     private func persist() {
