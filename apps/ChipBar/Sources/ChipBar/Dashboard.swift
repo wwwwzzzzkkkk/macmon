@@ -67,6 +67,7 @@ struct Dashboard: View {
     @StateObject private var state: DashboardState
     @StateObject private var updater = ChipBarUpdater.shared
     @ObservedObject private var tileLayout = DashboardTileLayoutModel.shared
+    @ObservedObject private var widgetRegistration = ChipBarWidgetRegistrationModel.shared
     @StateObject private var powerReading = ChipBarPowerFlowModel.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
@@ -303,6 +304,23 @@ struct Dashboard: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Text("小组件显示系统调度的最近一次快照，并非每秒刷新。打开 ChipBar 可查看实时数据。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button("检查小组件") { widgetRegistration.check() }
+                    .disabled(widgetRegistration.checking)
+                Button("修复小组件注册") { widgetRegistration.repair() }
+                    .disabled(widgetRegistration.checking)
+            }
+            .buttonStyle(ChipBarPressStyle())
+            .font(.caption)
+            Text(widgetRegistration.status)
+                .font(.caption2)
+                .foregroundStyle(widgetRegistration.registered ? .secondary : .orange)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
+            Text("修复后关闭并重新打开系统小组件库；如仍无法添加，请检查扩展签名及 macOS 的 WidgetKit 日志。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
