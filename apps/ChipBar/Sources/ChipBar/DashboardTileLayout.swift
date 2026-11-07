@@ -93,7 +93,10 @@ struct DashboardTileArrangement: Equatable {
 }
 
 /// Pointer updates are isolated from the main dashboard's published state.
-@MainActor final class ChipBarTilePointerMotion: ObservableObject {
+final class ChipBarTilePointerMotion: ObservableObject {
+    // SwiftUI delivers gesture updates on the main thread. Keep the pointer
+    // model consistent with DashboardTileLayoutModel's existing isolation
+    // instead of introducing cross-actor calls into every gesture event.
     @Published private(set) var location: CGPoint?
     @Published private(set) var draggedTile: DashboardTile?
     @Published private(set) var size: CGSize = .zero
