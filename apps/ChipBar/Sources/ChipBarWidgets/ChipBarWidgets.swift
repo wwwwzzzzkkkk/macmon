@@ -62,7 +62,22 @@ private struct WidgetTelemetry {
 
     let fields: [String: Any]
     static var current: WidgetTelemetry {
-        WidgetTelemetry(fields: UserDefaults(suiteName: group)?.dictionary(forKey: key) ?? [:])
+        let groupValues = UserDefaults(suiteName: group)?.dictionary(forKey: key) ?? [:]
+        // In ad-hoc builds the unsandboxed host writes a minimal JSON snapshot
+        // into this extension's own Application Support container. Prefer the
+        // freshest valid snapshot; never substitute fake "live" readings.
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                  in: .userDomainMask).first
+        let url = directory?.appendingPathComponent("ChipBar/telemetry.json")
+        var localValues: [String: Any] = [:]
+        if let url, let data = try? Data(contentsOf: url),
+           data.count <= 128 * 1024,
+           let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            localValues = decoded
+        }
+        let groupTime = (groupValues["timestamp"] as? NSNumber)?.doubleValue ?? 0
+        let localTime = (localValues["timestamp"] as? NSNumber)?.doubleValue ?? 0
+        return WidgetTelemetry(fields: localTime > groupTime ? localValues : groupValues)
     }
 
     func number(_ key: String) -> Double? {
