@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [3.3.3] - 2026-11-08
+
+- 修复桌面及通知中心小组件已由 PlugInKit 注册却始终不出现在 macOS 小组件库的问题：来自实际 Mac 的 `chronod` 日志证实扩展每次被启动约 40 ms 后连接失效（NSCocoaErrorDomain Code 4099），在读取小组件描述阶段失败。
+- 移除 WidgetKit `StaticConfiguration.description()` 中的 `LocalizedStringKey` 字符串插值，改用编译期静态描述文本，避免 WidgetKit 在描述查询阶段触发 `Fatal error: Formatted text for description is not supported` 的已知故障模式。
+- 为十种小组件提供独立、静态本地化的 Gallery 显示名称，避免描述信息使用运行期格式化字符串；实际数值展示与 WidgetKit 时间线均不变。
+- 新增版本管理回归测试，检查 WidgetKit Gallery 描述必须为不含插值的静态文字；继续保留 Xcode 原生扩展 Target、PlugInKit 注册诊断和扩展签名检查。
+- 本次是针对扩展启动失败的修复；构建通过不等于系统已成功显示小组件，安装后需复测 macOS 小组件库及 `chronod` 描述查询结果。
+
+
 ## [3.3.2] - 2026-11-08
 
 - 完成拖拽期间窗口防跳动收尾：当主页处于排列模式时，禁用由实时传感器状态更新触发的 NSHostingView.fittingSize 测量，防止父玻璃面板突然重新定位或导致滚动位置跳变。
