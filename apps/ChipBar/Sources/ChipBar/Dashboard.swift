@@ -135,10 +135,13 @@ struct Dashboard: View {
                 header
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
-                    withAnimation(ChipBarMotion.optional(ChipBarMotion.selection,
-                                                         reduceMotion: reduceMotion)) {
-                        tileLayout.editing.toggle()
-                        tileLayout.dragging = nil
+                    if tileLayout.editing {
+                        tileLayout.finishEditing(reduceMotion: reduceMotion)
+                    } else {
+                        withAnimation(reduceMotion ? nil :
+                                      .spring(response: 0.32, dampingFraction: 0.76)) {
+                            tileLayout.editing = true
+                        }
                     }
                 } label: {
                     Label(tileLayout.editing ? "完成" : "排列",
@@ -165,22 +168,66 @@ struct Dashboard: View {
                                     .accessibilityHidden(true)
                             }
                         }
+                        // The selected tile lifts off the glass; an active drag
+                        // leaves a translucent home-position guide. On release,
+                        // a brief compression joins the spring landing.
+                        .overlay {
+                            if tileLayout.highlighted == tile || tileLayout.settling == tile {
+                                RoundedRectangle(cornerRadius: 25, style: .continuous)
+                                    .strokeBorder(Color.accentColor.opacity(0.75), lineWidth: 1.8)
+                                    .padding(2)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                        .scaleEffect(tileLayout.settling == tile ? 0.94 :
+                                     tileLayout.highlighted == tile ? 1.035 : 1)
+                        .offset(y: tileLayout.highlighted == tile ? -3 : 0)
+                        .shadow(color: .black.opacity(tileLayout.highlighted == tile ? 0.23 : 0),
+                                radius: 13, y: 6)
+                        .opacity(tileLayout.dragging == tile ? 0.38 : 1)
+                        .zIndex(tileLayout.highlighted == tile ? 5 : 0)
                         .contentShape(Rectangle())
                         .onLongPressGesture(minimumDuration: 0.45) {
-                            tileLayout.editing = true
+                            tileLayout.select(tile, reduceMotion: reduceMotion)
                         }
                         .onDrag {
-                            tileLayout.editing = true
-                            tileLayout.dragging = tile
+                            tileLayout.beginDrag(tile, reduceMotion: reduceMotion)
                             return NSItemProvider(object: tile.rawValue as NSString)
+                        } preview: {
+                            Label(tile.title, systemImage: tile.symbol)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .frame(width: tile.columns == 6 ? 240 :
+                                       tile.columns == 3 ? 136 : 95, height: 55)
+                                .glassTile(radius: 22)
+                                .shadow(color: .black.opacity(0.23), radius: 18, y: 8)
                         }
                         .onDrop(of: [UTType.utf8PlainText.identifier],
-                                delegate: ChipBarTileDropDelegate(target: tile, layout: tileLayout))
+                                delegate: ChipBarTileDropDelegate(
+                                    target: tile, layout: tileLayout, reduceMotion: reduceMotion))
+                        .accessibilityHint("长按并拖动重新排列；松手后磁贴自动落位")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .animation(reduceMotion ? nil : .spring(response: 0.33, dampingFraction: 0.90),
                        value: tileLayout.arrangement)
+
+            if tileLayout.editing {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.down.to.line")
+                    Text("拖到这里 · 放在末尾")
+                }
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 30)
+                .background(Color.primary.opacity(0.045),
+                            in: RoundedRectangle(cornerRadius: 12))
+                .onDrop(of: [UTType.utf8PlainText.identifier],
+                        delegate: ChipBarTileEndDropDelegate(
+                            layout: tileLayout, reduceMotion: reduceMotion))
+                .transition(.opacity.combined(with: .scale(scale: 0.94)))
+            }
 
             errorPanel
             Text(monitor.status).font(.caption).foregroundStyle(.secondary)
