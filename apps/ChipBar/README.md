@@ -1,12 +1,18 @@
-# ChipBar v3.3.2 · Apple Silicon 菜单栏监控
+# ChipBar v3.3.3 · Apple Silicon 菜单栏监控
 
 > macOS 13+ · Apple Silicon (arm64) · 原生 SwiftUI + AppKit · macOS 26+ Liquid Glass
 >
 > 最新界面采用三个独立圆环磁贴、紧凑的 CPU 各核心图、风扇与 ANE 并排布局，以及“电源与功率 / 应用占用 / 外置硬盘”独立二级卡片。
 
-**[GitHub 产品主页](../../readme.md)** · **[下载 v3.3.2](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.3.2)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+**[GitHub 产品主页](../../readme.md)** · **[下载 v3.3.3](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.3.3)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
 
-## v3.3.2 稳定性修复：拖动与小组件注册
+## v3.3.3 小组件启动修复
+
+针对实际 macOS `chronod` 日志：系统已经成功注册并尝试启动 ChipBarWidgets.appex，但在查询 WidgetKit 小组件描述列表时，扩展约 40 ms 内断开连接（NSCocoaErrorDomain Code 4099）。源码中发现 `StaticConfiguration.description()` 使用了动态字符串插值，存在 WidgetKit 在描述查询时触发 Fatal Error 的已知风险。本版本已改用静态 Gallery 描述文字，并保留十个独立小组件名称。新增自动回归测试防止相同问题再次进入正式包。
+
+修复需在真实 Mac 上复测：退出旧版 ChipBar，将 3.3.3 拷贝到「应用程序」，重新运行并在系统小组件库搜索 ChipBar。如仍不可见，检查 `chronod` / `ChipBarWidgets` 的日志与崩溃报告；本机小组件列表显示不能仅靠 CI 构建证明成功。
+
+## v3.3.3 稳定性修复：拖动与小组件注册
 
 新版磁贴使用连续鼠标手势：长按约半秒进入排列后继续按住即可跟随光标；也可以先按「排列」，再直接按住磁贴移动。邻近磁贴会平滑让位，松手压缩回弹。选中与移动时不会插入额外行或重新调整菜单玻璃窗口的可视高度，从而减少整页上下跳动。设置里的显示/隐藏和已保存顺序继续保留。
 
@@ -14,7 +20,7 @@
 
 小组件使用扩展沙盒内的本机快照，不调用未经授权的 App Group；它仍由 macOS 按预算更新，不是实时监控。
 
-## v3.3.2 新功能：自由排列与系统小组件
+## v3.3.3 新功能：自由排列与系统小组件
 
 主页所有十个磁贴均可重排。长按任意磁贴约 0.45 秒，或点击页头「排列」，进入编辑模式：当前磁贴抬起高亮；拖动时邻近磁贴平滑避让，松手后有压缩回弹的落位动画。可拖至底部专用落点放在最后，点击「完成」退出。位置和磁贴显示开关自动保存；设置页面的「主页磁贴布局」可恢复默认并按模块隐藏／显示。
 
@@ -24,7 +30,7 @@
 
 发布包新增内嵌 `ChipBarWidgets.appex`；macOS 13～25 保留原有材质降级策略。构建/发布需要检查扩展签名及安装包完整性。首次安装后如系统未即时发现小组件，可以重新打开小组件选择器。
 
-## 界面与导航 · v3.3.2
+## 界面与导航 · v3.3.3
 
 ### 1. 主监控面板（约 378 pt 宽）
 
@@ -40,7 +46,7 @@
 
 三个环形数值不是功率百分比：CPU / GPU 使用活跃度，内存使用已用容量比例。内存环颜色反映系统内存压力，**不是**“内存使用率达到某个固定百分比就变红”。测不到的硬件数据会显示为不可用。
 
-### 2. 「电源与功率」桑基图侧卡（v3.3.2）
+### 2. 「电源与功率」桑基图侧卡（v3.3.3）
 
 首页已经显示 CPU、GPU、ANE 功率与历史曲线，这里**不重复**。二级页采用约 420 pt 宽的独立玻璃侧卡，保留顶部返回按钮、传感器在线状态、实时胶囊，下面仅保留一张 **“功率流向”** 磁贴，已移除最下方的文字说明。
 
@@ -91,7 +97,7 @@
 
 ### 截图说明
 
-现有仓库保留 `preview.png` 和 `preview-settings.png` 两张历史截图，但它们展示的是**较早版本**，不应当视为 v3.3.2 的真实界面截图。为避免误导，新版 UI 的结构以以上说明和源码为准；可在本机重新截取 v3.3.2 实际界面后替换图片。
+现有仓库保留 `preview.png` 和 `preview-settings.png` 两张历史截图，但它们展示的是**较早版本**，不应当视为 v3.3.3 的真实界面截图。为避免误导，新版 UI 的结构以以上说明和源码为准；可在本机重新截取 v3.3.3 实际界面后替换图片。
 
 <details>
 <summary>展开旧版界面参考图</summary>
@@ -99,13 +105,13 @@
 <p align="center">
   <img src="preview.png" width="640" alt="ChipBar 旧版主面板参考图" />
   <br />
-  <sub>历史主面板截图，并非 v3.3.2。</sub>
+  <sub>历史主面板截图，并非 v3.3.3。</sub>
 </p>
 
 <p align="center">
   <img src="preview-settings.png" width="640" alt="ChipBar 旧版设置页参考图" />
   <br />
-  <sub>历史设置页截图，并非 v3.3.2。</sub>
+  <sub>历史设置页截图，并非 v3.3.3。</sub>
 </p>
 </details>
 
@@ -130,7 +136,7 @@ brew upgrade --cask wwwwzzzzkkkk/chipbar/chipbar
 
 ### 手动安装
 
-1. 打开 **[v3.3.2 正式发布页](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.3.2)**，下载 `ChipBar-macOS-arm64.zip`（发布页同时提供 `SHA256SUMS`）。
+1. 打开 **[v3.3.3 正式发布页](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.3.3)**，下载 `ChipBar-macOS-arm64.zip`（发布页同时提供 `SHA256SUMS`）。
 2. 退出正在运行的旧 ChipBar。
 3. 解压后将 `ChipBar.app` 移入「应用程序」，启动新版。手动安装请另行确保 macmon 可用。
 
