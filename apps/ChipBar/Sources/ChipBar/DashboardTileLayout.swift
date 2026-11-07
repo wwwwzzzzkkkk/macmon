@@ -212,6 +212,9 @@ final class DashboardTileLayoutModel: ObservableObject {
                 Self.distanceSquared(point, to: second.value)
         }) else { return }
         let rect = closest.value
+        // Do not move a tile merely because the cursor moved inside its
+        // original bounds; the pointer must actually reach a neighboring slot.
+        guard Self.distanceSquared(point, to: rect) <= 12 * 12 else { return }
         let after: Bool = rect.width >= 240
             ? point.y > rect.midY
             : point.x > rect.midX
@@ -231,7 +234,9 @@ final class DashboardTileLayoutModel: ObservableObject {
     private static func distanceSquared(_ point: CGPoint, to rect: CGRect) -> CGFloat {
         let x = max(rect.minX, min(rect.maxX, point.x))
         let y = max(rect.minY, min(rect.maxY, point.y))
-        return pow(x - point.x, 2) + pow(y - point.y, 2)
+        let dx = x - point.x
+        let dy = y - point.y
+        return dx * dx + dy * dy
     }
 
     func finishDrop(reduceMotion: Bool) {
