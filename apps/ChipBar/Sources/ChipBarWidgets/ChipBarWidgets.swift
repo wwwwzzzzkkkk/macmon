@@ -104,8 +104,10 @@ private struct ChipBarWidgetProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<ChipBarWidgetEntry>) -> Void) {
         let date = Date()
         let entry = ChipBarWidgetEntry(date: date, telemetry: .current)
-        // WidgetKit is budgeted by macOS; this is not a live 1–3 s monitor.
-        completion(Timeline(entries: [entry], policy: .after(date.addingTimeInterval(15 * 60))))
+        // The host refreshes its file more frequently; request a new view
+        // roughly every two minutes, but WidgetKit may coalesce or defer it.
+        // Never wake a separate SMC polling process from the extension.
+        completion(Timeline(entries: [entry], policy: .after(date.addingTimeInterval(2 * 60))))
     }
 }
 
@@ -507,8 +509,11 @@ private struct ChipBarWidgetContent: View {
 
     private var fresh: Bool { !entry.telemetry.stale(at: entry.date) }
     private var data: WidgetTelemetry { entry.telemetry }
-    private var history: [Double] { fresh ? data.values("powerHistory") : [] }
-    private func value(_ key: String) -> Double? { fresh ? data.number(key) : nil }
+    // Never erase the last genuine readings simply because the system has
+    // deferred the next widget timeline. The status reports snapshot age;
+    // a dash means no hardware reading was provided at all.
+    private var history: [Double] { data.values("powerHistory") }
+    private func value(_ key: String) -> Double? { data.number(key) }
     private func text(_ key: String, digits: Int = 1) -> String {
         GlassNumber.text(value(key), digits: digits)
     }
@@ -517,9 +522,9 @@ private struct ChipBarWidgetContent: View {
     private var memory: Double? { value("ramPercentage") }
     private var chip: Double? { value("chip") }
     private var chipLabel: String {
-        fresh ? data.label("chipName") ?? "Apple Silicon" : "Apple Silicon"
+        data.label("chipName") ?? "Apple Silicon"
     }
-    private var hasExternal: Bool { fresh && data.number("externalTotalGB") != nil }
+    private var hasExternal: Bool { data.number("externalTotalGB") != nil }
 
     var body: some View {
         GeometryReader { geometry in
@@ -528,7 +533,7 @@ private struct ChipBarWidgetContent: View {
                 case .systemLarge:
                     dashboardLarge(in: geometry.size)
                 case .systemMedium:
-                    dashboardMedium
+                    dashboardMedium(in: geometry.size)
                 default:
                     dashboardSmall(in: geometry.size)
                 }
@@ -546,7 +551,7 @@ private struct ChipBarWidgetContent: View {
         HStack(spacing: 4) {
             Circle().fill(fresh ? GlassTone.mint : .orange)
                 .frame(width: 5, height: 5)
-            Text(fresh ? "已同步" : "待刷新")
+            Text(fresh ? "快照" : "旧快照")
                 .lineLimit(1)
                 .foregroundStyle(GlassTone.secondary)
         }
@@ -669,14 +674,14 @@ private struct ChipBarWidgetContent: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.white)
                 Spacer(minLength: 0)
-                let count = fresh ? data.values("coreUsage", limit: 64).count : 0
+                let count = data.values("coreUsage", limit: 64).count
                 Text(count == 0 ? "采集中…" : "\(count) 个核心")
                     .font(.system(size: 9))
                     .foregroundStyle(GlassTone.secondary)
                     .lineLimit(1)
             }
-            GlassCoreBars(values: fresh ? data.values("coreUsage", limit: 64) : [],
-                          tierNames: fresh ? data.allNames("coreTiers") : [],
+            GlassCoreBars(values: data.values("coreUsage", limit: 64),
+                          tierNames: data.allNames("coreTiers"),
                           barHeight: tight ? 16 : 21)
             HStack(alignment: .top, spacing: 8) {
                 internalDisk
@@ -694,8 +699,9 @@ private struct ChipBarWidgetContent: View {
     }
 
     /// Medium is the horizontal navy card with warm power and three rings.
-    private var dashboardMedium: some View {
-        VStack(alignment: .leading, spacing: 5) {
+    private func dashboardMedium(in size: CGSize) -> some View {
+        let tight = size.height < 145
+        return VStack(alignment: .leading, spacing: tight ? 3 : 5) {
             HStack(spacing: 4) {
                 Image(systemName: "waveform.path.ecg")
                     .foregroundStyle(GlassTone.gold)
@@ -709,10 +715,25 @@ private struct ChipBarWidgetContent: View {
             .foregroundStyle(.white)
             .font(.system(size: 10))
             HStack(alignment: .center, spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    powerHero
+                VStack(alignment: .leading, spacing: tight ? 2 : 4) {
+                    if tight {
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            Text(text("chip"))
+                                .font(.system(size: 26, weight: .bold, design: .rounded))
+                            Text("W")
+                                .font(.system(size: 11))
+                        }
+                        .foregroundStyle(GlassTone.gold)
+                        .lineLimit(1).minimumScaleFactor(0.58)
+                        Text("均值 " + text("averagePower") + " W")
+                            .font(.system(size: 8))
+                            .foregroundStyle(GlassTone.secondary)
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                    } else {
+                        powerHero
+                    }
                     GlassSparkline(values: history)
-                        .frame(height: 25)
+                        .frame(height: tight ? 21 : 25)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 compactTriple
