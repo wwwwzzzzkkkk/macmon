@@ -92,6 +92,30 @@ import ChipBarCore
         #expect(!monitor.showsTemperatureInMenu(for: "disk4"))
     }
 
+    @Test func unifiedMenuSSDChoiceEnablesRealLegacyReadout() {
+        let preferences = defaults()
+        preferences.set(false, forKey: "ssdMenu")
+        preferences.set(false, forKey: "ssdMenuGlobalEnabled")
+        let monitor = ExternalSSDMonitor(defaults: preferences, start: false,
+            probe: { _, _, _, _ in SSDProbeResult(readings: [], status: "test") })
+        defer { monitor.shutdown() }
+        #expect(!monitor.showInMenu)
+        #expect(!monitor.menuTemperaturesEnabled)
+        monitor.setMenuTemperatureVisibility(true)
+        #expect(monitor.showInMenu)
+        #expect(monitor.menuTemperaturesEnabled)
+        #expect(preferences.bool(forKey: "ssdMenuGlobalEnabled"))
+        #expect(preferences.bool(forKey: "ssdMenu"))
+        // As before, if no SSD is attached a permitted menu readout shows —.
+        #expect(monitor.selectedTemperatureReadouts.first?.id == "ssd")
+        monitor.setMenuTemperatureVisibility(false)
+        #expect(!monitor.menuTemperaturesEnabled)
+        #expect(monitor.selectedTemperatureReadouts.isEmpty)
+        monitor.setMenuTemperatureVisibility(true)
+        #expect(monitor.showInMenu)
+        #expect(monitor.selectedTemperatureReadouts.first?.id == "ssd")
+    }
+
     @Test func globalTemperatureVisibilityCanBeDisabledWithoutConnectedDisks() {
         let preferences = defaults()
         let monitor = ExternalSSDMonitor(defaults: preferences, start: false)
