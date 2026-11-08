@@ -2,9 +2,9 @@ import Foundation
 import WidgetKit
 import ChipBarCore
 
-/// Widgets use a system-controlled timeline, not an extra process sampler.
-/// ChipBar publishes a small, read-only summary to its shared app-group
-/// preferences. This stays local to the Mac.
+/// Widgets have OS-budgeted timelines. The host app publishes recent metrics
+/// to the extension sandbox; it does not create any widget-side SMC reader or
+/// long-lived background process.
 @MainActor final class WidgetTelemetryBridge {
     static let shared = WidgetTelemetryBridge()
 
@@ -14,12 +14,19 @@ import ChipBarCore
 
     private var lastWrite: Date?
     private var lastReload: Date?
+    private var lastCoreSample: Date?
+    private var cores: [Double] = []
+    private let coreSampler = CPUCoreSampler()
+    private var coreSampling = false
+    private var lastPayload: [String: Any]?
 
-    /// Never update preference storage on every 1-second macmon tick.
-    /// WidgetKit has its own refresh budget and is not a live display.
+    // Persist a fresh payload approximately every 15 seconds while the host
+    // runs. The operating system may still postpone displaying the new image.
+    // No busy timer: calls arrive from the existing macmon stream.
     func publish(_ sample: Sample, history: [Sample]) {
         let now = Date()
-        if let lastWrite, now.timeIntervalSince(lastWrite) < 60 { return }
+        updateCoreReadingsIfNeeded(now: now)
+        if let lastWrite, now.timeIntervalSince(lastWrite) < 15 { return }
         var values: [String: Any] = [
             "timestamp": now.timeIntervalSince1970
         ]
@@ -59,15 +66,10 @@ import ChipBarCore
         values["powerHistory"] = Swift.stride(from: 0, to: recent.count, by: strideBy)
             .compactMap { recent[$0].total }.filter { $0.isFinite && $0 >= 0 }
 
-        let cores = CPUCoreLoadModel.shared.values
-        if !cores.isEmpty {
-            values["coreUsage"] = cores.map { min(100, max(0, $0)) }
-            // Only color P/M/E tiers when IOKit verified each logical ID.
-            let verified = CPUCoreTopology.current.namesByLogicalID
-            if verified.count == cores.count {
-                values["coreTiers"] = cores.indices.map { verified[$0] ?? "" }
-            }
-        }
+        // CPUCoreLoadModel is only active when the dashboard is open.
+        // For widgets use the independently sampled Mach utilization cache,
+        // collected on a low-frequency background actor instead.
+        mergeCoreReadings(into: &values)
 
         if let availableBytes = InternalStorageModel.shared.capacity?.availableBytes,
            availableBytes >= 0 {
@@ -113,9 +115,53 @@ import ChipBarCore
             values["applicationCPU"] = top.map { $0.cpuPercent ?? 0 }
         }
 
+        writePayload(values, now: now)
+    }
+
+    private func mergeCoreReadings(into values: inout [String: Any]) {
+        guard let lastCoreSample,
+              Date().timeIntervalSince(lastCoreSample) <= 90,
+              !cores.isEmpty else { return }
+        values["coreUsage"] = cores.map { min(100, max(0, $0)) }
+        let verified = CPUCoreTopology.current.namesByLogicalID
+        if verified.count == cores.count {
+            values["coreTiers"] = cores.indices.map { verified[$0] ?? "" }
+        }
+    }
+
+    private func updateCoreReadingsIfNeeded(now: Date) {
+        guard !coreSampling,
+              lastCoreSample.map({ now.timeIntervalSince($0) >= 20 }) ?? true else { return }
+        coreSampling = true
+        Task { [weak self] in
+            guard let self else { return }
+            // host_processor_info exposes cumulative ticks: discard the
+            // baseline, then calculate utilization across a real interval.
+            _ = await self.coreSampler.read()
+            do { try await Task.sleep(for: .milliseconds(650)) }
+            catch { self.coreSampling = false; return }
+            guard let percentages = await self.coreSampler.read(),
+                  !percentages.isEmpty else {
+                self.coreSampling = false
+                return
+            }
+            let at = Date()
+            self.cores = percentages
+            self.lastCoreSample = at
+            self.coreSampling = false
+            // First successful CPU-core sample should reach disk immediately,
+            // not require the user to open the home dashboard.
+            if var payload = self.lastPayload {
+                self.mergeCoreReadings(into: &payload)
+                payload["timestamp"] = at.timeIntervalSince1970
+                self.writePayload(payload, now: at)
+            }
+        }
+    }
+
+    private func writePayload(_ payload: [String: Any], now: Date) {
         // The unsandboxed host writes only non-sensitive, read-only telemetry
-        // to the widget extension's sandbox Application Support directory.
-        // Never request an App Group without a matching Team ID entitlement.
+        // to the WidgetKit extension's own Application Support container.
         let destination = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Containers/\(Self.extensionID)/Data/Library/Application Support/ChipBar")
             .appendingPathComponent("telemetry.json")
@@ -123,19 +169,17 @@ import ChipBarCore
             try FileManager.default.createDirectory(
                 at: destination.deletingLastPathComponent(),
                 withIntermediateDirectories: true)
-            let data = try JSONSerialization.data(withJSONObject: values, options: [])
+            let data = try JSONSerialization.data(withJSONObject: payload, options: [])
             try data.write(to: destination, options: .atomic)
+            lastWrite = now
+            lastPayload = payload
+            if lastReload.map({ now.timeIntervalSince($0) >= 120 }) ?? true {
+                lastReload = now
+                WidgetCenter.shared.reloadAllTimelines()
+            }
         } catch {
-            // The user may not yet have installed/activated the extension.
-            // Keep the widget path best-effort; do not interrupt monitoring.
-        }
-        lastWrite = now
-
-        // Each of the ten widget kinds has an independent timeline; update
-        // them as a group, respecting WidgetKit's OS-controlled budget.
-        if lastReload.map({ now.timeIntervalSince($0) >= 15 * 60 }) ?? true {
-            lastReload = now
-            WidgetCenter.shared.reloadAllTimelines()
+            // A missing extension container is not a reason to interrupt
+            // ChipBar's main monitoring.
         }
     }
 }
