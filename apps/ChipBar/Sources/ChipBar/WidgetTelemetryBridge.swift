@@ -15,6 +15,7 @@ import ChipBarCore
     private var lastWrite: Date?
     private var lastReload: Date?
     private var lastCoreSample: Date?
+    private var lastCoreAttempt: Date?
     private var cores: [Double] = []
     private let coreSampler = CPUCoreSampler()
     private var coreSampling = false
@@ -130,8 +131,11 @@ import ChipBarCore
     }
 
     private func updateCoreReadingsIfNeeded(now: Date) {
+        // Throttle attempts as well as successful reads; on an unsupported
+        // host a failed Mach call must not cause retries every macmon tick.
         guard !coreSampling,
-              lastCoreSample.map({ now.timeIntervalSince($0) >= 20 }) ?? true else { return }
+              lastCoreAttempt.map({ now.timeIntervalSince($0) >= 20 }) ?? true else { return }
+        lastCoreAttempt = now
         coreSampling = true
         Task { [weak self] in
             guard let self else { return }
