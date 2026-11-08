@@ -68,6 +68,17 @@ import ChipBarCore
         if start { restart() }
     }
 
+    /// Mirrors the other menu-bar visibility choices. When there is no
+    /// per-drive selection yet, turning the master item on must make the
+    /// legacy all-SSD menu readout visible instead of selecting an inert pill.
+    /// Explicit per-drive choices are never overwritten.
+    func setMenuTemperatureVisibility(_ visible: Bool) {
+        if visible && !diskMenuConfigured && !showInMenu {
+            showInMenu = true
+        }
+        menuTemperaturesEnabled = visible
+    }
+
     var menuTemperature: Double? {
         readings.compactMap { $0.temperature }.filter { $0.isFresh() }.compactMap(\.composite).max()
     }
