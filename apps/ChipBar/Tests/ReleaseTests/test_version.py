@@ -119,6 +119,18 @@ class VersionTests(unittest.TestCase):
         self.assertIn("now.timeIntervalSince(lastWrite) < 15", bridge)
         self.assertIn(">= 120", bridge)
         self.assertIn("date.addingTimeInterval(2 * 60)", widget)
+        self.assertIn("lastCoreAttempt", bridge)
+
+    def test_storage_snapshots_refresh_without_opening_the_menu(self):
+        root = Path(__file__).resolve().parents[2]
+        bridge = (root / "Sources/ChipBar/WidgetTelemetryBridge.swift").read_text()
+        self.assertIn("private let internalStorageSampler = InternalStorageSampler()", bridge)
+        self.assertIn("private let diskSampler = DiskActivitySampler()", bridge)
+        self.assertIn("updateStorageReadingsIfNeeded(now: now)", bridge)
+        self.assertIn("await self.diskSampler.sampleAll(includeVolumes: true)", bridge)
+        self.assertIn("ExternalStorageCapacityModel.displayRows(from: freshDisk)", bridge)
+        self.assertIn("values.removeValue(forKey: key)", bridge)
+        self.assertIn("lastStorageAttempt", bridge)
 
     def test_widget_refresh_is_automatic_and_removed_from_settings(self):
         root = Path(__file__).resolve().parents[2]
