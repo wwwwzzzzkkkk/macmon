@@ -695,7 +695,7 @@ struct Dashboard: View {
         return Button {
             withAnimation(ChipBarMotion.optional(ChipBarMotion.selection,
                                                  reduceMotion: reduceMotion)) {
-                monitor.ssd.menuTemperaturesEnabled.toggle()
+                monitor.ssd.setMenuTemperatureVisibility(!enabled)
             }
         } label: {
             HStack(spacing: 4) {
