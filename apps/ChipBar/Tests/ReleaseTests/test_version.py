@@ -73,6 +73,27 @@ class VersionTests(unittest.TestCase):
                     run.assert_not_called()
                 self.assertFalse((root / "dist" / version.ASSET).exists())
 
+    def test_glass_widgets_use_real_snapshot_data_for_every_system_size(self):
+        root = Path(__file__).resolve().parents[2]
+        widget = (root / "Sources/ChipBarWidgets/ChipBarWidgets.swift").read_text()
+        publisher = (root / "Sources/ChipBar/WidgetTelemetryBridge.swift").read_text()
+        for family in [".systemSmall", ".systemMedium", ".systemLarge"]:
+            self.assertIn(family, widget)
+        for component in ["GlassMetricRing", "GlassConcentricRings",
+                          "GlassSparkline", "GlassCoreBars", "GlassStorageRow"]:
+            self.assertIn(component, widget)
+        self.assertIn("ChipBarTelemetryWidget<OverviewWidgetModule>()", widget)
+        for metric in ["averagePower", "peakPower", "chipName", "externalFreeGB",
+                       "externalTotalGB", "storageReadMB", "storageWriteMB",
+                       "externalReadMB", "externalWriteMB", "coreTiers"]:
+            self.assertIn(f'"{metric}"', widget)
+            self.assertIn(f'"{metric}"', publisher)
+        for misleading_mock in ["11.6 W", "29%", "42%", "84%", "Zark",
+                                "Apple M5 Pro"]:
+            self.assertNotIn(misleading_mock, widget)
+        self.assertIn("private var isFresh", widget)
+        self.assertIn("WidgetCenter.shared.reloadAllTimelines()", publisher)
+
     def test_widget_refresh_is_automatic_and_removed_from_settings(self):
         root = Path(__file__).resolve().parents[2]
         dashboard = (root / "Sources/ChipBar/Dashboard.swift").read_text()
