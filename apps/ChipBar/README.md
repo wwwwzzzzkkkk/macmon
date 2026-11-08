@@ -1,10 +1,20 @@
-# ChipBar v3.3.5 · Apple Silicon 菜单栏监控
+# ChipBar v3.3.6 · Apple Silicon 菜单栏监控
 
 > macOS 13+ · Apple Silicon (arm64) · 原生 SwiftUI + AppKit · macOS 26+ Liquid Glass
 >
 > 最新界面采用三个独立圆环磁贴、紧凑的 CPU 各核心图、风扇与 ANE 并排布局，以及“电源与功率 / 应用占用 / 外置硬盘”独立二级卡片。
 
-**[GitHub 产品主页](../../readme.md)** · **[下载 v3.3.5](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.3.5)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+**[GitHub 产品主页](../../readme.md)** · **[下载 v3.3.6](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.3.6)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+
+## v3.3.6 小组件精简与数据同步
+
+macOS 小组件库现在**只保留两种可选设计**：**ChipBar 仪表盘**（大、中、小三种尺寸，分别对应设计图左侧紫色高密度面板、右上蓝色横向监控、右下三重同心环）以及**储存空间**（小尺寸，内置／外接磁盘空间和读写速度）。CPU/GPU/内存等仍然作为仪表盘中的实时指标，但不再各自占据小组件库的一项。已经放置在桌面上的旧专项小组件可能在更新后显示不可用，可以删掉旧实例并添加上述新类型。
+
+这版降低紫蓝饱和度、圆环光晕和趋势曲线亮度，重新计算小、中、大尺寸布局。字体、名称、容量、百分比及速率均有行数限制和最小缩放值；带外置硬盘的大型组件将两块容量区并排，避免把底部状态区顶出边界。
+
+过去逐核心数值依赖 ChipBar 首页展开才会启动采样，因此桌面小组件长期空白。现在主程序在监控期间每约 20 秒进行一次轻量独立 Mach 逐核采样（首次取两个相隔约 650 毫秒的累计读数），无需打开菜单。采样仅在 ChipBar 主程序运行、且原有监控流有有效数据时触发，没有另起常驻进程。
+
+主程序最快每 **15 秒**将新快照写入扩展容器，并最多约每 **2 分钟**申请一次 WidgetKit 时间线重载；WidgetKit 扩展同样按 2 分钟请求更新。**实际桌面刷新时间完全由 macOS 的系统预算决定，不能保证每两分钟，更不能实现秒级实时**。系统延迟时保留最近一次真实数据及快照状态，而不是突然清空数字。
 
 ## v3.3.5 原生 Liquid Glass 高密度监控小组件
 
