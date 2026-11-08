@@ -39,16 +39,34 @@ import ChipBarCore
         write("ramUsed", sample.memory?.usedGiB)
         write("ramTotal", sample.memory?.totalGiB)
         write("internalPower", ChipBarPowerFlowModel.shared.reading.systemWatts)
+        // Descriptive labels and aggregates for the high-density glass
+        // dashboard. These are real measurements, not design-mock values.
+        if let chip = sample.chip, !chip.isEmpty {
+            values["chipName"] = String(chip.prefix(56))
+        }
+        if let model = sample.model, !model.isEmpty {
+            values["macModel"] = String(model.prefix(56))
+        }
 
         // Keep at most 24 real historical samples from the recent 10 minutes.
         let recent = history.filter { now.timeIntervalSince($0.date) <= 600 }
         let strideBy = max(1, (recent.count + 23) / 24)
+        let realPowers = recent.compactMap(\.total).filter { $0.isFinite && $0 >= 0 }
+        if !realPowers.isEmpty {
+            write("averagePower", realPowers.reduce(0, +) / Double(realPowers.count))
+            write("peakPower", realPowers.max())
+        }
         values["powerHistory"] = Swift.stride(from: 0, to: recent.count, by: strideBy)
             .compactMap { recent[$0].total }.filter { $0.isFinite && $0 >= 0 }
 
         let cores = CPUCoreLoadModel.shared.values
         if !cores.isEmpty {
             values["coreUsage"] = cores.map { min(100, max(0, $0)) }
+            // Only color P/M/E tiers when IOKit verified each logical ID.
+            let verified = CPUCoreTopology.current.namesByLogicalID
+            if verified.count == cores.count {
+                values["coreTiers"] = cores.indices.map { verified[$0] ?? "" }
+            }
         }
 
         if let availableBytes = InternalStorageModel.shared.capacity?.availableBytes,
@@ -58,6 +76,32 @@ import ChipBarCore
         if let totalBytes = InternalStorageModel.shared.capacity?.totalBytes,
            totalBytes > 0 {
             values["storageTotalGB"] = Double(totalBytes) / 1_000_000_000
+        }
+
+        // Same disk model as ChipBar Home. Rates are stored only while the
+        // sampler's physical-disk snapshot is fresh; never invent a speed.
+        let external = ExternalStorageCapacityModel.shared
+        if let drive = external.volumes.first {
+            values["externalName"] = String(drive.volume.name.prefix(40))
+            write("externalFreeGB", Double(drive.volume.available) / 1_000_000_000)
+            write("externalTotalGB", Double(drive.volume.total) / 1_000_000_000)
+        }
+        if let activity = external.activity,
+           now.timeIntervalSince(activity.date) >= 0,
+           now.timeIntervalSince(activity.date) <= 10 {
+            let internalRates = activity.rates.filter {
+                activity.connected.contains($0.key) && !activity.external.contains($0.key)
+            }.map(\.value)
+            if !internalRates.isEmpty {
+                write("storageReadMB", internalRates.reduce(0) { $0 + $1.readMB })
+                write("storageWriteMB", internalRates.reduce(0) { $0 + $1.writeMB })
+            }
+            if let drive = external.volumes.first,
+               activity.connected.contains(drive.diskID),
+               let rate = activity.rates[drive.diskID] {
+                write("externalReadMB", rate.readMB)
+                write("externalWriteMB", rate.writeMB)
+            }
         }
 
         if let snapshot = ApplicationActivityModel.shared.snapshot {
