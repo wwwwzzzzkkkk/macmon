@@ -336,6 +336,10 @@ final class DashboardTileLayoutModel: ObservableObject {
             dragging = nil
             highlighted = nil
             settling = tile
+            // The successful drop also completes editing. Do not call
+            // finishEditing() here: doing so would immediately clear
+            // "settling" and cut off the landing compression/rebound.
+            editing = false
         }
         persist()
         layoutRevision &+= 1
