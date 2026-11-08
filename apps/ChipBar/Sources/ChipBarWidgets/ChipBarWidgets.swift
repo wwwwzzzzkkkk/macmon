@@ -6,10 +6,11 @@ import WidgetKit
 /// the macOS desktop / Notification Center widget gallery. The system owns
 /// placement, sizing and update budgets.
 private enum ChipBarWidgetTile: String, CaseIterable {
-    case powerTrend, cpu, gpu, memory, cpuCores, fan, ane, storage, powerSupply, applications
+    case overview, powerTrend, cpu, gpu, memory, cpuCores, fan, ane, storage, powerSupply, applications
 
     var title: String {
         switch self {
+        case .overview: return "ChipBar 仪表盘"
         case .powerTrend: return "芯片功率趋势"
         case .cpu: return "CPU"
         case .gpu: return "GPU"
@@ -29,6 +30,7 @@ private enum ChipBarWidgetTile: String, CaseIterable {
     /// Keep gallery metadata backed by direct, static localization keys.
     var galleryTitle: LocalizedStringKey {
         switch self {
+        case .overview: return "ChipBar · 仪表盘"
         case .powerTrend: return "ChipBar · 芯片功率趋势"
         case .cpu: return "ChipBar · CPU"
         case .gpu: return "ChipBar · GPU"
@@ -44,6 +46,7 @@ private enum ChipBarWidgetTile: String, CaseIterable {
 
     var symbol: String {
         switch self {
+        case .overview: return "waveform.path.ecg.rectangle"
         case .powerTrend: return "chart.xyaxis.line"
         case .cpu: return "cpu"
         case .gpu: return "square.stack.3d.up"
@@ -59,6 +62,7 @@ private enum ChipBarWidgetTile: String, CaseIterable {
 
     var metric: String {
         switch self {
+        case .overview: return "chip"
         case .powerTrend: return "chip"
         case .cpu: return "cpuPower"
         case .gpu: return "gpuPower"
@@ -90,6 +94,16 @@ private struct WidgetTelemetry {
               let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return WidgetTelemetry(fields: [:]) }
         return WidgetTelemetry(fields: decoded)
+    }
+
+    func label(_ key: String) -> String? {
+        guard let text = fields[key] as? String, !text.isEmpty else { return nil }
+        return text
+    }
+
+    func allNames(_ key: String, limit: Int = 64) -> [String] {
+        guard let raw = fields[key] as? [String] else { return [] }
+        return Array(raw.prefix(limit))
     }
 
     func number(_ key: String) -> Double? {
@@ -147,6 +161,7 @@ private struct ChipBarWidgetProvider: TimelineProvider {
 private protocol ChipBarWidgetModule {
     static var tile: ChipBarWidgetTile { get }
 }
+private enum OverviewWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .overview }
 private enum PowerTrendWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .powerTrend }
 private enum CPUWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .cpu }
 private enum GPUWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .gpu }
@@ -176,183 +191,744 @@ private struct ChipBarTelemetryWidget<Module: ChipBarWidgetModule>: Widget {
     }
 }
 
+
+private enum GlassTone {
+    static let blue = Color(red: 0.39, green: 0.69, blue: 1.00)
+    static let lilac = Color(red: 0.79, green: 0.62, blue: 1.00)
+    static let gold = Color(red: 1.00, green: 0.78, blue: 0.20)
+    static let mint = Color(red: 0.28, green: 0.87, blue: 0.79)
+    static let cyan = Color(red: 0.20, green: 0.79, blue: 0.95)
+    static let ink = Color.white
+    static let secondary = Color(red: 0.68, green: 0.76, blue: 0.88)
+}
+
+private enum GlassNumber {
+    static func text(_ value: Double?, digits: Int = 1) -> String {
+        guard let value, value.isFinite, value >= 0 else { return "—" }
+        return String(format: digits == 0 ? "%.0f" : "%.1f", value)
+    }
+
+    static func capacity(_ gb: Double?) -> String {
+        guard let gb, gb.isFinite, gb >= 0 else { return "—" }
+        if gb >= 1000 { return String(format: "%.2f TB", gb / 1000) }
+        return String(format: "%.1f GB", gb)
+    }
+}
+
+private struct GlassWidgetBackground: ViewModifier {
+    let purple: Bool
+
+    private var background: some View {
+        ZStack {
+            LinearGradient(
+                colors: purple
+                    ? [Color(red: 0.22, green: 0.13, blue: 0.64),
+                       Color(red: 0.07, green: 0.08, blue: 0.28),
+                       Color(red: 0.20, green: 0.05, blue: 0.28)]
+                    : [Color(red: 0.02, green: 0.08, blue: 0.19),
+                       Color(red: 0.01, green: 0.16, blue: 0.31),
+                       Color(red: 0.02, green: 0.27, blue: 0.40)],
+                startPoint: .topLeading, endPoint: .bottomTrailing)
+            RadialGradient(
+                colors: purple
+                    ? [Color(red: 0.64, green: 0.10, blue: 0.47).opacity(0.48), .clear]
+                    : [GlassTone.cyan.opacity(0.24), .clear],
+                center: .bottomTrailing,
+                startRadius: 3, endRadius: 340)
+            RadialGradient(colors: [GlassTone.lilac.opacity(purple ? 0.18 : 0.04), .clear],
+                           center: .topLeading, startRadius: 5, endRadius: 260)
+        }
+    }
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(macOS 14.0, *) {
+            content.containerBackground(for: .widget) { background }
+        } else {
+            content.background(background)
+        }
+    }
+}
+
+private struct GlassMetricRing: View {
+    let value: Double?
+    let tint: Color
+    let diameter: CGFloat
+
+    private var progress: CGFloat {
+        CGFloat(min(1, max(0, (value ?? 0) / 100)))
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(.white.opacity(0.13), lineWidth: diameter * 0.12)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(tint, style: StrokeStyle(lineWidth: diameter * 0.12,
+                                                 lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .shadow(color: tint.opacity(0.8), radius: diameter * 0.08)
+            Text(GlassNumber.text(value, digits: 0))
+                .font(.system(size: diameter * 0.245, weight: .bold, design: .rounded))
+                .foregroundStyle(GlassTone.ink)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .frame(width: diameter, height: diameter)
+        .accessibilityLabel("使用率 \(GlassNumber.text(value, digits: 0))%")
+    }
+}
+
+private struct GlassTripleRings: View {
+    let cpu: Double?
+    let gpu: Double?
+    let memory: Double?
+    let cpuPower: Double?
+    let gpuPower: Double?
+    let memoryUsed: Double?
+    let compact: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: compact ? 8 : 12) {
+            item("CPU", value: cpu, power: GlassNumber.text(cpuPower) + " W",
+                 tint: GlassTone.blue)
+            item("GPU", value: gpu, power: GlassNumber.text(gpuPower) + " W",
+                 tint: GlassTone.lilac)
+            item("内存", value: memory, power: GlassNumber.text(memoryUsed) + " GB",
+                 tint: GlassTone.gold)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func item(_ label: String, value: Double?, power: String, tint: Color) -> some View {
+        VStack(spacing: compact ? 2 : 4) {
+            GlassMetricRing(value: value, tint: tint, diameter: compact ? 44 : 59)
+            Text(label)
+                .font(.system(size: compact ? 9 : 10, weight: .semibold))
+                .foregroundStyle(GlassTone.secondary)
+            if !compact {
+                Text(power)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(GlassTone.ink)
+                    .monospacedDigit()
+                    .lineLimit(1).minimumScaleFactor(0.7)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct GlassConcentricRings: View {
+    let power: Double?
+    let cpu: Double?
+    let gpu: Double?
+    let memory: Double?
+    let diameter: CGFloat
+
+    private func arc(_ value: Double?, tint: Color, size: CGFloat) -> some View {
+        ZStack {
+            Circle().stroke(.white.opacity(0.11), lineWidth: 8)
+            Circle()
+                .trim(from: 0, to: CGFloat(min(100, max(0, value ?? 0))) / 100)
+                .stroke(tint, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .shadow(color: tint.opacity(0.52), radius: 5)
+        }
+        .frame(width: size, height: size)
+    }
+
+    var body: some View {
+        ZStack {
+            arc(cpu, tint: GlassTone.blue, size: diameter)
+            arc(gpu, tint: GlassTone.lilac, size: diameter * 0.78)
+            arc(memory, tint: GlassTone.gold, size: diameter * 0.56)
+            HStack(alignment: .firstTextBaseline, spacing: 1) {
+                Text(GlassNumber.text(power))
+                    .font(.system(size: diameter * 0.145, weight: .bold, design: .rounded))
+                Text("W")
+                    .font(.system(size: diameter * 0.075, weight: .semibold))
+            }
+            .foregroundStyle(GlassTone.gold)
+            .monospacedDigit()
+        }
+        .frame(width: diameter, height: diameter)
+    }
+}
+
+private struct GlassSparkline: View {
+    let values: [Double]
+    var tint: Color = GlassTone.gold
+
+    private func point(_ index: Int, size: CGSize) -> CGPoint {
+        let low = values.min() ?? 0
+        let high = values.max() ?? 1
+        let span = max(high - low, 0.5)
+        let x = size.width * CGFloat(index) / CGFloat(max(values.count - 1, 1))
+        let fraction = CGFloat((values[index] - low) / span)
+        return CGPoint(x: x, y: 6 + (size.height - 12) * (1 - fraction))
+    }
+
+    private func curve(_ size: CGSize) -> Path {
+        Path { path in
+            guard values.count > 1 else { return }
+            for index in values.indices {
+                let p = point(index, size: size)
+                if index == 0 { path.move(to: p) }
+                else { path.addLine(to: p) }
+            }
+        }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Path { path in
+                    let y = proxy.size.height * 0.78
+                    path.move(to: CGPoint(x: 0, y: y))
+                    path.addLine(to: CGPoint(x: proxy.size.width, y: y))
+                }
+                .stroke(.white.opacity(0.09), style: StrokeStyle(lineWidth: 1, dash: [3, 5]))
+
+                if values.count > 1 {
+                    curve(proxy.size)
+                        .stroke(tint.opacity(0.58),
+                                style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                        .blur(radius: 4)
+                    curve(proxy.size)
+                        .stroke(tint, style: StrokeStyle(lineWidth: 2.4, lineCap: .round,
+                                                        lineJoin: .round))
+                    if let lastIndex = values.indices.last {
+                        Circle().fill(.white)
+                            .frame(width: 7, height: 7)
+                            .shadow(color: tint.opacity(0.9), radius: 6)
+                            .position(point(lastIndex, size: proxy.size))
+                    }
+                } else {
+                    Text("等待功率趋势")
+                        .font(.caption2)
+                        .foregroundStyle(GlassTone.secondary)
+                }
+            }
+        }
+        .accessibilityLabel("最近一次功率趋势")
+    }
+}
+
+private struct GlassCoreBars: View {
+    let values: [Double]
+    let tierNames: [String]
+    let barHeight: CGFloat
+
+    private func tint(at index: Int) -> Color {
+        guard tierNames.indices.contains(index) else { return GlassTone.blue }
+        let tier = tierNames[index]
+        if tier == "超级核" { return GlassTone.gold }
+        if tier == "能效核" { return GlassTone.mint }
+        if tier == "性能核" { return GlassTone.blue }
+        return GlassTone.blue
+    }
+
+    var body: some View {
+        if values.isEmpty {
+            Text("打开 ChipBar 获取逐核心读数")
+                .font(.caption2)
+                .foregroundStyle(GlassTone.secondary)
+                .frame(maxWidth: .infinity, minHeight: barHeight, alignment: .center)
+        } else {
+            HStack(alignment: .bottom, spacing: 3) {
+                ForEach(Array(values.prefix(32).enumerated()), id: \.offset) { item in
+                    let tint = tint(at: item.offset)
+                    ZStack(alignment: .bottom) {
+                        Capsule().fill(.white.opacity(0.09))
+                        Capsule().fill(LinearGradient(colors: [tint.opacity(0.75), tint],
+                                                      startPoint: .bottom, endPoint: .top))
+                            .frame(height: max(3, barHeight * CGFloat(min(100, max(0, item.element))) / 100))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: barHeight)
+        }
+    }
+}
+
+private struct GlassStorageRow: View {
+    let name: String
+    let freeGB: Double?
+    let totalGB: Double?
+    let readMB: Double?
+    let writeMB: Double?
+    var dense: Bool = false
+    var color: Color = GlassTone.blue
+
+    private var used: Double? {
+        guard let freeGB, let totalGB, totalGB > 0 else { return nil }
+        return min(1, max(0, 1 - freeGB / totalGB))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: dense ? 3 : 5) {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text(name)
+                    .font(.system(size: dense ? 10 : 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Spacer(minLength: 0)
+                Text(GlassNumber.capacity(freeGB))
+                    .font(.system(size: dense ? 10 : 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .monospacedDigit().lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                if let used {
+                    Text("已用 \(Int(used * 100))%")
+                        .font(.system(size: 9))
+                        .foregroundStyle(GlassTone.secondary)
+                        .lineLimit(1)
+                }
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.13))
+                    Capsule()
+                        .fill(LinearGradient(colors: [color, color.opacity(0.55)],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .frame(width: proxy.size.width * CGFloat(used ?? 0))
+                }
+            }
+            .frame(height: dense ? 5 : 7)
+            if !dense {
+                Text("读 \(GlassNumber.text(readMB)) · 写 \(GlassNumber.text(writeMB)) MB/s")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(GlassTone.secondary)
+                    .lineLimit(1)
+                    .monospacedDigit()
+            }
+        }
+    }
+}
+
+private struct GlassValuePill: View {
+    let icon: String
+    let label: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon).foregroundStyle(tint)
+                .font(.system(size: 10))
+            Text(label)
+                .foregroundStyle(GlassTone.secondary)
+                .font(.system(size: 10))
+            Spacer(minLength: 0)
+            Text(value)
+                .foregroundStyle(.white)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, minHeight: 25)
+        .background(.white.opacity(0.075),
+                    in: Capsule(style: .continuous))
+        .overlay(Capsule(style: .continuous).strokeBorder(.white.opacity(0.10), lineWidth: 0.7))
+    }
+}
+
 private struct ChipBarWidgetContent: View {
     let entry: ChipBarWidgetEntry
     let tile: ChipBarWidgetTile
 
     @Environment(\.widgetFamily) private var family
 
-    private var stale: Bool { entry.telemetry.stale(at: entry.date) }
-    private var teal: Color { Color(red: 0.23, green: 0.68, blue: 0.82) }
+    private var isFresh: Bool { !entry.telemetry.stale(at: entry.date) }
+    private var data: WidgetTelemetry { entry.telemetry }
+    private var history: [Double] { isFresh ? data.values("powerHistory") : [] }
 
-    private func formatted(_ value: Double?, digits: Int = 1) -> String {
-        guard let value, !stale else { return "—" }
-        return String(format: digits == 0 ? "%.0f" : "%.1f", value)
+    private func value(_ key: String) -> Double? {
+        isFresh ? data.number(key) : nil
+    }
+    private func text(_ key: String, digits: Int = 1) -> String {
+        GlassNumber.text(value(key), digits: digits)
+    }
+    private var gpu: Double? { value("gpuUsage") }
+    private var cpu: Double? { value("cpuUsage") }
+    private var memory: Double? { value("ramPercentage") }
+    private var chip: Double? { value("chip") }
+    private var chipLabel: String { isFresh ? data.label("chipName") ?? "Apple Silicon" : "Apple Silicon" }
+    private var hasExternal: Bool { data.number("externalTotalGB") != nil && isFresh }
+
+    @ViewBuilder var body: some View {
+        Group {
+            switch family {
+            case .systemLarge: largeWidget
+            case .systemMedium: mediumWidget
+            default: smallWidget
+            }
+        }
+        .padding(family == .systemSmall ? 12 : 14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .modifier(GlassWidgetBackground(purple: family == .systemLarge ||
+                                        (tile == .overview && family == .systemSmall)))
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 6) {
-                Image(systemName: tile.symbol).foregroundStyle(teal)
-                Text(tile.title).fontWeight(.semibold).lineLimit(1)
-                Spacer(minLength: 0)
-                Image(systemName: "bolt.fill")
-                    .foregroundStyle(.secondary).font(.caption2)
+    private var brandHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "waveform.path.ecg")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(GlassTone.gold)
+                .frame(width: 29, height: 29)
+                .background(GlassTone.gold.opacity(0.11),
+                            in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 9)
+                    .strokeBorder(GlassTone.gold.opacity(0.5), lineWidth: 1))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(tile == .overview || tile == .powerTrend ? "ChipBar" : tile.title)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white).lineLimit(1)
+                Text(chipLabel)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(GlassTone.secondary)
+                    .lineLimit(1).minimumScaleFactor(0.75)
             }
-            .font(.system(size: 12))
-
-            tileDetails
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-
+            Spacer(minLength: 4)
             HStack(spacing: 4) {
                 Circle()
-                    .fill(stale ? Color.orange : Color.green)
+                    .fill(isFresh ? GlassTone.mint : .orange)
+                    .frame(width: 6, height: 6)
+                Text(isFresh ? "已同步" : "待刷新")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(isFresh ? GlassTone.mint : GlassTone.secondary)
+            }
+            .padding(.horizontal, 7).padding(.vertical, 5)
+            .background(.white.opacity(0.08), in: Capsule())
+        }
+    }
+
+    private var powerHero: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("芯片总功率")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(GlassTone.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(text("chip"))
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundStyle(GlassTone.gold)
+                Text("W")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(GlassTone.secondary)
+            }
+            .lineLimit(1).minimumScaleFactor(0.7)
+            .monospacedDigit()
+            Text("均值 \(text("averagePower")) W · 峰值 \(text("peakPower")) W")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(GlassTone.secondary)
+                .lineLimit(1).minimumScaleFactor(0.75)
+        }
+    }
+
+    private var triple: GlassTripleRings {
+        GlassTripleRings(cpu: cpu, gpu: gpu, memory: memory,
+                         cpuPower: value("cpuPower"), gpuPower: value("gpuPower"),
+                         memoryUsed: value("ramUsed"), compact: false)
+    }
+
+    private var compactTriple: GlassTripleRings {
+        GlassTripleRings(cpu: cpu, gpu: gpu, memory: memory,
+                         cpuPower: value("cpuPower"), gpuPower: value("gpuPower"),
+                         memoryUsed: value("ramUsed"), compact: true)
+    }
+
+    private var accessoryPills: some View {
+        HStack(spacing: 5) {
+            GlassValuePill(icon: "fanblades", label: "风扇",
+                           value: text("fanRPM", digits: 0), tint: GlassTone.cyan)
+            GlassValuePill(icon: "sparkle", label: "ANE",
+                           value: text("anePower") + "W", tint: GlassTone.lilac)
+            GlassValuePill(icon: "bolt", label: "内部",
+                           value: text("internalPower") + "W", tint: GlassTone.gold)
+        }
+    }
+
+    private var largeWidget: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            brandHeader
+            HStack(alignment: .bottom, spacing: 6) {
+                powerHero
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                GlassSparkline(values: history)
+                    .frame(maxWidth: .infinity).frame(height: 60)
+            }
+            Rectangle().fill(.white.opacity(0.15)).frame(height: 0.6)
+            triple
+            HStack(spacing: 6) {
+                Text("CPU 各核心")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white)
+                Spacer()
+                let count = isFresh ? data.values("coreUsage", limit: 64).count : 0
+                Text(count == 0 ? "等待读取" : "\(count) 个核心")
+                    .font(.system(size: 9))
+                    .foregroundStyle(GlassTone.secondary)
+            }
+            GlassCoreBars(values: isFresh ? data.values("coreUsage", limit: 64) : [],
+                          tierNames: isFresh ? data.allNames("coreTiers") : [],
+                          barHeight: 23)
+            GlassStorageRow(name: "Macintosh HD",
+                            freeGB: value("storageFreeGB"),
+                            totalGB: value("storageTotalGB"),
+                            readMB: value("storageReadMB"),
+                            writeMB: value("storageWriteMB"),
+                            dense: true, color: GlassTone.blue)
+            if hasExternal {
+                GlassStorageRow(name: data.label("externalName") ?? "外置磁盘",
+                                freeGB: value("externalFreeGB"),
+                                totalGB: value("externalTotalGB"),
+                                readMB: value("externalReadMB"),
+                                writeMB: value("externalWriteMB"),
+                                dense: true, color: GlassTone.mint)
+            }
+            Spacer(minLength: 0)
+            accessoryPills
+        }
+        .foregroundStyle(.white)
+    }
+
+    private var mediumWidget: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 5) {
+                Image(systemName: tile.symbol)
+                    .foregroundStyle(GlassTone.gold)
+                Text(tile == .overview ? "ChipBar · 芯片监控" : tile.title)
+                    .fontWeight(.bold)
+                    .lineLimit(1)
+                Spacer(minLength: 3)
+                if let timestamp = data.sampledAt {
+                    Text(timestamp, style: .time)
+                        .foregroundStyle(GlassTone.secondary)
+                }
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(.white)
+
+            if tile == .storage {
+                GlassStorageRow(name: "Macintosh HD", freeGB: value("storageFreeGB"),
+                                totalGB: value("storageTotalGB"),
+                                readMB: value("storageReadMB"),
+                                writeMB: value("storageWriteMB"),
+                                dense: false)
+                if hasExternal {
+                    GlassStorageRow(name: data.label("externalName") ?? "外置磁盘",
+                                    freeGB: value("externalFreeGB"),
+                                    totalGB: value("externalTotalGB"),
+                                    readMB: value("externalReadMB"),
+                                    writeMB: value("externalWriteMB"),
+                                    dense: true, color: GlassTone.mint)
+                }
+            } else if tile == .applications {
+                applicationRows(limit: 3)
+            } else if tile == .cpuCores {
+                HStack {
+                    Text("\(isFresh ? data.values("coreUsage", limit: 64).count : 0) 个逻辑核心")
+                    Spacer()
+                    Text("CPU \(text("cpuUsage", digits: 0))%")
+                }.font(.caption).foregroundStyle(GlassTone.secondary)
+                GlassCoreBars(values: isFresh ? data.values("coreUsage", limit: 64) : [],
+                              tierNames: isFresh ? data.allNames("coreTiers") : [],
+                              barHeight: 65)
+            } else if tile == .cpu || tile == .gpu || tile == .memory {
+                HStack(spacing: 16) {
+                    GlassMetricRing(value: tile == .cpu ? cpu : tile == .gpu ? gpu : memory,
+                                    tint: tile == .cpu ? GlassTone.blue :
+                                        tile == .gpu ? GlassTone.lilac : GlassTone.gold,
+                                    diameter: 92)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(tile.title)
+                            .foregroundStyle(GlassTone.secondary).font(.caption)
+                        Text(tile == .memory
+                             ? GlassNumber.capacity(value("ramUsed"))
+                             : text(tile == .cpu ? "cpuPower" : "gpuPower") + " W")
+                            .font(.system(size: 25, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white).monospacedDigit()
+                        Text(tile == .memory
+                             ? "总内存 " + GlassNumber.capacity(value("ramTotal"))
+                             : "温度 " + text(tile == .cpu ? "cpuTemperature" : "gpuTemperature") + "°C")
+                            .font(.caption).foregroundStyle(GlassTone.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+            } else if tile == .fan || tile == .ane || tile == .powerSupply {
+                HStack {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(text(tile == .fan ? "fanRPM" :
+                                  tile == .ane ? "anePower" : "internalPower",
+                                  digits: tile == .fan ? 0 : 1))
+                            .font(.system(size: 38, weight: .bold, design: .rounded))
+                            .foregroundStyle(GlassTone.gold).monospacedDigit()
+                        Text(tile == .fan ? "RPM · 风扇转速" :
+                             tile == .ane ? "W · Neural Engine" : "W · 内部 DC 功率")
+                            .foregroundStyle(GlassTone.secondary).font(.caption)
+                    }
+                    Spacer()
+                    GlassConcentricRings(power: chip, cpu: cpu, gpu: gpu, memory: memory,
+                                         diameter: 100)
+                }
+            } else {
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("芯片总功率")
+                            .font(.system(size: 10)).foregroundStyle(GlassTone.secondary)
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            Text(text("chip"))
+                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                            Text("W").font(.system(size: 14))
+                        }
+                        .foregroundStyle(GlassTone.gold).monospacedDigit()
+                        Text("均值 \(text("averagePower")) W")
+                            .font(.system(size: 9)).foregroundStyle(GlassTone.secondary)
+                        GlassSparkline(values: history)
+                            .frame(height: 26)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    compactTriple
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            Spacer(minLength: 0)
+            if tile == .overview || tile == .powerTrend {
+                accessoryPills
+            }
+        }
+        .foregroundStyle(.white)
+    }
+
+    @ViewBuilder private var smallWidget: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: tile.symbol)
+                    .foregroundStyle(GlassTone.gold)
+                Text(tile == .overview ? "ChipBar" : tile.title)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            if tile == .overview {
+                Spacer(minLength: 0)
+                GlassConcentricRings(power: chip, cpu: cpu, gpu: gpu,
+                                     memory: memory, diameter: 92)
+                    .frame(maxWidth: .infinity)
+                Spacer(minLength: 0)
+                HStack(spacing: 6) {
+                    legend("CPU", cpu, GlassTone.blue)
+                    legend("GPU", gpu, GlassTone.lilac)
+                    legend("内存", memory, GlassTone.gold)
+                }
+            } else if tile == .cpu || tile == .gpu || tile == .memory {
+                Spacer(minLength: 0)
+                GlassMetricRing(value: tile == .cpu ? cpu : tile == .gpu ? gpu : memory,
+                                tint: tile == .cpu ? GlassTone.blue :
+                                    tile == .gpu ? GlassTone.lilac : GlassTone.gold,
+                                diameter: 88)
+                    .frame(maxWidth: .infinity)
+                Spacer(minLength: 0)
+                Text(tile == .memory
+                     ? GlassNumber.capacity(value("ramUsed"))
+                     : text(tile == .cpu ? "cpuPower" : "gpuPower") + " W")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white).monospacedDigit()
+                    .frame(maxWidth: .infinity)
+            } else if tile == .storage {
+                Spacer(minLength: 1)
+                GlassStorageRow(name: "Macintosh HD", freeGB: value("storageFreeGB"),
+                                totalGB: value("storageTotalGB"),
+                                readMB: value("storageReadMB"), writeMB: value("storageWriteMB"),
+                                dense: true)
+                if hasExternal {
+                    GlassStorageRow(name: data.label("externalName") ?? "外置磁盘",
+                                    freeGB: value("externalFreeGB"),
+                                    totalGB: value("externalTotalGB"),
+                                    readMB: value("externalReadMB"), writeMB: value("externalWriteMB"),
+                                    dense: true, color: GlassTone.mint)
+                }
+                Spacer(minLength: 0)
+            } else if tile == .cpuCores {
+                Spacer(minLength: 0)
+                GlassCoreBars(values: isFresh ? data.values("coreUsage", limit: 64) : [],
+                              tierNames: isFresh ? data.allNames("coreTiers") : [],
+                              barHeight: 70)
+                Spacer(minLength: 0)
+                Text("逐核心占用")
+                    .foregroundStyle(GlassTone.secondary).font(.caption2)
+            } else if tile == .applications {
+                applicationRows(limit: 2)
+                Spacer(minLength: 0)
+            } else if tile == .powerTrend {
+                Text(text("chip") + " W")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(GlassTone.gold).monospacedDigit()
+                GlassSparkline(values: history).frame(height: 65)
+                Spacer(minLength: 0)
+            } else {
+                Spacer(minLength: 0)
+                Text(text(tile == .fan ? "fanRPM" :
+                          tile == .ane ? "anePower" : "internalPower",
+                          digits: tile == .fan ? 0 : 1))
+                    .font(.system(size: 33, weight: .bold, design: .rounded))
+                    .foregroundStyle(GlassTone.gold)
+                    .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                Text(tile == .fan ? "RPM" : "W")
+                    .foregroundStyle(GlassTone.secondary).font(.caption)
+                Spacer(minLength: 0)
+                GlassSparkline(values: history).frame(height: 24)
+            }
+            HStack(spacing: 4) {
+                Circle().fill(isFresh ? GlassTone.mint : .orange)
                     .frame(width: 5, height: 5)
-                Text(stale ? "数据已过期 · 打开 ChipBar" : "最近一次采样")
+                Text(isFresh ? "最近一次监测" : "等待新数据")
+                    .foregroundStyle(GlassTone.secondary)
+                    .font(.system(size: 8))
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                if let timestamp = entry.telemetry.sampledAt {
-                    Text(timestamp, style: .time)
-                }
             }
-            .font(.system(size: 9))
-            .foregroundStyle(.secondary)
         }
-        .padding(13)
-        .modifier(ChipBarWidgetBackground())
+        .foregroundStyle(.white)
     }
 
-    @ViewBuilder private var tileDetails: some View {
-        let data = entry.telemetry
-        switch tile {
-        case .powerTrend:
-            metricText(formatted(data.number("chip")) + " W")
-            Sparkline(values: stale ? [] : data.values("powerHistory"), tint: .orange)
-                .frame(height: family == .systemSmall ? 42 : 75)
-        case .cpu:
-            metricText(formatted(data.number("cpuUsage"), digits: 0) + "%")
-            Text("功率 " + formatted(data.number("cpuPower")) + " W")
-                .foregroundStyle(.secondary).font(.caption)
-            ProgressView(value: stale ? 0 : min(100, data.number("cpuUsage") ?? 0),
-                         total: 100).tint(.blue)
-        case .gpu:
-            metricText(formatted(data.number("gpuUsage"), digits: 0) + "%")
-            Text("功率 " + formatted(data.number("gpuPower")) + " W")
-                .foregroundStyle(.secondary).font(.caption)
-            ProgressView(value: stale ? 0 : min(100, data.number("gpuUsage") ?? 0),
-                         total: 100).tint(.purple)
-        case .memory:
-            metricText(formatted(data.number("ramPercentage"), digits: 0) + "%")
-            Text(formatted(data.number("ramUsed")) + " / " +
-                 formatted(data.number("ramTotal")) + " GB")
-                .font(.caption).foregroundStyle(.secondary)
-            ProgressView(value: stale ? 0 : min(100, data.number("ramPercentage") ?? 0),
-                         total: 100).tint(.mint)
-        case .cpuCores:
-            let cores = stale ? [] : data.values("coreUsage", limit: 64)
-            Text(cores.isEmpty ? "暂无逐核心数据" : "\(cores.count) 个逻辑核心")
-                .font(.caption).foregroundStyle(.secondary)
-            CoreBars(values: cores).frame(height: family == .systemSmall ? 45 : 88)
-        case .fan:
-            metricText(formatted(data.number("fanRPM"), digits: 0) + " RPM")
-            Text("当前风扇转速").font(.caption).foregroundStyle(.secondary)
-        case .ane:
-            metricText(formatted(data.number("anePower")) + " W")
-            Text("Apple Neural Engine").font(.caption).foregroundStyle(.secondary)
-        case .storage:
-            metricText(formatted(data.number("storageFreeGB"), digits: 0) + " GB")
-            Text("可用 / 总计 " + formatted(data.number("storageTotalGB"), digits: 0) + " GB")
-                .font(.caption).foregroundStyle(.secondary)
-            if !stale, let free = data.number("storageFreeGB"),
-               let total = data.number("storageTotalGB"), total > 0 {
-                ProgressView(value: max(0, min(1, 1 - free / total)))
-                    .tint(teal)
-            }
-        case .powerSupply:
-            metricText(formatted(data.number("internalPower")) + " W")
-            Text("内部 DC 功率 · 非插座 AC")
-                .font(.caption).foregroundStyle(.secondary)
-        case .applications:
-            let names = stale ? [] : data.names("applicationNames")
-            let values = stale ? [] : data.values("applicationCPU", limit: 3)
+    private func legend(_ label: String, _ number: Double?, _ tint: Color) -> some View {
+        HStack(spacing: 3) {
+            Circle().fill(tint).frame(width: 5, height: 5)
+            Text(GlassNumber.text(number, digits: 0) + "%")
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel(label)
+    }
+
+    private func applicationRows(limit: Int) -> some View {
+        let names = isFresh ? data.names("applicationNames", limit: limit) : []
+        let cpu = isFresh ? data.values("applicationCPU", limit: limit) : []
+        return VStack(alignment: .leading, spacing: 8) {
             if names.isEmpty {
-                Text("暂无应用占用快照").foregroundStyle(.secondary).font(.caption)
+                Text("打开 ChipBar 获取应用占用")
+                    .font(.caption)
+                    .foregroundStyle(GlassTone.secondary)
             } else {
-                VStack(alignment: .leading, spacing: 5) {
-                    ForEach(Array(names.enumerated()), id: \.offset) { item in
-                        HStack {
-                            Text(item.element).lineLimit(1)
-                            Spacer()
-                            if item.offset < values.count {
-                                Text(String(format: "%.0f%%", values[item.offset]))
-                                    .monospacedDigit()
-                            }
+                ForEach(Array(names.enumerated()), id: \.offset) { item in
+                    HStack {
+                        Text(item.element).lineLimit(1)
+                        Spacer(minLength: 0)
+                        if cpu.indices.contains(item.offset) {
+                            Text(String(format: "%.0f%%", cpu[item.offset]))
+                                .monospacedDigit()
                         }
-                        .font(.caption)
                     }
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white)
                 }
             }
-        }
-    }
-
-    private func metricText(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: family == .systemSmall ? 23 : 32,
-                          weight: .semibold, design: .rounded))
-            .monospacedDigit()
-            .lineLimit(1)
-            .minimumScaleFactor(0.65)
-    }
-}
-
-private struct Sparkline: View {
-    let values: [Double]
-    let tint: Color
-
-    var body: some View {
-        GeometryReader { geometry in
-            Path { path in
-                guard values.count > 1 else { return }
-                let range = max(1, (values.max() ?? 1) - (values.min() ?? 0))
-                let low = values.min() ?? 0
-                let width = geometry.size.width
-                let height = geometry.size.height
-                for (index, value) in values.enumerated() {
-                    let point = CGPoint(
-                        x: width * CGFloat(index) / CGFloat(values.count - 1),
-                        y: height - CGFloat((value - low) / range) * height)
-                    if index == 0 { path.move(to: point) }
-                    else { path.addLine(to: point) }
-                }
-            }
-            .stroke(tint, style: StrokeStyle(lineWidth: 2.4, lineCap: .round,
-                                             lineJoin: .round))
-        }
-    }
-}
-
-private struct CoreBars: View {
-    let values: [Double]
-    var body: some View {
-        GeometryReader { geometry in
-            HStack(alignment: .bottom, spacing: 2) {
-                ForEach(Array(values.enumerated()), id: \.offset) { item in
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.blue.opacity(0.85))
-                        .frame(height: max(3, geometry.size.height * CGFloat(min(100, item.element)) / 100))
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        }
-    }
-}
-
-private struct ChipBarWidgetBackground: ViewModifier {
-    @ViewBuilder func body(content: Content) -> some View {
-        if #available(macOS 14.0, *) {
-            content.containerBackground(.thinMaterial, for: .widget)
-        } else {
-            content.background(.regularMaterial)
         }
     }
 }
@@ -361,6 +937,7 @@ private struct ChipBarWidgetBackground: ViewModifier {
 struct ChipBarWidgets: WidgetBundle {
     @WidgetBundleBuilder
     var body: some Widget {
+        ChipBarTelemetryWidget<OverviewWidgetModule>()
         ChipBarTelemetryWidget<PowerTrendWidgetModule>()
         ChipBarTelemetryWidget<CPUWidgetModule>()
         ChipBarTelemetryWidget<GPUWidgetModule>()
