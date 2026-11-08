@@ -1,10 +1,22 @@
-# ChipBar v3.3.4 · Apple Silicon 菜单栏监控
+# ChipBar v3.3.5 · Apple Silicon 菜单栏监控
 
 > macOS 13+ · Apple Silicon (arm64) · 原生 SwiftUI + AppKit · macOS 26+ Liquid Glass
 >
 > 最新界面采用三个独立圆环磁贴、紧凑的 CPU 各核心图、风扇与 ANE 并排布局，以及“电源与功率 / 应用占用 / 外置硬盘”独立二级卡片。
 
-**[GitHub 产品主页](../../readme.md)** · **[下载 v3.3.4](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.3.4)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+**[GitHub 产品主页](../../readme.md)** · **[下载 v3.3.5](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.3.5)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+
+## v3.3.5 原生 Liquid Glass 高密度监控小组件
+
+以「B · 高密度液态玻璃（精修）」设计图为视觉基准：午夜蓝 / 紫色双重渐变、黄色功率趋势光线、蓝 / 紫 / 金三色占用圆环、真实逐核心柱状图、存储容量跑道和半透明状态胶囊。所有数值均来自 ChipBar 真实监控快照，**绝不把设计图里的 11.6 W、29% 等示例数值写入安装包**。
+
+系统小组件库新增独立的 **「ChipBar · 仪表盘」** 综合小组件，并保留「芯片功率趋势 / CPU / GPU / 内存 / CPU 各核心 / 风扇 / ANE / 储存空间 / 内部功率 / 应用占用」十个专项小组件。每个小组件都提供下列尺寸：
+
+- **小型**：参照右下角三重圆环或聚焦模块；仪表盘显示 CPU/GPU/内存同心环及中心芯片功率，储存模块显示真实内外置容量条。
+- **中型**：参照右上角的蓝色横版监测卡片；显示总功率、黄色曲线和三色占用环，或相应专项硬件指标。
+- **大型**：参照左侧紫色高密度概览；尽量容纳芯片信息、功率曲线、三环、逐核心负载、磁盘和风扇 / ANE / 内部功率。具体排版会按 macOS 所给的小组件尺寸自适应。
+
+监控快照新增平均/峰值功率、macmon 真实芯片型号、验证通过的逻辑核心类型和可用的外置盘、读写速度数据。硬件暂时无读数时显示「—」或等待状态，不会显示伪造数值。**macOS WidgetKit 会控制刷新周期；这是漂亮且节能的最近一次快照，不是每秒刷新的动态图。**
 
 ## v3.3.4 设置与磁贴交互简化
 
