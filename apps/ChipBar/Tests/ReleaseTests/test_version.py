@@ -91,8 +91,34 @@ class VersionTests(unittest.TestCase):
         for misleading_mock in ["11.6 W", "29%", "42%", "84%", "Zark",
                                 "Apple M5 Pro"]:
             self.assertNotIn(misleading_mock, widget)
-        self.assertIn("private var isFresh", widget)
+        self.assertIn("private var fresh", widget)
         self.assertIn("WidgetCenter.shared.reloadAllTimelines()", publisher)
+
+    def test_only_reference_widget_kinds_are_registered(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "Sources/ChipBarWidgets/ChipBarWidgets.swift").read_text()
+        import re
+        kinds = re.findall(r'^\s+ChipBarTelemetryWidget<([A-Za-z]+WidgetModule)>\(\)',
+                           source, re.MULTILINE)
+        self.assertEqual(kinds, ["OverviewWidgetModule", "StorageWidgetModule"])
+        self.assertIn("case overview, storage", source)
+        self.assertIn("tile == .storage", source)
+        self.assertIn(".systemSmall, .systemMedium, .systemLarge", source)
+        self.assertNotIn("ChipBarTelemetryWidget<CPUWidgetModule>", source)
+        self.assertNotIn("ChipBarTelemetryWidget<GPUWidgetModule>", source)
+
+    def test_core_sampler_independent_of_dashboard_and_refreshes_host_snapshot(self):
+        root = Path(__file__).resolve().parents[2]
+        bridge = (root / "Sources/ChipBar/WidgetTelemetryBridge.swift").read_text()
+        widget = (root / "Sources/ChipBarWidgets/ChipBarWidgets.swift").read_text()
+        self.assertIn("private let coreSampler = CPUCoreSampler()", bridge)
+        self.assertIn("updateCoreReadingsIfNeeded(now: now)", bridge)
+        self.assertIn("await self.coreSampler.read()", bridge)
+        self.assertIn('values["coreUsage"]', bridge)
+        self.assertNotIn("CPUCoreLoadModel.shared.values", bridge)
+        self.assertIn("now.timeIntervalSince(lastWrite) < 15", bridge)
+        self.assertIn(">= 120", bridge)
+        self.assertIn("date.addingTimeInterval(2 * 60)", widget)
 
     def test_widget_refresh_is_automatic_and_removed_from_settings(self):
         root = Path(__file__).resolve().parents[2]
