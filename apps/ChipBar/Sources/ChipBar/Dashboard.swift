@@ -67,7 +67,6 @@ struct Dashboard: View {
     @StateObject private var state: DashboardState
     @StateObject private var updater = ChipBarUpdater.shared
     @ObservedObject private var tileLayout = DashboardTileLayoutModel.shared
-    @ObservedObject private var widgetRegistration = ChipBarWidgetRegistrationModel.shared
     @StateObject private var powerReading = ChipBarPowerFlowModel.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
@@ -286,48 +285,9 @@ struct Dashboard: View {
             settingsNavigation
             MacHardwareInformationSection(chip: monitor.sample?.chip ?? monitor.hardware)
             fanOverview
-            ChipBarTileSettings(layout: tileLayout)
-            desktopWidgetSettings
             settingsPanel
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var desktopWidgetSettings: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("桌面与通知中心小组件", systemImage: "square.on.square.dashed")
-                .font(.subheadline.weight(.semibold))
-            Text("ChipBar 的十个监控模块可分别作为 macOS 原生小组件添加。")
-                .font(.caption2)
-            Text("在桌面点右键 → 编辑小组件 → 搜索 ChipBar，选择模块和尺寸；通知中心也可在“编辑小组件”中添加。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("小组件显示系统调度的最近一次快照，并非每秒刷新。打开 ChipBar 可查看实时数据。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                Button("检查小组件") { widgetRegistration.check() }
-                    .disabled(widgetRegistration.checking)
-                Button("修复小组件注册") { widgetRegistration.repair() }
-                    .disabled(widgetRegistration.checking)
-            }
-            .buttonStyle(ChipBarPressStyle())
-            .font(.caption)
-            Text(widgetRegistration.status)
-                .font(.caption2)
-                .foregroundStyle(widgetRegistration.registered ? Color.secondary : Color.orange)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
-            Text("修复后关闭并重新打开系统小组件库；如仍无法添加，请检查扩展签名及 macOS 的 WidgetKit 日志。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
     }
 
     private var settingsNavigation: some View {
@@ -620,7 +580,7 @@ struct Dashboard: View {
                     Label("菜单栏显示", systemImage: "menubar.rectangle")
                         .font(.subheadline.weight(.semibold))
                     Spacer()
-                    Text("\(monitor.menuItems.count) / 8 已显示")
+                    Text("\(monitor.menuItems.count + (monitor.ssd.menuTemperaturesEnabled ? 1 : 0)) / 9 已显示")
                         .font(.caption2)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
@@ -638,7 +598,8 @@ struct Dashboard: View {
                     }
                     GridRow {
                         menuChoice(.network)
-                        menuChoice(.disk).gridCellColumns(2)
+                        menuChoice(.disk)
+                        menuSSDTemperatureChoice
                     }
                 }
                 if monitor.menuItems.contains(.power) {
@@ -650,13 +611,6 @@ struct Dashboard: View {
                         accessibilityLabel: "菜单栏功率指标"
                     )
                 }
-                Toggle("菜单栏 SSD 温度", isOn: Binding(
-                    get: { monitor.ssd.menuTemperaturesEnabled },
-                    set: { monitor.ssd.menuTemperaturesEnabled = $0 }
-                ))
-                    .toggleStyle(ChipBarGlassToggleStyle())
-                    .font(.caption.weight(.medium))
-                    .accessibilityHint("没有外置硬盘连接时也可以随时关闭")
             }
             .padding(12)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
@@ -731,6 +685,44 @@ struct Dashboard: View {
         .buttonStyle(ChipBarPressStyle())
         .accessibilityLabel(item.title)
         .accessibilityValue(enabled ? "已显示" : "未显示")
+    }
+
+    /// SSD temperatures have a separate persisted master preference from
+    /// MenuContent. Render it with exactly the same pill as all other menu
+    /// items, without changing per-drive SMART selections.
+    private var menuSSDTemperatureChoice: some View {
+        let enabled = monitor.ssd.menuTemperaturesEnabled
+        return Button {
+            withAnimation(ChipBarMotion.optional(ChipBarMotion.selection,
+                                                 reduceMotion: reduceMotion)) {
+                monitor.ssd.menuTemperaturesEnabled.toggle()
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "thermometer.medium")
+                    .font(.system(size: 11))
+                    .frame(width: 13)
+                Text("SSD 温度")
+                    .font(.system(size: 10, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Spacer(minLength: 0)
+                if enabled {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+            }
+            .foregroundStyle(enabled ? Color.black : .primary)
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .frame(maxWidth: .infinity)
+            .modifier(MenuChoiceSurface(selected: enabled))
+            .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(ChipBarPressStyle())
+        .accessibilityLabel("菜单栏 SSD 温度")
+        .accessibilityValue(enabled ? "已显示" : "未显示")
+        .accessibilityHint("即使当前没有外置硬盘也能修改此偏好")
     }
 
     private func menuTitle(_ item: MenuContent) -> String {
