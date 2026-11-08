@@ -1,10 +1,18 @@
-# ChipBar v3.3.3 · Apple Silicon 菜单栏监控
+# ChipBar v3.3.4 · Apple Silicon 菜单栏监控
 
 > macOS 13+ · Apple Silicon (arm64) · 原生 SwiftUI + AppKit · macOS 26+ Liquid Glass
 >
 > 最新界面采用三个独立圆环磁贴、紧凑的 CPU 各核心图、风扇与 ANE 并排布局，以及“电源与功率 / 应用占用 / 外置硬盘”独立二级卡片。
 
-**[GitHub 产品主页](../../readme.md)** · **[下载 v3.3.3](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.3.3)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+**[GitHub 产品主页](../../readme.md)** · **[下载 v3.3.4](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.3.4)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+
+## v3.3.4 设置与磁贴交互简化
+
+主页磁贴在长按/点击「排列」后，按住拖动、放下时会**自动退出排列模式**；相邻磁贴继续自动避让，松手的轻压和弹性回弹动画保持完整，不会因为退出编辑而突然消失。磁贴位置照常保存。
+
+「设备与设置」不再出现「主页磁贴布局」和独立的小组件说明磁贴，减少滚动和重复文字。菜单栏「SSD 温度」现与其他 8 项显示选项处在**同一九宫格**，使用完全一致的浅色选中胶囊；按下首次开启时也会启用默认 SSD 温度读数。已经设置的每盘温度显示偏好会保留。
+
+WidgetKit 扩展由主程序**自动注册**，新监测数据自动发布成本机快照（最多每分钟一次）；ChipBar 自动申请 WidgetKit 时间线刷新（最多约每 15 分钟一次），系统可依据预算推迟。**不需要任何手动刷新设置，也不能保证每秒更新。** 小组件首次出现和实际刷新仍由 macOS 管理。
 
 ## v3.3.3 小组件启动修复
 
