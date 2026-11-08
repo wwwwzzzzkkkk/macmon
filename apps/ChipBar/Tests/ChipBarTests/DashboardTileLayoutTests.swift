@@ -65,10 +65,10 @@ struct DashboardTileLayoutTests {
         model.finishDrop(reduceMotion: true)
         #expect(model.dragging == nil)
         #expect(model.highlighted == nil)
-        #expect(model.settling == .cpu)
-        model.finishEditing(reduceMotion: true)
         #expect(!model.editing)
-        #expect(model.settling == nil)
+        // Exiting edit mode must NOT cancel the landing animation.
+        #expect(model.settling == .cpu)
+        #expect(model.layoutRevision == initialHeightRevision + 1)
     }
 
     @Test func editModePressMovesWithCursorAndReflowsOnlyOnTargetChange() {
@@ -94,6 +94,8 @@ struct DashboardTileLayoutTests {
         model.endPress(.cpu, reduceMotion: true)
         #expect(model.dragging == nil)
         #expect(model.pointer.draggedTile == nil)
+        #expect(!model.editing)
+        #expect(model.settling == .cpu)
         #expect(model.layoutRevision == revision + 1)
         let reloaded = DashboardTileLayoutModel(defaults: defaults)
         #expect(reloaded.visible[1] == .gpu)
