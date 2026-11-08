@@ -19,6 +19,15 @@ import ChipBarCore
     private var cores: [Double] = []
     private let coreSampler = CPUCoreSampler()
     private var coreSampling = false
+    // Like CPU cores, disk capacity sampling cannot rely on a dashboard view:
+    // the menu-bar app may run for days without that view being opened.
+    private let internalStorageSampler = InternalStorageSampler()
+    private let diskSampler = DiskActivitySampler()
+    private var storageSampling = false
+    private var lastStorageAttempt: Date?
+    private var lastStorageSample: Date?
+    private var bootCapacity: InternalStorageCapacity?
+    private var physicalDisk: DiskActivitySnapshot?
     private var lastPayload: [String: Any]?
 
     // Persist a fresh payload approximately every 15 seconds while the host
@@ -27,6 +36,7 @@ import ChipBarCore
     func publish(_ sample: Sample, history: [Sample]) {
         let now = Date()
         updateCoreReadingsIfNeeded(now: now)
+        updateStorageReadingsIfNeeded(now: now)
         if let lastWrite, now.timeIntervalSince(lastWrite) < 15 { return }
         var values: [String: Any] = [
             "timestamp": now.timeIntervalSince1970
@@ -72,40 +82,7 @@ import ChipBarCore
         // collected on a low-frequency background actor instead.
         mergeCoreReadings(into: &values)
 
-        if let availableBytes = InternalStorageModel.shared.capacity?.availableBytes,
-           availableBytes >= 0 {
-            values["storageFreeGB"] = Double(availableBytes) / 1_000_000_000
-        }
-        if let totalBytes = InternalStorageModel.shared.capacity?.totalBytes,
-           totalBytes > 0 {
-            values["storageTotalGB"] = Double(totalBytes) / 1_000_000_000
-        }
-
-        // Same disk model as ChipBar Home. Rates are stored only while the
-        // sampler's physical-disk snapshot is fresh; never invent a speed.
-        let external = ExternalStorageCapacityModel.shared
-        if let drive = external.volumes.first {
-            values["externalName"] = String(drive.volume.name.prefix(40))
-            write("externalFreeGB", Double(drive.volume.available) / 1_000_000_000)
-            write("externalTotalGB", Double(drive.volume.total) / 1_000_000_000)
-        }
-        if let activity = external.activity,
-           now.timeIntervalSince(activity.date) >= 0,
-           now.timeIntervalSince(activity.date) <= 10 {
-            let internalRates = activity.rates.filter {
-                activity.connected.contains($0.key) && !activity.external.contains($0.key)
-            }.map(\.value)
-            if !internalRates.isEmpty {
-                write("storageReadMB", internalRates.reduce(0) { $0 + $1.readMB })
-                write("storageWriteMB", internalRates.reduce(0) { $0 + $1.writeMB })
-            }
-            if let drive = external.volumes.first,
-               activity.connected.contains(drive.diskID),
-               let rate = activity.rates[drive.diskID] {
-                write("externalReadMB", rate.readMB)
-                write("externalWriteMB", rate.writeMB)
-            }
-        }
+        mergeStorageReadings(into: &values)
 
         if let snapshot = ApplicationActivityModel.shared.snapshot {
             let top = snapshot.rows
@@ -127,6 +104,79 @@ import ChipBarCore
         let verified = CPUCoreTopology.current.namesByLogicalID
         if verified.count == cores.count {
             values["coreTiers"] = cores.indices.map { verified[$0] ?? "" }
+        }
+    }
+
+    private func mergeStorageReadings(into values: inout [String: Any]) {
+        // When a drive has been unplugged, clear any stale external fields
+        // before writing the latest snapshot. Do not claim old I/O speeds.
+        for key in ["storageFreeGB", "storageTotalGB", "storageReadMB",
+                    "storageWriteMB", "externalName", "externalFreeGB",
+                    "externalTotalGB", "externalReadMB", "externalWriteMB"] {
+            values.removeValue(forKey: key)
+        }
+        let capacity = bootCapacity ?? InternalStorageModel.shared.capacity
+        if let capacity {
+            values["storageFreeGB"] = Double(capacity.availableBytes) / 1_000_000_000
+            values["storageTotalGB"] = Double(capacity.totalBytes) / 1_000_000_000
+        }
+        let fallback = ExternalStorageCapacityModel.shared
+        let freshDisk = physicalDisk.flatMap { snapshot in
+            Date().timeIntervalSince(snapshot.date) < 90 ? snapshot : nil
+        }
+        let disk = freshDisk ?? fallback.activity
+        let external: [ExternalVolumeCapacity]
+        if let freshDisk {
+            external = ExternalStorageCapacityModel.displayRows(from: freshDisk)
+        } else {
+            external = fallback.volumes
+        }
+        if let drive = external.first {
+            values["externalName"] = String(drive.volume.name.prefix(40))
+            values["externalFreeGB"] = Double(drive.volume.available) / 1_000_000_000
+            values["externalTotalGB"] = Double(drive.volume.total) / 1_000_000_000
+        }
+        if let disk, Date().timeIntervalSince(disk.date) <= 90 {
+            let internalRates = disk.rates.filter {
+                disk.connected.contains($0.key) && !disk.external.contains($0.key)
+            }.map(\.value)
+            if !internalRates.isEmpty {
+                values["storageReadMB"] = internalRates.reduce(0) { $0 + $1.readMB }
+                values["storageWriteMB"] = internalRates.reduce(0) { $0 + $1.writeMB }
+            }
+            if let drive = external.first,
+               disk.connected.contains(drive.diskID),
+               let rates = disk.rates[drive.diskID] {
+                values["externalReadMB"] = rates.readMB
+                values["externalWriteMB"] = rates.writeMB
+            }
+        }
+    }
+
+    private func updateStorageReadingsIfNeeded(now: Date) {
+        // Reuse the existing native samplers, on demand. At most one bounded
+        // scan each 45 seconds; never add a continuously running disk task.
+        guard !storageSampling,
+              lastStorageAttempt.map({ now.timeIntervalSince($0) >= 45 }) ?? true else { return }
+        lastStorageAttempt = now
+        storageSampling = true
+        Task { [weak self] in
+            guard let self else { return }
+            let capacity = await self.internalStorageSampler.read()
+            // Two physical counter samples are needed to compute true MB/s.
+            _ = await self.diskSampler.sampleAll(includeVolumes: true)
+            do { try await Task.sleep(for: .milliseconds(1_000)) }
+            catch { self.storageSampling = false; return }
+            let snapshot = await self.diskSampler.sampleAll(includeVolumes: true)
+            self.bootCapacity = capacity
+            self.physicalDisk = snapshot
+            self.lastStorageSample = Date()
+            self.storageSampling = false
+            if var payload = self.lastPayload {
+                self.mergeStorageReadings(into: &payload)
+                payload["timestamp"] = Date().timeIntervalSince1970
+                self.writePayload(payload, now: Date())
+            }
         }
     }
 
