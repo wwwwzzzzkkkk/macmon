@@ -73,6 +73,21 @@ class VersionTests(unittest.TestCase):
                     run.assert_not_called()
                 self.assertFalse((root / "dist" / version.ASSET).exists())
 
+    def test_widget_refresh_is_automatic_and_removed_from_settings(self):
+        root = Path(__file__).resolve().parents[2]
+        dashboard = (root / "Sources/ChipBar/Dashboard.swift").read_text()
+        telemetry = (root / "Sources/ChipBar/WidgetTelemetryBridge.swift").read_text()
+        controller = (root / "Sources/ChipBar/MenuController.swift").read_text()
+        self.assertNotIn("desktopWidgetSettings", dashboard)
+        self.assertNotIn("ChipBarTileSettings(layout:", dashboard)
+        self.assertNotIn("widgetRegistration.check()", dashboard)
+        self.assertNotIn("widgetRegistration.repair()", dashboard)
+        self.assertIn("menuSSDTemperatureChoice", dashboard)
+        self.assertIn("WidgetCenter.shared.reloadAllTimelines()", telemetry)
+        self.assertIn("WidgetTelemetryBridge.shared.publish(sample, history: self.history)",
+                      (root / "Sources/ChipBar/Monitor.swift").read_text())
+        self.assertIn("ChipBarWidgetRegistrationModel.shared.ensureOnFirstLaunch()", controller)
+
     def test_widget_descriptors_never_use_interpolated_descriptions(self):
         # The widget extension is queried before the gallery can list tiles.
         # LocalizedStringKey interpolation inside WidgetConfiguration.description
