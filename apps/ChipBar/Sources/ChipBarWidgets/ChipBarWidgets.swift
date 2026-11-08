@@ -2,77 +2,32 @@ import Foundation
 import SwiftUI
 import WidgetKit
 
-/// All ten ChipBar dashboard modules are independent, selectable widgets in
-/// the macOS desktop / Notification Center widget gallery. The system owns
-/// placement, sizing and update budgets.
-private enum ChipBarWidgetTile: String, CaseIterable {
-    case overview, powerTrend, cpu, gpu, memory, cpuCores, fan, ane, storage, powerSupply, applications
+/// Exactly the two designs in the supplied reference: a dashboard in three
+/// system sizes, and the separate compact storage card. Removing registered
+/// kinds also removes the old per-CPU/GPU/memory entries from WidgetKit gallery.
+private enum ChipBarWidgetTile: String {
+    case overview, storage
 
     var title: String {
         switch self {
         case .overview: return "ChipBar 仪表盘"
-        case .powerTrend: return "芯片功率趋势"
-        case .cpu: return "CPU"
-        case .gpu: return "GPU"
-        case .memory: return "内存"
-        case .cpuCores: return "CPU 各核心"
-        case .fan: return "风扇"
-        case .ane: return "ANE"
         case .storage: return "储存空间"
-        case .powerSupply: return "内部功率"
-        case .applications: return "应用占用"
         }
     }
 
-    /// The descriptor-query path evaluates WidgetConfiguration before any
-    /// timeline is rendered. WidgetKit's .description(_:) cannot handle
-    /// LocalizedStringKey interpolation and can fatalError during that query.
-    /// Keep gallery metadata backed by direct, static localization keys.
+    /// LocalizedStringKey values must be compile-time literals. Formatting
+    /// gallery descriptions dynamically can crash chronod's descriptor query.
     var galleryTitle: LocalizedStringKey {
         switch self {
         case .overview: return "ChipBar · 仪表盘"
-        case .powerTrend: return "ChipBar · 芯片功率趋势"
-        case .cpu: return "ChipBar · CPU"
-        case .gpu: return "ChipBar · GPU"
-        case .memory: return "ChipBar · 内存"
-        case .cpuCores: return "ChipBar · CPU 各核心"
-        case .fan: return "ChipBar · 风扇"
-        case .ane: return "ChipBar · ANE"
         case .storage: return "ChipBar · 储存空间"
-        case .powerSupply: return "ChipBar · 内部功率"
-        case .applications: return "ChipBar · 应用占用"
         }
     }
 
     var symbol: String {
         switch self {
         case .overview: return "waveform.path.ecg.rectangle"
-        case .powerTrend: return "chart.xyaxis.line"
-        case .cpu: return "cpu"
-        case .gpu: return "square.stack.3d.up"
-        case .memory: return "memorychip"
-        case .cpuCores: return "chart.bar.xaxis"
-        case .fan: return "fanblades"
-        case .ane: return "sparkle"
         case .storage: return "internaldrive"
-        case .powerSupply: return "bolt.horizontal.circle"
-        case .applications: return "square.stack.3d.up"
-        }
-    }
-
-    var metric: String {
-        switch self {
-        case .overview: return "chip"
-        case .powerTrend: return "chip"
-        case .cpu: return "cpuPower"
-        case .gpu: return "gpuPower"
-        case .memory: return "ramPercentage"
-        case .cpuCores: return "cpuUsage"
-        case .fan: return "fanRPM"
-        case .ane: return "anePower"
-        case .storage: return "storageFreeGB"
-        case .powerSupply: return "internalPower"
-        case .applications: return "cpuUsage"
         }
     }
 }
@@ -154,24 +109,17 @@ private struct ChipBarWidgetProvider: TimelineProvider {
     }
 }
 
-// WidgetKit requires each Widget type to be default-initializable. An
-// instance-only tile argument cannot satisfy Widget.init() and fails the
-// distributed extension build. A distinct marker type preserves each tile's
-// identity when WidgetKit reconstructs it on its own.
+// Separate zero-argument Widget types are required for macOS to restore
+// independently placed instances. The gallery exposes only these two kinds.
 private protocol ChipBarWidgetModule {
     static var tile: ChipBarWidgetTile { get }
 }
-private enum OverviewWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .overview }
-private enum PowerTrendWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .powerTrend }
-private enum CPUWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .cpu }
-private enum GPUWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .gpu }
-private enum MemoryWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .memory }
-private enum CPUCoresWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .cpuCores }
-private enum FanWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .fan }
-private enum ANEWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .ane }
-private enum StorageWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .storage }
-private enum PowerSupplyWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .powerSupply }
-private enum ApplicationsWidgetModule: ChipBarWidgetModule { static let tile: ChipBarWidgetTile = .applications }
+private enum OverviewWidgetModule: ChipBarWidgetModule {
+    static let tile: ChipBarWidgetTile = .overview
+}
+private enum StorageWidgetModule: ChipBarWidgetModule {
+    static let tile: ChipBarWidgetTile = .storage
+}
 
 private struct ChipBarTelemetryWidget<Module: ChipBarWidgetModule>: Widget {
     init() {}
@@ -187,19 +135,21 @@ private struct ChipBarTelemetryWidget<Module: ChipBarWidgetModule>: Widget {
         // with "Formatted text for description is not supported" during
         // chronod's getAllDescriptors query, leaving the gallery empty.
         .description("在桌面或通知中心查看 ChipBar 的最近一次监测快照。")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .supportedFamilies(tile == .storage
+                           ? [.systemSmall]
+                           : [.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
 
 private enum GlassTone {
-    static let blue = Color(red: 0.39, green: 0.69, blue: 1.00)
-    static let lilac = Color(red: 0.79, green: 0.62, blue: 1.00)
-    static let gold = Color(red: 1.00, green: 0.78, blue: 0.20)
-    static let mint = Color(red: 0.28, green: 0.87, blue: 0.79)
-    static let cyan = Color(red: 0.20, green: 0.79, blue: 0.95)
+    static let blue = Color(red: 0.53, green: 0.74, blue: 0.97)
+    static let lilac = Color(red: 0.80, green: 0.72, blue: 0.96)
+    static let gold = Color(red: 0.98, green: 0.83, blue: 0.47)
+    static let mint = Color(red: 0.49, green: 0.86, blue: 0.80)
+    static let cyan = Color(red: 0.42, green: 0.77, blue: 0.91)
     static let ink = Color.white
-    static let secondary = Color(red: 0.68, green: 0.76, blue: 0.88)
+    static let secondary = Color(red: 0.77, green: 0.81, blue: 0.90)
 }
 
 private enum GlassNumber {
@@ -222,20 +172,20 @@ private struct GlassWidgetBackground: ViewModifier {
         ZStack {
             LinearGradient(
                 colors: purple
-                    ? [Color(red: 0.22, green: 0.13, blue: 0.64),
-                       Color(red: 0.07, green: 0.08, blue: 0.28),
-                       Color(red: 0.20, green: 0.05, blue: 0.28)]
-                    : [Color(red: 0.02, green: 0.08, blue: 0.19),
-                       Color(red: 0.01, green: 0.16, blue: 0.31),
-                       Color(red: 0.02, green: 0.27, blue: 0.40)],
+                    ? [Color(red: 0.28, green: 0.25, blue: 0.52),
+                       Color(red: 0.14, green: 0.15, blue: 0.32),
+                       Color(red: 0.23, green: 0.14, blue: 0.30)]
+                    : [Color(red: 0.10, green: 0.17, blue: 0.29),
+                       Color(red: 0.11, green: 0.22, blue: 0.36),
+                       Color(red: 0.13, green: 0.31, blue: 0.43)],
                 startPoint: .topLeading, endPoint: .bottomTrailing)
             RadialGradient(
                 colors: purple
-                    ? [Color(red: 0.64, green: 0.10, blue: 0.47).opacity(0.48), .clear]
-                    : [GlassTone.cyan.opacity(0.24), .clear],
+                    ? [Color(red: 0.56, green: 0.33, blue: 0.56).opacity(0.24), .clear]
+                    : [GlassTone.cyan.opacity(0.15), .clear],
                 center: .bottomTrailing,
                 startRadius: 3, endRadius: 340)
-            RadialGradient(colors: [GlassTone.lilac.opacity(purple ? 0.18 : 0.04), .clear],
+            RadialGradient(colors: [GlassTone.lilac.opacity(purple ? 0.11 : 0.04), .clear],
                            center: .topLeading, startRadius: 5, endRadius: 260)
         }
     }
@@ -267,9 +217,9 @@ private struct GlassMetricRing: View {
                 .stroke(tint, style: StrokeStyle(lineWidth: diameter * 0.12,
                                                  lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .shadow(color: tint.opacity(0.8), radius: diameter * 0.08)
-            Text(GlassNumber.text(value, digits: 0))
-                .font(.system(size: diameter * 0.245, weight: .bold, design: .rounded))
+                .shadow(color: tint.opacity(0.42), radius: diameter * 0.07)
+            Text(GlassNumber.text(value, digits: 0) + "%")
+                .font(.system(size: diameter * 0.22, weight: .bold, design: .rounded))
                 .foregroundStyle(GlassTone.ink)
                 .monospacedDigit()
                 .lineLimit(1)
@@ -333,7 +283,7 @@ private struct GlassConcentricRings: View {
                 .trim(from: 0, to: CGFloat(min(100, max(0, value ?? 0))) / 100)
                 .stroke(tint, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .shadow(color: tint.opacity(0.52), radius: 5)
+                .shadow(color: tint.opacity(0.33), radius: 4)
         }
         .frame(width: size, height: size)
     }
@@ -392,7 +342,7 @@ private struct GlassSparkline: View {
 
                 if values.count > 1 {
                     curve(proxy.size)
-                        .stroke(tint.opacity(0.58),
+                        .stroke(tint.opacity(0.28),
                                 style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
                         .blur(radius: 4)
                     curve(proxy.size)
@@ -401,7 +351,7 @@ private struct GlassSparkline: View {
                     if let lastIndex = values.indices.last {
                         Circle().fill(.white)
                             .frame(width: 7, height: 7)
-                            .shadow(color: tint.opacity(0.9), radius: 6)
+                            .shadow(color: tint.opacity(0.45), radius: 4)
                             .position(point(lastIndex, size: proxy.size))
                     }
                 } else {
@@ -431,7 +381,7 @@ private struct GlassCoreBars: View {
 
     var body: some View {
         if values.isEmpty {
-            Text("打开 ChipBar 获取逐核心读数")
+            Text("核心数据采集中…")
                 .font(.caption2)
                 .foregroundStyle(GlassTone.secondary)
                 .frame(maxWidth: .infinity, minHeight: barHeight, alignment: .center)
@@ -938,15 +888,6 @@ struct ChipBarWidgets: WidgetBundle {
     @WidgetBundleBuilder
     var body: some Widget {
         ChipBarTelemetryWidget<OverviewWidgetModule>()
-        ChipBarTelemetryWidget<PowerTrendWidgetModule>()
-        ChipBarTelemetryWidget<CPUWidgetModule>()
-        ChipBarTelemetryWidget<GPUWidgetModule>()
-        ChipBarTelemetryWidget<MemoryWidgetModule>()
-        ChipBarTelemetryWidget<CPUCoresWidgetModule>()
-        ChipBarTelemetryWidget<FanWidgetModule>()
-        ChipBarTelemetryWidget<ANEWidgetModule>()
         ChipBarTelemetryWidget<StorageWidgetModule>()
-        ChipBarTelemetryWidget<PowerSupplyWidgetModule>()
-        ChipBarTelemetryWidget<ApplicationsWidgetModule>()
     }
 }
