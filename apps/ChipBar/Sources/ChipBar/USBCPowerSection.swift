@@ -70,7 +70,8 @@ struct USBCPowerSection: View {
 
             ForEach(active.indices, id: \.self) { index in
                 let port = active[index]
-                USBCPortRow(port: port, tint: USBCFormat.tint(index))
+                USBCPortRow(port: port, tint: USBCFormat.tint(index),
+                            devices: snapshot.devices.filter { $0.portID == port.id })
             }
 
             if !others.isEmpty {
@@ -93,7 +94,8 @@ struct USBCPowerSection: View {
 
                 if showsOtherPorts {
                     ForEach(others) { port in
-                        USBCPortRow(port: port, tint: .secondary)
+                        USBCPortRow(port: port, tint: .secondary,
+                                    devices: snapshot.devices.filter { $0.portID == port.id })
                     }
                 }
             }
@@ -106,11 +108,16 @@ struct USBCPowerSection: View {
 private struct USBCPortRow: View {
     let port: USBCPortMeasurement
     let tint: Color
+    let devices: [USBCDeviceLink]
     @State private var expanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var currentSpeed: String {
-        USBCFormat.speed(port.currentGbps)
+        if let thunderbolt = port.currentGbps { return USBCFormat.speed(thunderbolt) }
+        return USBCFormat.speed(devices.compactMap(\.linkGbps).max())
+    }
+    private var speedLabel: String {
+        port.currentGbps != nil ? "当前雷雳链路" : "设备链路"
     }
 
     var body: some View {
@@ -151,7 +158,7 @@ private struct USBCPortRow: View {
                             .foregroundStyle(.secondary)
                         Text(USBCFormat.speed(port.maximumGbps))
                         Spacer(minLength: 4)
-                        Text("当前链路")
+                        Text(speedLabel)
                             .foregroundStyle(.secondary)
                         Text(currentSpeed)
                     }
@@ -170,6 +177,22 @@ private struct USBCPortRow: View {
                 HStack(spacing: 8) {
                     valueCard("输出电压", value: port.voltage, unit: "V")
                     valueCard("输出电流", value: port.current, unit: "A")
+                }
+                if !devices.isEmpty {
+                    ForEach(devices.prefix(4)) { device in
+                        HStack(spacing: 7) {
+                            Image(systemName: "externaldrive")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                            Text(device.name)
+                                .font(.system(size: 10))
+                                .lineLimit(1)
+                            Spacer(minLength: 4)
+                            Text(USBCFormat.speed(device.linkGbps))
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .padding(.top, 7)
+                    }
                 }
             }
         }
@@ -238,6 +261,12 @@ struct USBDeviceLinkSection: View {
                             Text(device.name)
                                 .font(.system(size: 11, weight: .semibold))
                                 .lineLimit(1)
+                            if let portID = device.portID {
+                                Text(portID.replacingOccurrences(of: "Port-", with: "")
+                                    .replacingOccurrences(of: "@", with: " "))
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                            }
                             if let allocated = device.allocatedWatts {
                                 Text("USB 分配功率 \(USBCFormat.watts(allocated, precision: 1)) W")
                                     .font(.system(size: 9))
