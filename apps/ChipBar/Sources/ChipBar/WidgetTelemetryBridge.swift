@@ -14,6 +14,7 @@ import ChipBarCore
 
     private var lastWrite: Date?
     private var lastReload: Date?
+    private var lastNewWidgetReload: Date?
     private var lastCoreSample: Date?
     private var lastCoreAttempt: Date?
     private var cores: [Double] = []
@@ -94,6 +95,117 @@ import ChipBarCore
         }
 
         writePayload(values, now: now)
+
+        // New Codable contract is additive. The legacy telemetry file and
+        // every old widget kind continue working unchanged.
+        if let snapshot = makeSharedSnapshot(sample: sample, history: history,
+                                             legacy: values, now: now) {
+            do {
+                try ChipBarSnapshotStore.write(snapshot)
+                if lastNewWidgetReload.map({ now.timeIntervalSince($0) >= 120 }) ?? true {
+                    lastNewWidgetReload = now
+                    WidgetCenter.shared.reloadTimelines(
+                        ofKind: ChipBarSnapshotStore.newOverviewKind)
+                    WidgetCenter.shared.reloadTimelines(
+                        ofKind: ChipBarSnapshotStore.newStorageKind)
+                }
+            } catch {
+                // A missing App Group entitlement never interrupts monitoring;
+                // the existing extension-container fallback is best-effort.
+            }
+        }
+    }
+
+    private func makeSharedSnapshot(sample: Sample, history: [Sample],
+                                    legacy: [String: Any], now: Date) -> ChipBarSnapshot? {
+        // Do not replace missing readings with the #Preview sample values.
+        guard let watts = sample.total, watts.isFinite, watts >= 0 else { return nil }
+        let readings = history.filter {
+            now.timeIntervalSince($0.date) >= 0 &&
+            now.timeIntervalSince($0.date) <= 600 &&
+            $0.total?.isFinite == true
+        }.sorted { $0.date < $1.date }
+        let valid = readings.compactMap(\.total)
+        let average = valid.isEmpty ? watts : valid.reduce(0, +) / Double(valid.count)
+        let peak = valid.max() ?? watts
+
+        // Forty time-uniform points over ten minutes, from oldest to latest.
+        let series: [Double] = (0..<40).map { step in
+            let time = now.addingTimeInterval(-600 + Double(step) * 600 / 39)
+            guard let nearest = readings.min(by: {
+                abs($0.date.timeIntervalSince(time)) <
+                    abs($1.date.timeIntervalSince(time))
+            }), let value = nearest.total else { return watts }
+            return max(0, value)
+        }
+
+        let rawCores = legacy["coreUsage"] as? [Double] ?? []
+        var orderedCores = rawCores
+        var performance = min(10, rawCores.count)
+        let topology = CPUCoreTopology.current.namesByLogicalID
+        if rawCores.count == 15 && topology.count == 15 {
+            let perfIDs = (0..<15).filter { topology[$0] == "性能核" }
+            let superIDs = (0..<15).filter { topology[$0] == "超级核" }
+            if perfIDs.count == 10 && superIDs.count == 5 {
+                orderedCores = (perfIDs + superIDs).map { rawCores[$0] }
+                performance = 10
+            }
+        }
+
+        func number(_ key: String) -> Double? {
+            legacy[key] as? Double
+        }
+        func volume(name: String, prefix: String) -> ChipBarSnapshot.Volume? {
+            guard let free = number(prefix + "FreeGB"),
+                  let total = number(prefix + "TotalGB"),
+                  total > 0, free >= 0, free <= total,
+                  total < Double(Int64.max) / 1_000_000_000 else { return nil }
+            return .init(name: name,
+                         freeBytes: Int64(free * 1_000_000_000),
+                         totalBytes: Int64(total * 1_000_000_000),
+                         readMBs: number(prefix + "ReadMB"),
+                         writeMBs: number(prefix + "WriteMB"))
+        }
+
+        var volumes: [ChipBarSnapshot.Volume] = []
+        if let disk = volume(name: "Macintosh HD", prefix: "storage") {
+            volumes.append(disk)
+        }
+        if let name = legacy["externalName"] as? String,
+           let disk = volume(name: name, prefix: "external") {
+            volumes.append(disk)
+        }
+        // "storage" capacity keys refer to the boot disk, while the
+        // backwards-compatible I/O rate fields have different prefixes.
+        if !volumes.isEmpty {
+            if let index = volumes.firstIndex(where: { $0.name == "Macintosh HD" }) {
+                volumes[index].readMBs = number("storageReadMB")
+                volumes[index].writeMBs = number("storageWriteMB")
+            }
+        }
+
+        return ChipBarSnapshot(
+            timestamp: now,
+            chipPower: watts,
+            avgPower: average,
+            peakPower: peak,
+            powerSeries: series,
+            internalPower: number("internalPower"),
+            cpu: .init(percent: sample.cpuUtilization ?? 0,
+                       watts: sample.cpu ?? 0,
+                       tempC: sample.cpuTemperature),
+            gpu: .init(percent: sample.gpuUtilization ?? 0,
+                       watts: sample.gpu ?? 0,
+                       tempC: sample.gpuTemperature),
+            mem: .init(percent: sample.memory?.usedPercent ?? 0,
+                       usedGB: sample.memory?.usedGiB ?? 0,
+                       totalGB: sample.memory?.totalGiB ?? 0),
+            cores: orderedCores,
+            fanRPM: sample.fans.map(\.rpm).max().map(Int.init),
+            aneWatts: sample.ane ?? 0,
+            volumes: volumes,
+            chipName: sample.chip ?? "Apple Silicon",
+            performanceCoreCount: performance)
     }
 
     private func mergeCoreReadings(into values: inout [String: Any]) {
