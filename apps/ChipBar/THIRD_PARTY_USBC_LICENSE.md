@@ -7,9 +7,12 @@ by the following MIT-licensed open-source projects:
   Copyright (c) 2026 TheFilip
 - WhatPort: https://github.com/darrylmorley/whatport
   Copyright (c) 2025 Darryl Morley
+- WhatCable: https://github.com/steelrain/whatcable_macOS
+  Copyright (c) 2026 Darryl Morley
 
-Their DnUI / DnJV / DnJI SMC key mapping and Thunderbolt link-controller
-semantics informed the independent ChipBar implementation.
+Their DnUI / DnJV / DnJI SMC key mapping, Thunderbolt link-controller
+semantics, and physical UsbIOPort association informed the independent ChipBar
+implementation.
 
 MIT License
 
