@@ -22,6 +22,10 @@ metadata = {
     "CFBundleShortVersionString": version, "CFBundleVersion": version,
     "LSMinimumSystemVersion": "13.0", "LSUIElement": True,
     "NSHighResolutionCapable": True,
+    "CFBundleURLTypes": [{
+        "CFBundleURLName": "local.chipbar.monitor.url",
+        "CFBundleURLSchemes": ["chipbar"]
+    }],
 }
 with (Path(app) / "Contents/Info.plist").open("wb") as stream:
     plistlib.dump(metadata, stream)
@@ -50,22 +54,42 @@ test -x "$BUILT_WIDGET/Contents/MacOS/ChipBarWidgets" || {
 mkdir -p "$APP/Contents/PlugIns"
 ditto --norsrc --noextattr "$BUILT_WIDGET" "$APP/Contents/PlugIns/ChipBarWidgets.appex"
 WIDGET="$APP/Contents/PlugIns/ChipBarWidgets.appex"
-python3 - "$STAGE" <<'PYWIDGET'
+# The CI release is ad-hoc signed and therefore cannot assert a provisioned
+# App Group. A developer/team-signed distribution may opt in by setting BOTH
+# CHIPBAR_CODESIGN_IDENTITY and CHIPBAR_APP_GROUP_ID; the app and extension
+# then receive the same entitlement. Never embed a fake App Group entitlement
+# into the ad-hoc release and cause WidgetKit's chronod to reject it.
+SIGN_IDENTITY="${CHIPBAR_CODESIGN_IDENTITY:--}"
+APP_GROUP="${CHIPBAR_APP_GROUP_ID:-}"
+if [[ -n "$APP_GROUP" && "$SIGN_IDENTITY" == "-" ]]; then
+  echo "ERROR: App Group requires a genuine Apple Team code signing identity" >&2
+  exit 1
+fi
+python3 - "$STAGE" "$APP_GROUP" <<'PYWIDGET'
 import plistlib
 import sys
 from pathlib import Path
-with (Path(sys.argv[1]) / "widget.entitlements").open("wb") as stream:
-    plistlib.dump({"com.apple.security.app-sandbox": True}, stream)
+stage, app_group = sys.argv[1:]
+widget = {"com.apple.security.app-sandbox": True}
+host = {}
+if app_group:
+    widget["com.apple.security.application-groups"] = [app_group]
+    host["com.apple.security.application-groups"] = [app_group]
+with (Path(stage) / "widget.entitlements").open("wb") as stream:
+    plistlib.dump(widget, stream)
+if host:
+    with (Path(stage) / "host.entitlements").open("wb") as stream:
+        plistlib.dump(host, stream)
 PYWIDGET
 
-# For a test build that should retain macOS TCC consent across updates,
-# sign each build with the SAME real Keychain identity and preserve the bundle
-# identifier. CI has no signing certificate and still uses ad-hoc (-) signing.
-# A new ad-hoc build has a new code identity and can trigger OS consent again.
-SIGN_IDENTITY="${CHIPBAR_CODESIGN_IDENTITY:--}"
 codesign --force --sign "$SIGN_IDENTITY" \
   --entitlements "$STAGE/widget.entitlements" "$WIDGET"
-codesign --force --sign "$SIGN_IDENTITY" "$APP"
+if [[ -n "$APP_GROUP" ]]; then
+  codesign --force --sign "$SIGN_IDENTITY" \
+    --entitlements "$STAGE/host.entitlements" "$APP"
+else
+  codesign --force --sign "$SIGN_IDENTITY" "$APP"
+fi
 codesign --verify --deep --strict "$APP"
 mkdir -p dist
 ditto --norsrc --noextattr "$APP" "$PWD/dist/ChipBar.app"
