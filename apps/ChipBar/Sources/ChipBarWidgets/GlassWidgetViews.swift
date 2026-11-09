@@ -103,7 +103,9 @@ struct RingView: View {
         .frame(width: diameter, height: diameter)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(label) 占用 \(GlassFormat.decimal(percent, precision: 0))%，功率 \(GlassFormat.decimal(watts)) 瓦，温度 \(GlassFormat.decimal(tempC)) 度"
+            String(format: String(localized: "%@ 占用 %@%%，功率 %@ 瓦，温度 %@ 度"),
+                   label, GlassFormat.decimal(percent, precision: 0),
+                   GlassFormat.decimal(watts), GlassFormat.decimal(tempC))
         )
     }
 }
@@ -199,7 +201,8 @@ struct SparklineView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "最近 10 分钟芯片功率，均值 \(GlassFormat.decimal(average)) 瓦，当前 \(GlassFormat.decimal(current)) 瓦"
+            String(format: String(localized: "最近 10 分钟芯片功率，均值 %@ 瓦，当前 %@ 瓦"),
+                   GlassFormat.decimal(average), GlassFormat.decimal(current))
         )
     }
 }
@@ -261,7 +264,8 @@ struct UsageBar: View {
             }
         }
         .frame(height: height)
-        .accessibilityLabel("已使用 \(Int(percent))%")
+        .accessibilityLabel(String(format: String(localized: "已使用 %lld%%"),
+                                   Int(percent)))
     }
 }
 
@@ -277,7 +281,7 @@ struct PillView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(color)
                 .widgetAccentable()
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .foregroundStyle(.secondary)
                 .font(.system(size: 9))
                 .lineLimit(1)
@@ -400,8 +404,8 @@ struct WidgetSnapshotStatus: View {
     }
 
     private var status: String {
-        guard let snapshot else { return "暂无数据" }
-        if snapshot.isStale(at: now) { return "数据已过期" }
+        guard let snapshot else { return String(localized: "暂无数据") }
+        if snapshot.isStale(at: now) { return String(localized: "数据已过期") }
         let time = DateFormatter.localizedString(from: snapshot.timestamp,
                                                  dateStyle: .none, timeStyle: .short)
         return String(format: String(localized: "实时 %@"), time)
@@ -508,7 +512,7 @@ struct GlassOverviewContent: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.67)
             }
-            Text(name)
+            Text(LocalizedStringKey(name))
                 .font(.system(size: 8))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -592,7 +596,7 @@ struct GlassOverviewContent: View {
                      label: name, diameter: 40, watts: watts,
                      tempC: name == "CPU" ? snapshot?.cpu.tempC :
                              name == "GPU" ? snapshot?.gpu.tempC : nil)
-            Text(name)
+            Text(LocalizedStringKey(name))
                 .font(.system(size: 8.5))
                 .foregroundStyle(.secondary)
             Text(watts == nil ? capacity(snapshot?.mem.usedGB) : GlassFormat.power(watts))
@@ -751,7 +755,8 @@ struct StorageVolumeRow: View {
                     .lineLimit(1).truncationMode(.middle)
                     .minimumScaleFactor(0.65)
                 Spacer(minLength: 1)
-                Text("已用 \(Int(volume.usedPercent))%")
+                Text(String(format: String(localized: "已用 %@%%"),
+                            String(Int(volume.usedPercent))))
                     .font(.system(size: 8.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -761,7 +766,8 @@ struct StorageVolumeRow: View {
                 GlassNumberText(text: available.number, unit: available.unit,
                                 size: 24, tint: .primary)
             } else {
-                Text(available.number + " " + available.unit + " 可用")
+                Text(String(format: String(localized: "%@ %@ 可用"),
+                            available.number, available.unit))
                     .font(.system(size: 9, weight: .semibold, design: .rounded))
                     .lineLimit(1).minimumScaleFactor(0.65)
             }
