@@ -15,7 +15,9 @@ enum SidePanelLayout {
     static let padding: CGFloat = 12
     static let contentWidth: CGFloat = width - 2 * padding
     static let applicationHeight: CGFloat = 250
-    static let powerHeight: CGFloat = 322
+    // Power page is scrollable inside a stable native window; expanding a port
+    // must never resize the parent menu or its glass sidecar.
+    static let powerHeight: CGFloat = 640
     static let diskHeight: CGFloat = 410
 
     static func width(for kind: DashboardSidePanelKind?) -> CGFloat {
