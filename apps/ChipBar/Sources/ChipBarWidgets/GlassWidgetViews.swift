@@ -585,7 +585,9 @@ struct GlassOverviewContent: View {
                             detail: String, tint: Color, width: CGFloat) -> some View {
         VStack(spacing: 2) {
             RingView(percent: percent, color: tint, lineWidth: 5.5,
-                     label: name, diameter: 40, watts: watts, tempC: nil)
+                     label: name, diameter: 40, watts: watts,
+                     tempC: name == "CPU" ? snapshot?.cpu.tempC :
+                             name == "GPU" ? snapshot?.gpu.tempC : nil)
             Text(name)
                 .font(.system(size: 8.5))
                 .foregroundStyle(.secondary)
@@ -700,7 +702,9 @@ struct GlassOverviewContent: View {
                            detail: String, tint: Color, diameter: CGFloat) -> some View {
         VStack(spacing: 2) {
             RingView(percent: percent, color: tint, lineWidth: 6,
-                     label: name, diameter: diameter, watts: watts, tempC: nil,
+                     label: name, diameter: diameter, watts: watts,
+                     tempC: name == "CPU" ? snapshot?.cpu.tempC :
+                             name == "GPU" ? snapshot?.gpu.tempC : nil,
                      fontSize: 13)
             Text(name + (watts == nil ? " " + capacity(snapshot?.mem.usedGB) :
                          " " + GlassFormat.power(watts)))
