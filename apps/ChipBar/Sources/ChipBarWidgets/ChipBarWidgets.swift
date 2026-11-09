@@ -85,8 +85,23 @@ struct ChipBarStorageIntentWidget: Widget {
 }
 
 struct ChipBarStorageWidget: Widget {
+    // WidgetBundleBuilder permits only a single #available branch, without
+    // an else. On macOS 13 the static widget owns ChipBar.Storage; on 14+
+    // this hidden compatibility widget uses a different kind while the
+    // configurable App Intent widget owns ChipBar.Storage.
+    private var fallbackKind: String {
+        if #available(macOS 14.0, *) {
+            return "ChipBar.Storage.macOS13-fallback"
+        }
+        return ChipBarSnapshotStore.newStorageKind
+    }
+    private var fallbackFamilies: [WidgetFamily] {
+        if #available(macOS 14.0, *) { return [] }
+        return [.systemSmall]
+    }
+
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: ChipBarSnapshotStore.newStorageKind,
+        StaticConfiguration(kind: fallbackKind,
                             provider: SnapshotProvider()) { entry in
             GlassStorageContent(snapshot: entry.snapshot,
                                 selectedVolume: nil,
@@ -95,7 +110,7 @@ struct ChipBarStorageWidget: Widget {
         }
         .configurationDisplayName("ChipBar · 储存空间")
         .description("查看两个储存卷的剩余容量和读写速率。")
-        .supportedFamilies([.systemSmall])
+        .supportedFamilies(fallbackFamilies)
     }
 }
 
@@ -311,13 +326,11 @@ private struct LegacyCard: View {
 struct ChipBarWidgets: WidgetBundle {
     @WidgetBundleBuilder var body: some Widget {
         ChipBarOverviewWidget()
-        // WidgetBundleBuilder supports availability-only optional branches,
-        // but not the SwiftUI-style if/else (it has no buildEither).
+        // macOS 13 static fallback is always present in the bundle but
+        // hidden on 14+; only the App Intent configuration is then visible.
+        ChipBarStorageWidget()
         if #available(macOS 14.0, *) {
             ChipBarStorageIntentWidget()
-        }
-        if #unavailable(macOS 14.0) {
-            ChipBarStorageWidget()
         }
 
         // Keeping all eleven legacy IDs prevents placed widgets disappearing.
