@@ -168,20 +168,48 @@ import ChipBarCore
         }
 
         var volumes: [ChipBarSnapshot.Volume] = []
-        if let disk = volume(name: "Macintosh HD", prefix: "storage") {
+        // The boot APFS container is a single capacity bar.
+        if var disk = volume(name: "Macintosh HD", prefix: "storage") {
+            disk.readMBs = number("storageReadMB")
+            disk.writeMBs = number("storageWriteMB")
             volumes.append(disk)
         }
-        if let name = legacy["externalName"] as? String,
+
+        // The legacy menu summary exposes only its first external volume.
+        // The new AppIntent must offer ALL mounted external volumes, using
+        // the already available disk snapshots; no additional sampling.
+        let currentDisk = physicalDisk.flatMap { disk -> DiskActivitySnapshot? in
+            let age = now.timeIntervalSince(disk.date)
+            return age >= 0 && age <= 90 ? disk : nil
+        }
+        let source = ExternalStorageCapacityModel.shared
+        let rows = currentDisk.map(ExternalStorageCapacityModel.displayRows(from:))
+            ?? source.volumes
+        let activity = currentDisk ?? source.activity
+        var seenVolumeNames = Set(volumes.map(\.name))
+        for row in rows.prefix(12) {
+            let disk = row.volume
+            guard disk.total > 0, disk.available >= 0,
+                  disk.available <= disk.total,
+                  seenVolumeNames.insert(disk.name).inserted else { continue }
+            let rates: DiskRates? = activity.flatMap { snapshot in
+                let age = now.timeIntervalSince(snapshot.date)
+                guard age >= 0, age <= 90,
+                      snapshot.connected.contains(row.diskID) else { return nil }
+                return snapshot.rates[row.diskID]
+            }
+            volumes.append(.init(name: disk.name,
+                                 freeBytes: disk.available,
+                                 totalBytes: disk.total,
+                                 readMBs: rates?.readMB,
+                                 writeMBs: rates?.writeMB))
+        }
+        // Preserve the previous first-volume fallback if a drive's capacity
+        // model is still warming up; never duplicate an already listed drive.
+        if rows.isEmpty, let name = legacy["externalName"] as? String,
+           !seenVolumeNames.contains(name),
            let disk = volume(name: name, prefix: "external") {
             volumes.append(disk)
-        }
-        // "storage" capacity keys refer to the boot disk, while the
-        // backwards-compatible I/O rate fields have different prefixes.
-        if !volumes.isEmpty {
-            if let index = volumes.firstIndex(where: { $0.name == "Macintosh HD" }) {
-                volumes[index].readMBs = number("storageReadMB")
-                volumes[index].writeMBs = number("storageWriteMB")
-            }
         }
 
         return ChipBarSnapshot(
