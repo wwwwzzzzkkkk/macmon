@@ -142,8 +142,8 @@ public enum ChipBarSnapshotStore {
     private static func entitledGroupURL() -> URL? {
         guard let task = SecTaskCreateFromSelf(kCFAllocatorDefault),
               let groups = SecTaskCopyValueForEntitlement(
-                  task, "com.apple.security.application-groups" as CFString, nil)?
-                  .takeRetainedValue() as? [String],
+                  task, "com.apple.security.application-groups" as CFString, nil)
+                  as? [String],
               groups.contains(groupID) else { return nil }
         return FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: groupID)?
