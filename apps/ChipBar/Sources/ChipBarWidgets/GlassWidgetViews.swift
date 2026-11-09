@@ -538,6 +538,10 @@ struct GlassOverviewContent: View {
         let h = size.height - 28
         let left = max(112, w * 0.48)
         let right = max(1, w - left - 8)
+        // Header + power labels + trend must all fit inside the system's
+        // compact 158pt high medium widget, including safe text scaling.
+        let trendHeight = max(18, min(38, h - 94))
+        let ringColumnWidth = max(1, (right - 6) / 3)
         return HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 5) {
@@ -551,7 +555,7 @@ struct GlassOverviewContent: View {
                 SparklineView(values: snapshot?.powerSeries ?? [],
                               color: GlassPalette.power, showGrid: true,
                               average: snapshot?.avgPower, current: snapshot?.chipPower)
-                    .frame(height: min(44, max(20, h - 69)))
+                    .frame(height: trendHeight)
             }
             .frame(width: left, alignment: .leading)
 
@@ -559,13 +563,13 @@ struct GlassOverviewContent: View {
                 HStack(alignment: .top, spacing: 3) {
                     mediumRing("CPU", snapshot?.cpu.percent,
                                watts: snapshot?.cpu.watts, detail: temperature(snapshot?.cpu.tempC),
-                               tint: GlassPalette.cpu, width: right / 3)
+                               tint: GlassPalette.cpu, width: ringColumnWidth)
                     mediumRing("GPU", snapshot?.gpu.percent,
                                watts: snapshot?.gpu.watts, detail: temperature(snapshot?.gpu.tempC),
-                               tint: GlassPalette.gpu, width: right / 3)
+                               tint: GlassPalette.gpu, width: ringColumnWidth)
                     mediumRing("内存", snapshot?.mem.percent,
                                watts: nil, detail: capacity(snapshot?.mem.totalGB),
-                               tint: memTint, width: right / 3)
+                               tint: memTint, width: ringColumnWidth)
                 }
                 Divider().overlay(.white.opacity(0.12))
                 HStack(spacing: 4) {
