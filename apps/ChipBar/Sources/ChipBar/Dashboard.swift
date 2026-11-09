@@ -153,8 +153,7 @@ struct Dashboard: View {
             }
 
             ChipBarAdaptiveTileLayout {
-                ForEach(tileLayout.visible.filter { $0 != .usbOutput || tileLayout.editing ||
-                         !powerReading.reading.usb.sourcingPorts.isEmpty }) { tile in
+                ForEach(tileLayout.visible) { tile in
                     homeTile(tile)
                         // Keep the hit target active during the same mouse
                         // press that turns edit mode on. Disabling the entire
@@ -283,10 +282,11 @@ struct Dashboard: View {
         case .storage:
             StorageCapacitySection(state: state)
         case .powerSupply:
-            sidePanelEntry("电源", icon: "bolt.horizontal.circle", kind: .power,
-                           trailingValue: powerReading.reading.systemWatts)
-        case .usbOutput:
-            usbOutputHomeTile
+            PowerOverviewHomeTile(reading: powerReading.reading,
+                                  selected: state.sidePanel == .power) {
+                guard !tileLayout.editing else { return }
+                state.sidePanel = state.sidePanel == .power ? nil : .power
+            }
         case .applications:
             sidePanelEntry("应用占用", icon: "square.stack.3d.up", kind: .applications)
         }
@@ -461,54 +461,6 @@ struct Dashboard: View {
                 pressureStatus: monitor.memoryPressure.title,
                 active: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping)
         }
-    }
-
-    private var usbOutputHomeTile: some View {
-        let snapshot = powerReading.reading.usb
-        let ports = snapshot.sourcingPorts
-        let selected = state.sidePanel == .power
-        return Button {
-            guard !tileLayout.editing else { return }
-            state.sidePanel = selected ? nil : .power
-        } label: {
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 6) {
-                    Image(systemName: "cable.connector")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color(red: 0.22, green: 0.76, blue: 0.80))
-                    Text("USB-C 对外供电")
-                        .font(.caption.weight(.semibold))
-                    Spacer(minLength: 0)
-                    Text("\(ports.count) 个端口")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                }
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(USBCFormat.watts(snapshot.totalWatts, precision: 2))
-                        .font(.system(size: 23, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                    Text("W").font(.system(size: 11)).foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                    ForEach(ports.prefix(2)) { port in
-                        Text("\(port.label) \(USBCFormat.watts(port.watts, precision: 1))W")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                    }
-                }
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassTile(radius: 26, tint: selected ? accent.opacity(0.13) : nil,
-                       interactive: true)
-            .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        }
-        .buttonStyle(ChipBarPressStyle())
-        .accessibilityLabel("USB-C 对外供电，\(USBCFormat.watts(snapshot.totalWatts, precision: 2)) 瓦")
     }
 
     private func sidePanelEntry(_ title: String, icon: String,
