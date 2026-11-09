@@ -62,8 +62,12 @@ struct ChipBarOverviewWidget: Widget {
 }
 
 struct ChipBarStorageWidget: Widget {
-    @WidgetConfigurationBuilder
     var body: some WidgetConfiguration {
+        makeConfiguration()
+    }
+
+    // Apple's backward-compatibility pattern for macOS 13 + App Intents 14+.
+    private func makeConfiguration() -> some WidgetConfiguration {
         if #available(macOS 14.0, *) {
             AppIntentConfiguration(kind: ChipBarSnapshotStore.newStorageKind,
                                    intent: StorageVolumeIntent.self,
