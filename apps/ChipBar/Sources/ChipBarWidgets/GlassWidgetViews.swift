@@ -610,102 +610,129 @@ struct GlassOverviewContent: View {
         .frame(width: width)
     }
 
+    // Keep the large WidgetKit layout in small, independently type-checked
+    // sections. A single deeply nested ViewBuilder exceeded the Swift 5
+    // type-checker's time budget on the Xcode 26 release runner.
     private func large(in size: CGSize) -> some View {
         let w = size.width - 28
         let h = size.height - 28
         let tight = h < 310
         return VStack(alignment: .leading, spacing: tight ? 3 : 5) {
-            HStack(spacing: 6) {
-                IconChip(symbol: "waveform.path.ecg",
-                         color: GlassPalette.power, size: 28)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("ChipBar")
-                        .font(.system(size: 13, weight: .bold))
-                        .lineLimit(1)
-                    Text(snapshot?.chipName ?? "Apple Silicon")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1).minimumScaleFactor(0.65)
-                }
-                Spacer(minLength: 1)
-                WidgetSnapshotStatus(snapshot: snapshot, now: now)
-            }
-            HStack(alignment: .bottom, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("芯片总功率")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                    GlassNumberText(text: number(snapshot?.chipPower),
-                                    unit: "W", size: tight ? 33 : 38, tint: numberTint)
-                    Text("均值 \(number(snapshot?.avgPower)) W · 峰值 \(number(snapshot?.peakPower)) W")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.60)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                SparklineView(values: snapshot?.powerSeries ?? [],
-                              color: GlassPalette.power, showGrid: true,
-                              average: snapshot?.avgPower, current: snapshot?.chipPower)
-                    .frame(width: w * 0.50, height: tight ? 39 : 52)
-            }
+            largeHeader
+            largePower(width: w, tight: tight)
             Divider()
-            HStack(alignment: .top, spacing: 5) {
-                largeRing("CPU", snapshot?.cpu.percent, snapshot?.cpu.watts,
-                          detail: temperature(snapshot?.cpu.tempC),
-                          tint: GlassPalette.cpu, diameter: tight ? 42 : 48)
-                largeRing("GPU", snapshot?.gpu.percent, snapshot?.gpu.watts,
-                          detail: temperature(snapshot?.gpu.tempC),
-                          tint: GlassPalette.gpu, diameter: tight ? 42 : 48)
-                largeRing("内存", snapshot?.mem.percent, nil,
-                          detail: "共 " + capacity(snapshot?.mem.totalGB),
-                          tint: memTint, diameter: tight ? 42 : 48)
-            }
-            HStack(spacing: 5) {
-                Text("CPU 各核心")
-                    .font(.system(size: 9, weight: .semibold))
-                Spacer(minLength: 1)
-                Text("● " + String(localized: "性能核") + " " +
-                     (snapshot.map { String($0.performanceCoreCount) } ?? "—"))
-                    .foregroundStyle(.secondary)
-                    .font(.system(size: 8))
-                    .lineLimit(1)
-                Text("● " + String(localized: "超级核") + " " +
-                     (snapshot.map { String(max(0, $0.cores.count - $0.performanceCoreCount)) } ?? "—"))
-                    .foregroundStyle(.secondary)
-                    .font(.system(size: 8))
-                    .lineLimit(1)
-            }
+            largeRings(tight: tight)
+            largeCoreHeader
             CoreBarsView(values: snapshot?.cores ?? [],
                          perfCount: snapshot?.performanceCoreCount ?? 10,
                          height: tight ? 22 : 30)
-            HStack(alignment: .top, spacing: 8) {
-                if let volumes = snapshot?.volumes, !volumes.isEmpty {
-                    ForEach(Array(volumes.prefix(2))) { volume in
-                        StorageVolumeRow(volume: volume, enlarged: false)
-                            .frame(maxWidth: .infinity)
-                    }
-                } else {
-                    Text("储存空间 —")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            largeStorage
             Spacer(minLength: 0)
-            HStack(spacing: 4) {
-                PillView(icon: "fanblades", label: "风扇",
-                         value: rpm(snapshot?.fanRPM), color: GlassPalette.fan)
-                PillView(icon: "sparkles", label: "ANE",
-                         value: GlassFormat.power(snapshot?.aneWatts), color: GlassPalette.ane)
-                Link(destination: chipBarDeepLink("power")) {
-                    PillView(icon: "bolt.fill", label: "内部",
-                             value: GlassFormat.power(snapshot?.internalPower),
-                             color: GlassPalette.power)
-                }
-                .buttonStyle(.plain)
-            }
+            largeFooter
         }
         .frame(width: w, height: h, alignment: .topLeading)
+    }
+
+    private var largeHeader: some View {
+        HStack(spacing: 6) {
+            IconChip(symbol: "waveform.path.ecg",
+                     color: GlassPalette.power, size: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("ChipBar")
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1)
+                Text(snapshot?.chipName ?? "Apple Silicon")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1).minimumScaleFactor(0.65)
+            }
+            Spacer(minLength: 1)
+            WidgetSnapshotStatus(snapshot: snapshot, now: now)
+        }
+    }
+
+    private func largePower(width: CGFloat, tight: Bool) -> some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("芯片总功率")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                GlassNumberText(text: number(snapshot?.chipPower),
+                                unit: "W", size: tight ? 33 : 38, tint: numberTint)
+                Text("均值 \(number(snapshot?.avgPower)) W · 峰值 \(number(snapshot?.peakPower)) W")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.60)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            SparklineView(values: snapshot?.powerSeries ?? [],
+                          color: GlassPalette.power, showGrid: true,
+                          average: snapshot?.avgPower, current: snapshot?.chipPower)
+                .frame(width: width * 0.50, height: tight ? 39 : 52)
+        }
+    }
+
+    private func largeRings(tight: Bool) -> some View {
+        HStack(alignment: .top, spacing: 5) {
+            largeRing("CPU", snapshot?.cpu.percent, snapshot?.cpu.watts,
+                      detail: temperature(snapshot?.cpu.tempC),
+                      tint: GlassPalette.cpu, diameter: tight ? 42 : 48)
+            largeRing("GPU", snapshot?.gpu.percent, snapshot?.gpu.watts,
+                      detail: temperature(snapshot?.gpu.tempC),
+                      tint: GlassPalette.gpu, diameter: tight ? 42 : 48)
+            largeRing("内存", snapshot?.mem.percent, nil,
+                      detail: "共 " + capacity(snapshot?.mem.totalGB),
+                      tint: memTint, diameter: tight ? 42 : 48)
+        }
+    }
+
+    private var largeCoreHeader: some View {
+        HStack(spacing: 5) {
+            Text("CPU 各核心")
+                .font(.system(size: 9, weight: .semibold))
+            Spacer(minLength: 1)
+            Text("● " + String(localized: "性能核") + " " +
+                 (snapshot.map { String($0.performanceCoreCount) } ?? "—"))
+                .foregroundStyle(.secondary)
+                .font(.system(size: 8))
+                .lineLimit(1)
+            Text("● " + String(localized: "超级核") + " " +
+                 (snapshot.map { String(max(0, $0.cores.count - $0.performanceCoreCount)) } ?? "—"))
+                .foregroundStyle(.secondary)
+                .font(.system(size: 8))
+                .lineLimit(1)
+        }
+    }
+
+    private var largeStorage: some View {
+        HStack(alignment: .top, spacing: 8) {
+            if let volumes = snapshot?.volumes, !volumes.isEmpty {
+                ForEach(Array(volumes.prefix(2))) { volume in
+                    StorageVolumeRow(volume: volume, enlarged: false)
+                        .frame(maxWidth: .infinity)
+                }
+            } else {
+                Text("储存空间 —")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var largeFooter: some View {
+        HStack(spacing: 4) {
+            PillView(icon: "fanblades", label: "风扇",
+                     value: rpm(snapshot?.fanRPM), color: GlassPalette.fan)
+            PillView(icon: "sparkles", label: "ANE",
+                     value: GlassFormat.power(snapshot?.aneWatts), color: GlassPalette.ane)
+            Link(destination: chipBarDeepLink("power")) {
+                PillView(icon: "bolt.fill", label: "内部",
+                         value: GlassFormat.power(snapshot?.internalPower),
+                         color: GlassPalette.power)
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private func largeRing(_ name: String, _ percent: Double?, _ watts: Double?,
