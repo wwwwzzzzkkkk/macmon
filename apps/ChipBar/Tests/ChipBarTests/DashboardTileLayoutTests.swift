@@ -15,6 +15,7 @@ struct DashboardTileLayoutTests {
         #expect(DashboardTile.ane.columns == 3)
         #expect(DashboardTile.storage.columns == 6)
         #expect(DashboardTile.powerSupply.columns == 3)
+        #expect(DashboardTile.usbOutput.columns == 6)
         #expect(DashboardTile.applications.columns == 3)
     }
 
