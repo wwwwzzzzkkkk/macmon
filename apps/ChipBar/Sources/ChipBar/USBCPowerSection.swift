@@ -42,7 +42,8 @@ struct USBCPowerSection: View {
             if active.count > 1, let total = snapshot.totalWatts, total > 0 {
                 GeometryReader { geometry in
                     HStack(spacing: 2) {
-                        ForEach(Array(active.enumerated()), id: \.element.id) { index, port in
+                        ForEach(active.indices, id: \.self) { index in
+                            let port = active[index]
                             Capsule()
                                 .fill(USBCFormat.tint(index))
                                 .frame(width: max(0, geometry.size.width *
@@ -67,7 +68,8 @@ struct USBCPowerSection: View {
                     .padding(.vertical, 6)
             }
 
-            ForEach(Array(active.enumerated()), id: \.element.id) { index, port in
+            ForEach(active.indices, id: \.self) { index in
+                let port = active[index]
                 USBCPortRow(port: port, tint: USBCFormat.tint(index))
             }
 
