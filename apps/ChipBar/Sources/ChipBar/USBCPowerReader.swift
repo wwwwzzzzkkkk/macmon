@@ -125,7 +125,9 @@ enum USBCPowerReader {
             let number = (props["PortNumber"] as? NSNumber)?.intValue
                 ?? Int(description.split(separator: "@").last ?? "")
             let identity = normalisedUUID(parentUUID(of: service))
-            let key = identity ?? description
+            // PortDescription is stable for a physical port, even if multiple
+            // registry layers expose it with/without a controller UUID.
+            let key = description
             guard seen.insert(key).inserted else { continue }
             let channel: Channel? = {
                 if hasSMCUUIDs {
@@ -153,8 +155,9 @@ enum USBCPowerReader {
             } else {
                 protocolName = "USB-C"
             }
+            // A transport name alone does not specify the negotiated or
+            // maximum bit rate. Do not invent 10 Gb/s for every USB3 port.
             let maximum = tb?.maximumGbps
-                ?? (supported.contains("USB3") ? 10 : supported.contains("USB2") ? 0.48 : nil)
             // The Thunderbolt controller advertises a stale current-speed code
             // even on empty sockets. Show achieved speed only with active CIO.
             let actual = active.contains("CIO") ? tb?.actualGbps : nil
