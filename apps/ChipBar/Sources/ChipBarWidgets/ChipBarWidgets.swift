@@ -327,6 +327,7 @@ struct ChipBarWidgets: WidgetBundle {
 
 // MARK: - Design-time previews (never used as a production fallback)
 
+@available(macOS 14.0, *)
 #Preview(as: .systemSmall) {
     ChipBarOverviewWidget()
 } timeline: {
@@ -334,6 +335,7 @@ struct ChipBarWidgets: WidgetBundle {
                   selectedVolume: nil, isPlaceholder: false)
 }
 
+@available(macOS 14.0, *)
 #Preview(as: .systemMedium) {
     ChipBarOverviewWidget()
 } timeline: {
@@ -341,6 +343,7 @@ struct ChipBarWidgets: WidgetBundle {
                   selectedVolume: nil, isPlaceholder: false)
 }
 
+@available(macOS 14.0, *)
 #Preview(as: .systemLarge) {
     ChipBarOverviewWidget()
 } timeline: {
@@ -348,6 +351,7 @@ struct ChipBarWidgets: WidgetBundle {
                   selectedVolume: nil, isPlaceholder: false)
 }
 
+@available(macOS 14.0, *)
 #Preview(as: .systemSmall) {
     ChipBarStorageWidget()
 } timeline: {
