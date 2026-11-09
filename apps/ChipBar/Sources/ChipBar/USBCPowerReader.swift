@@ -28,6 +28,8 @@ struct USBCPortMeasurement: Identifiable, Equatable, Sendable {
 struct USBCDeviceLink: Identifiable, Equatable, Sendable {
     let id: Int
     let name: String
+    /// Physical port, only when an ancestor publishes an explicit UsbIOPort path.
+    let portID: String?
     let linkGbps: Double?
     let allocatedWatts: Double?
 }
@@ -248,9 +250,37 @@ enum USBCPowerReader {
             }
             let allocated = (props["UsbPowerSinkAllocation"] as? NSNumber)?.doubleValue
             result.append(USBCDeviceLink(id: location, name: name,
+                                        portID: physicalPortName(of: service),
                                         linkGbps: linkGbps,
                                         allocatedWatts: allocated.map { $0 * 5 / 1000 }))
         }
         return result.sorted { $0.name < $1.name }
+    }
+
+    /// The physical USB-C port is an explicit registry path on UsbIOPort
+    /// ancestors, including devices behind hubs. Never infer it just from the
+    /// controller bus index: multiple physical sockets can share a controller.
+    private static func physicalPortName(of device: io_registry_entry_t) -> String? {
+        var current = device
+        IOObjectRetain(current)
+        defer { IOObjectRelease(current) }
+        for _ in 0..<20 {
+            var parent: io_registry_entry_t = 0
+            guard IORegistryEntryGetParentEntry(current, kIOServicePlane, &parent)
+                    == KERN_SUCCESS else { break }
+            IOObjectRelease(current)
+            current = parent
+            guard let raw = IORegistryEntryCreateCFProperty(
+                current, "UsbIOPort" as CFString, kCFAllocatorDefault, 0
+            )?.takeRetainedValue() else { continue }
+            let path: String? = (raw as? String)
+                ?? (raw as? Data).flatMap { String(data: $0, encoding: .utf8) }
+            guard let path,
+                  let name = path.trimmingCharacters(in: .controlCharacters)
+                    .split(separator: "/").last.map(String.init),
+                  name.hasPrefix("Port-USB-C@") else { continue }
+            return name
+        }
+        return nil
     }
 }
