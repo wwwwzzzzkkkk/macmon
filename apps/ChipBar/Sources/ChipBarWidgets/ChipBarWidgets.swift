@@ -73,7 +73,8 @@ struct ChipBarStorageIntentWidget: Widget {
                                intent: StorageVolumeIntent.self,
                                provider: StorageIntentProvider()) { entry in
             GlassStorageContent(snapshot: entry.snapshot,
-                                selectedVolume: entry.selectedVolume == "全部"
+                                selectedVolume: (entry.selectedVolume == "全部" ||
+                                                 entry.selectedVolume == "All")
                                     ? nil : entry.selectedVolume,
                                 now: entry.date,
                                 placeholder: entry.isPlaceholder)
