@@ -665,11 +665,13 @@ struct GlassOverviewContent: View {
                 Text("CPU 各核心")
                     .font(.system(size: 9, weight: .semibold))
                 Spacer(minLength: 1)
-                Text("● 性能核 \(snapshot?.performanceCoreCount ?? 10)")
+                Text("● " + String(localized: "性能核") + " " +
+                     (snapshot.map { String($0.performanceCoreCount) } ?? "—"))
                     .foregroundStyle(.secondary)
                     .font(.system(size: 8))
                     .lineLimit(1)
-                Text("● 超级核 \(max(0, (snapshot?.cores.count ?? 15) - (snapshot?.performanceCoreCount ?? 10)))")
+                Text("● " + String(localized: "超级核") + " " +
+                     (snapshot.map { String(max(0, $0.cores.count - $0.performanceCoreCount)) } ?? "—"))
                     .foregroundStyle(.secondary)
                     .font(.system(size: 8))
                     .lineLimit(1)
