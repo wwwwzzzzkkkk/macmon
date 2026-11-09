@@ -118,6 +118,24 @@ private enum LegacyWidgetTile: String {
         }
     }
 
+    // Gallery descriptors must use direct literals; computed/interpolated
+    // descriptions previously caused chronod's getAllDescriptors to fail.
+    var galleryTitle: LocalizedStringKey {
+        switch self {
+        case .overview: return "ChipBar · 仪表盘"
+        case .powerTrend: return "ChipBar · 芯片功率趋势"
+        case .cpu: return "ChipBar · CPU"
+        case .gpu: return "ChipBar · GPU"
+        case .memory: return "ChipBar · 内存"
+        case .cpuCores: return "ChipBar · CPU 各核心"
+        case .fan: return "ChipBar · 风扇"
+        case .ane: return "ChipBar · ANE"
+        case .storage: return "ChipBar · 储存空间"
+        case .powerSupply: return "ChipBar · 内部功率"
+        case .applications: return "ChipBar · 应用占用"
+        }
+    }
+
     var key: String {
         switch self {
         case .overview, .powerTrend: return "chip"
@@ -205,7 +223,7 @@ private struct LegacyWidget<Module: LegacyModule>: Widget {
                             provider: LegacyProvider()) { entry in
             LegacyCard(tile: Module.tile, entry: entry)
         }
-        .configurationDisplayName(Module.tile.title)
+        .configurationDisplayName(Module.tile.galleryTitle)
         // Static literal: WidgetKit may crash on an interpolated description.
         .description("兼容旧版 ChipBar 小组件，保留桌面已有的配置。")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
