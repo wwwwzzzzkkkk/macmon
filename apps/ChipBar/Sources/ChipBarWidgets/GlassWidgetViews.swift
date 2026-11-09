@@ -404,7 +404,7 @@ struct WidgetSnapshotStatus: View {
         if snapshot.isStale(at: now) { return "数据已过期" }
         let time = DateFormatter.localizedString(from: snapshot.timestamp,
                                                  dateStyle: .none, timeStyle: .short)
-        return "实时 " + time
+        return String(format: String(localized: "实时 %@"), time)
     }
 }
 
