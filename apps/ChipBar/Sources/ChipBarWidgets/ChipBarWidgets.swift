@@ -311,9 +311,12 @@ private struct LegacyCard: View {
 struct ChipBarWidgets: WidgetBundle {
     @WidgetBundleBuilder var body: some Widget {
         ChipBarOverviewWidget()
+        // WidgetBundleBuilder supports availability-only optional branches,
+        // but not the SwiftUI-style if/else (it has no buildEither).
         if #available(macOS 14.0, *) {
             ChipBarStorageIntentWidget()
-        } else {
+        }
+        if #unavailable(macOS 14.0) {
             ChipBarStorageWidget()
         }
 
