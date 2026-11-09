@@ -588,6 +588,45 @@ import ChipBarCore
         hostingView.appearance = appearance
     }
 
+    /// Open the existing menu-panel navigation from a WidgetKit deep link.
+    /// No hardware sampling or view architecture changes are required.
+    func openWidgetURL(_ url: URL) {
+        guard url.scheme?.lowercased() == "chipbar" else { return }
+        if !panelRequestedVisible { togglePanel() }
+        guard panelRequestedVisible else { return }
+        switch url.host?.lowercased() {
+        case "main", nil:
+            dashboardState.sidePanel = nil
+            dashboardState.showSettings = false
+            dashboardState.showSystemDetails = false
+        case "power":
+            dashboardState.showSettings = false
+            dashboardState.showSystemDetails = false
+            dashboardState.sidePanel = .power
+        case "disk":
+            let requested = url.path.removingPercentEncoding?
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
+            let drive = ExternalStorageCapacityModel.shared.volumes.first {
+                $0.volume.name == requested
+            }
+            if let drive {
+                dashboardState.showSettings = false
+                dashboardState.showSystemDetails = false
+                dashboardState.selectedExternalVolumeID = drive.id
+                dashboardState.sidePanel = .externalDisk
+            } else {
+                // Macintosh HD is on Home; the external-disk details panel
+                // accepts only a verified external volume ID.
+                dashboardState.sidePanel = nil
+                dashboardState.showSettings = false
+                dashboardState.showSystemDetails = false
+            }
+        default:
+            return
+        }
+        panel.makeKeyAndOrderFront(nil)
+    }
+
     @objc private func togglePanel() {
         let openedAt = ProcessInfo.processInfo.systemUptime
         recordMouseQA("buttonAction")
