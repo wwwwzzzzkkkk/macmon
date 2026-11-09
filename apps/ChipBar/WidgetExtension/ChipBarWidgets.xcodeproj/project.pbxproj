@@ -10,6 +10,10 @@
             isa = PBXBuildFile;
             fileRef = A22222222222222222222222 /* ChipBarWidgets.swift */;
         };
+        C11111111111111111111111 /* GlassWidgetViews.swift in Sources */ = { isa = PBXBuildFile; fileRef = C21111111111111111111111 /* GlassWidgetViews.swift */; };
+        C11222222222222222222222 /* GlassWidgetIntents.swift in Sources */ = { isa = PBXBuildFile; fileRef = C21222222222222222222222 /* GlassWidgetIntents.swift */; };
+        C11333333333333333333333 /* ChipBarSnapshot.swift in Sources */ = { isa = PBXBuildFile; fileRef = C21333333333333333333333 /* ChipBarSnapshot.swift */; };
+        C11444444444444444444444 /* Localizable.xcstrings in Resources */ = { isa = PBXBuildFile; fileRef = C21444444444444444444444 /* Localizable.xcstrings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -26,6 +30,10 @@
             path = ChipBarWidgets.appex;
             sourceTree = BUILT_PRODUCTS_DIR;
         };
+        C21111111111111111111111 /* GlassWidgetViews.swift */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassWidgetViews.swift; sourceTree = "<group>"; };
+        C21222222222222222222222 /* GlassWidgetIntents.swift */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassWidgetIntents.swift; sourceTree = "<group>"; };
+        C21333333333333333333333 /* ChipBarSnapshot.swift */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../ChipBarCore/ChipBarSnapshot.swift; sourceTree = "<group>"; };
+        C21444444444444444444444 /* Localizable.xcstrings */ = { isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -41,6 +49,10 @@
             isa = PBXGroup;
             children = (
                 A22222222222222222222222 /* ChipBarWidgets.swift */,
+                C21111111111111111111111 /* GlassWidgetViews.swift */,
+                C21222222222222222222222 /* GlassWidgetIntents.swift */,
+                C21333333333333333333333 /* ChipBarSnapshot.swift */,
+                C21444444444444444444444 /* Localizable.xcstrings */,
             );
             name = Sources;
             path = ../Sources/ChipBarWidgets;
@@ -62,6 +74,7 @@
             buildConfigurationList = A88888888888888888888888 /* Build configuration list for PBXNativeTarget "ChipBarWidgets" */;
             buildPhases = (
                 A99999999999999999999999 /* Sources */,
+                C99999999999999999999999 /* Resources */,
             );
             buildRules = ();
             dependencies = ();
@@ -84,7 +97,7 @@
             compatibilityVersion = "Xcode 14.0";
             developmentRegion = en;
             hasScannedForEncodings = 0;
-            knownRegions = (en, Base);
+            knownRegions = (en, "zh-Hans", Base);
             mainGroup = A44444444444444444444444;
             productRefGroup = A66666666666666666666666 /* Products */;
             projectDirPath = "";
@@ -101,10 +114,22 @@
             buildActionMask = 2147483647;
             files = (
                 A11111111111111111111111 /* ChipBarWidgets.swift in Sources */,
+                C11111111111111111111111 /* GlassWidgetViews.swift in Sources */,
+                C11222222222222222222222 /* GlassWidgetIntents.swift in Sources */,
+                C11333333333333333333333 /* ChipBarSnapshot.swift in Sources */,
             );
             runOnlyForDeploymentPostprocessing = 0;
         };
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXResourcesBuildPhase section */
+        C99999999999999999999999 /* Resources */ = {
+            isa = PBXResourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (C11444444444444444444444 /* Localizable.xcstrings in Resources */);
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+/* End PBXResourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
         B33333333333333333333333 /* Debug Project */ = {
