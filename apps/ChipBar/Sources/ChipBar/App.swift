@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import SwiftUI
 import ChipBarCore
 
@@ -26,6 +27,11 @@ import ChipBarCore
         Self.monitor = monitor
         let controller = MenuController(monitor: monitor)
         menuController = controller
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleWidgetURLEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL))
         if let index = args.firstIndex(of: "--menu-mouse-qa"), args.count > index + 1 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
                 Task { @MainActor in await controller.verifyMouseClicks(directory: args[index + 1]) }
@@ -37,7 +43,23 @@ import ChipBarCore
             }
         }
     }
-    func applicationWillTerminate(_ notification: Notification) { Self.monitor?.stop(forQuit: true) }
+    /// Both the Launch Services callback and the classic get-URL Apple Event
+    /// are handled because ChipBar is an LSUIElement/menu-only macOS app.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        urls.forEach { menuController?.openWidgetURL($0) }
+    }
+
+    @objc private func handleWidgetURLEvent(
+        _ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor
+    ) {
+        guard let path = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
+              let url = URL(string: path) else { return }
+        menuController?.openWidgetURL(url)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        Self.monitor?.stop(forQuit: true)
+    }
 }
 
 @main enum Launch {
