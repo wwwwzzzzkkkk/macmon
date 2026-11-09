@@ -16,6 +16,7 @@ struct ChipBarPowerReading: Equatable, Sendable {
     var sourceLabel: String
     var live: Bool
     var sourceKey: String? = nil
+    var usb: USBCPowerSnapshot = USBCPowerSnapshot()
 
     static let unavailable = ChipBarPowerReading(
         hasBattery: false, onAdapter: true, isCharging: false,
@@ -37,6 +38,9 @@ actor ChipBarPowerSampler {
 
     func read() -> ChipBarPowerReading {
         if smc == nil { smc = SMCReader() }
+        // Collect USB-C telemetry from this same SMC connection, at the same
+        // three-second cadence. No secondary timer or subprocess is needed.
+        let usb = USBCPowerReader.read(smc: smc)
         let battery = Self.batteryState()
 
         if let battery {
@@ -70,7 +74,8 @@ actor ChipBarPowerSampler {
                 live: available,
                 sourceKey: available
                     ? (battery.connected ? "PDTR + B0AC/B0AV" : "B0AC/B0AV")
-                    : nil
+                    : nil,
+                usb: usb
             )
         }
 
@@ -92,7 +97,8 @@ actor ChipBarPowerSampler {
             batteryPercent: nil, adapterWatts: nil, batteryWatts: nil,
             systemWatts: power,
             sourceLabel: power == nil ? "未检测到内部系统功率传感器" : "SMC \(source) · 内部 DC 功率，非插座 AC 输入",
-            live: power != nil, sourceKey: power == nil ? nil : source
+            live: power != nil, sourceKey: power == nil ? nil : source,
+            usb: usb
         )
     }
 
