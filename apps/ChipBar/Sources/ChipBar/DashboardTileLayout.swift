@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Stable identifiers: never persist an array index or a localized title.
 enum DashboardTile: String, CaseIterable, Identifiable {
-    case powerTrend, cpu, gpu, memory, cpuCores, fan, ane, storage, powerSupply, usbOutput, applications
+    case powerTrend, cpu, gpu, memory, cpuCores, fan, ane, storage, powerSupply, applications
 
     var id: String { rawValue }
 
@@ -16,8 +16,7 @@ enum DashboardTile: String, CaseIterable, Identifiable {
         case .fan: return "风扇"
         case .ane: return "ANE"
         case .storage: return "储存空间"
-        case .powerSupply: return "电源"
-        case .usbOutput: return "USB-C 供电"
+        case .powerSupply: return "电源与供电"
         case .applications: return "应用占用"
         }
     }
@@ -33,7 +32,6 @@ enum DashboardTile: String, CaseIterable, Identifiable {
         case .ane: return "sparkle"
         case .storage: return "internaldrive"
         case .powerSupply: return "bolt.horizontal.circle"
-        case .usbOutput: return "cable.connector"
         case .applications: return "square.stack.3d.up"
         }
     }
@@ -42,9 +40,9 @@ enum DashboardTile: String, CaseIterable, Identifiable {
     /// changes where tiles flow but does not squash ring gauges or charts.
     var columns: Int {
         switch self {
-        case .powerTrend, .cpuCores, .storage, .usbOutput: return 6
+        case .powerTrend, .cpuCores, .storage, .powerSupply: return 6
         case .cpu, .gpu, .memory: return 2
-        case .fan, .ane, .powerSupply, .applications: return 3
+        case .fan, .ane, .applications: return 3
         }
     }
 }
