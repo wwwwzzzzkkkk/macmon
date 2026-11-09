@@ -8,7 +8,10 @@ import WidgetKit
 struct StorageVolumeOptions: DynamicOptionsProvider {
     func results() async throws -> [String] {
         let names = ChipBarSnapshotStore.readForWidget()?.volumes.map(\.name) ?? []
-        return ["全部"] + Array(Set(names)).sorted()
+        // All is a presentation option, not an on-disk volume name. Localize
+        // the option title without turning the stored real volume IDs into
+        // translated strings.
+        return [String(localized: "全部")] + Array(Set(names)).sorted()
     }
 }
 
