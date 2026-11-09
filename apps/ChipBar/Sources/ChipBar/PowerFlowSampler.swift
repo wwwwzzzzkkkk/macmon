@@ -16,6 +16,7 @@ struct ChipBarPowerReading: Equatable, Sendable {
     var sourceLabel: String
     var live: Bool
     var sourceKey: String? = nil
+    var usb: USBCPowerSnapshot = USBCPowerSnapshot()
 
     static let unavailable = ChipBarPowerReading(
         hasBattery: false, onAdapter: true, isCharging: false,
@@ -35,8 +36,11 @@ actor ChipBarPowerSampler {
     private var smc: SMCReader?
     private var missed = 0
 
-    func read() -> ChipBarPowerReading {
+    func read(includeUSBDevices: Bool = false) -> ChipBarPowerReading {
         if smc == nil { smc = SMCReader() }
+        // Collect USB-C telemetry from this same SMC connection, at the same
+        // three-second cadence. No secondary timer or subprocess is needed.
+        let usb = USBCPowerReader.read(smc: smc, includeDevices: includeUSBDevices)
         let battery = Self.batteryState()
 
         if let battery {
@@ -70,7 +74,8 @@ actor ChipBarPowerSampler {
                 live: available,
                 sourceKey: available
                     ? (battery.connected ? "PDTR + B0AC/B0AV" : "B0AC/B0AV")
-                    : nil
+                    : nil,
+                usb: usb
             )
         }
 
@@ -92,7 +97,8 @@ actor ChipBarPowerSampler {
             batteryPercent: nil, adapterWatts: nil, batteryWatts: nil,
             systemWatts: power,
             sourceLabel: power == nil ? "未检测到内部系统功率传感器" : "SMC \(source) · 内部 DC 功率，非插座 AC 输入",
-            live: power != nil, sourceKey: power == nil ? nil : source
+            live: power != nil, sourceKey: power == nil ? nil : source,
+            usb: usb
         )
     }
 
@@ -148,9 +154,11 @@ actor ChipBarPowerSampler {
     @Published private(set) var chipWattsAtReading: Double?
     private let sampler = ChipBarPowerSampler()
 
-    func watch(chipPower: @MainActor @escaping () -> Double?) async {
+    func watch(chipPower: @MainActor @escaping () -> Double?,
+               needsUSBDevices: @MainActor @escaping () -> Bool = { false }) async {
         while !Task.isCancelled {
-            let result = await sampler.read()
+            let shouldEnumerateDevices = needsUSBDevices()
+            let result = await sampler.read(includeUSBDevices: shouldEnumerateDevices)
             guard !Task.isCancelled else { return }
             chipWattsAtReading = chipPower()
             reading = result

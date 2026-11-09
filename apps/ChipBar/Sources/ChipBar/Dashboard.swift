@@ -234,6 +234,17 @@ struct Dashboard: View {
             footer
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Exactly one sampler task for the dashboard. The old power tile used
+        // to own it, which left a USB-C-only layout without live readings.
+        .task(id: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping) {
+            guard monitor.dashboardVisible, !monitor.paused,
+                  !monitor.sleeping else { return }
+            await powerReading.watch(chipPower: {
+                monitor.connected ? monitor.sample?.total : nil
+            }, needsUSBDevices: {
+                state.sidePanel == .power
+            })
+        }
     }
 
     @ViewBuilder private func homeTile(_ tile: DashboardTile) -> some View {
@@ -271,8 +282,11 @@ struct Dashboard: View {
         case .storage:
             StorageCapacitySection(state: state)
         case .powerSupply:
-            sidePanelEntry("电源", icon: "bolt.horizontal.circle", kind: .power,
-                           trailingValue: powerReading.reading.systemWatts)
+            PowerOverviewHomeTile(reading: powerReading.reading,
+                                  selected: state.sidePanel == .power) {
+                guard !tileLayout.editing else { return }
+                state.sidePanel = state.sidePanel == .power ? nil : .power
+            }
         case .applications:
             sidePanelEntry("应用占用", icon: "square.stack.3d.up", kind: .applications)
         }
@@ -490,13 +504,6 @@ struct Dashboard: View {
         }
         .buttonStyle(ChipBarPressStyle())
         .accessibilityLabel("\(title)，\(kind == .power ? wattage(trailingValue) : "")，\(selected ? "收起" : "在侧边卡片展开")")
-        .task(id: monitor.dashboardVisible && !monitor.paused && !monitor.sleeping) {
-            guard kind == .power, monitor.dashboardVisible,
-                  !monitor.paused, !monitor.sleeping else { return }
-            await powerReading.watch(chipPower: {
-                monitor.connected ? monitor.sample?.total : nil
-            })
-        }
     }
 
     private func wattage(_ power: Double?) -> String {
