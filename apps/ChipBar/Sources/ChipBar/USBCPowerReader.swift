@@ -103,7 +103,9 @@ enum USBCPowerReader {
             let raw = smc?.describe("D\(number)UI")
             let uuid: String? = {
                 guard let raw, raw.size == 16, raw.bytes.count == 16 else { return nil }
-                return raw.bytes.map { String(format: "%02x", $0) }.joined()
+                let decoded = raw.bytes.map { String(format: "%02x", $0) }.joined()
+                // An empty/uninitialized controller UUID is not a valid join key.
+                return decoded.allSatisfy { $0 == "0" } ? nil : decoded
             }()
             return Channel(number: number, uuid: uuid,
                            volts: smc?.double("D\(number)JV"),
@@ -112,8 +114,12 @@ enum USBCPowerReader {
         let hasSMCUUIDs = channels.contains { $0.uuid != nil }
         let thunderbolt = thunderboltLinks()
         var iterator: io_iterator_t = 0
+        // IOAccessoryManager is the common superclass of the physical
+        // AppleHPM/AppleTCController port nodes across M1–M5 generations.
+        // PortDescription and PortNumber are not reliable on every chip.
         guard IOServiceGetMatchingServices(kIOMainPortDefault,
-                                           IOServiceMatching("IOPort"), &iterator) == KERN_SUCCESS
+                                           IOServiceMatching("IOAccessoryManager"), &iterator)
+                == KERN_SUCCESS
         else { return USBCPowerSnapshot() }
         defer { IOObjectRelease(iterator) }
 
@@ -122,15 +128,24 @@ enum USBCPowerReader {
         while case let service = IOIteratorNext(iterator), service != 0 {
             defer { IOObjectRelease(service) }
             guard let props = properties(service),
-                  let description = props["PortDescription"] as? String,
-                  description.hasPrefix("Port-USB-C") else { continue }
-            let number = (props["PortNumber"] as? NSNumber)?.intValue
-                ?? Int(description.split(separator: "@").last ?? "")
-            let identity = normalisedUUID(parentUUID(of: service))
-            // PortDescription is stable for a physical port, even if multiple
-            // registry layers expose it with/without a controller UUID.
-            let key = description
-            guard seen.insert(key).inserted else { continue }
+                  let entryName = registryEntryName(service),
+                  entryName == "Port-USB-C" || entryName.hasPrefix("Port-USB-C@")
+            else { continue }
+            // Keep only real built-in USB-C sockets; a subclass can include
+            // internal accessory-manager services or non-USB-C connectors.
+            if let type = props["PortTypeDescription"] as? String, type != "USB-C" {
+                continue
+            }
+            if let builtIn = props["BuiltIn"] as? NSNumber, !builtIn.boolValue {
+                continue
+            }
+            // IORegistry renders Port-USB-C@N by combining the registry entry
+            // name with its *location in plane*. N is not part of the name.
+            let number = registryPortNumber(service)
+                ?? (props["PortNumber"] as? NSNumber)?.intValue
+            let identity = normalisedUUID(controllerUUID(of: service))
+            guard let key = portIdentifier(number: number, controllerUUID: identity),
+                  seen.insert(key).inserted else { continue }
             let channel: Channel? = {
                 if hasSMCUUIDs {
                     guard let identity else { return nil }
@@ -143,7 +158,8 @@ enum USBCPowerReader {
                 return channels.first { $0.number == number }
             }()
             let supported = props["TransportsSupported"] as? [String] ?? []
-            let active = props["TransportsActive"] as? [String] ?? []
+            let active = (props["TransportsActive"] as? [String])
+                ?? (props["TransportsProvisioned"] as? [String]) ?? []
             let tb = number.flatMap { thunderbolt[$0] }
             let protocolName: String
             if let name = tb?.protocolName {
@@ -164,9 +180,10 @@ enum USBCPowerReader {
             // even on empty sockets. Show achieved speed only with active CIO.
             let actual = active.contains("CIO") ? tb?.actualGbps : nil
             ports.append(USBCPortMeasurement(
-                id: description, label: number.map { "USB-C \($0)" } ?? "USB-C",
+                id: key, label: number.map { "USB-C \($0)" } ?? "USB-C",
                 number: number,
-                isConnected: (props["ConnectionActive"] as? Bool) ?? false,
+                isConnected: (props["ConnectionActive"] as? Bool)
+                    ?? active.contains(where: { $0 != "CC" }),
                 protocolName: protocolName, maximumGbps: maximum,
                 currentGbps: actual,
                 voltage: channel?.watts == nil ? nil : channel?.volts,
@@ -189,12 +206,65 @@ enum USBCPowerReader {
         return unmanaged?.takeRetainedValue() as? [String: Any]
     }
 
-    private static func parentUUID(of service: io_registry_entry_t) -> String? {
-        var parent: io_registry_entry_t = 0
-        guard IORegistryEntryGetParentEntry(service, kIOServicePlane, &parent) == KERN_SUCCESS
-        else { return nil }
-        defer { IOObjectRelease(parent) }
-        return properties(parent)?["UUID"] as? String
+    /// The physical port's @N suffix is its IOService-plane location, which
+    /// macOS represents in hex. The registry name alone is "Port-USB-C".
+    private static func registryPortNumber(_ service: io_registry_entry_t) -> Int? {
+        var buffer = [CChar](repeating: 0, count: 128)
+        guard IORegistryEntryGetLocationInPlane(service, kIOServicePlane, &buffer)
+                == KERN_SUCCESS else { return nil }
+        let length = buffer.firstIndex(of: 0) ?? buffer.count
+        let location = String(decoding: buffer[..<length].map {
+            UInt8(bitPattern: $0)
+        }, as: UTF8.self)
+        return Int(location, radix: 16)
+    }
+
+    private static func registryEntryName(_ service: io_registry_entry_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: 128)
+        guard IORegistryEntryGetName(service, &buffer) == KERN_SUCCESS else { return nil }
+        let length = buffer.firstIndex(of: 0) ?? buffer.count
+        return String(decoding: buffer[..<length].map {
+            UInt8(bitPattern: $0)
+        }, as: UTF8.self)
+    }
+
+    /// Stable key also matches UsbIOPort ancestry on attached USB devices.
+    /// Do not use a constant "Port-USB-C" ID for multiple physical sockets.
+    static func portIdentifier(number: Int?, controllerUUID: String?) -> String? {
+        if let number, number >= 0 {
+            return "Port-USB-C@" + String(number, radix: 16)
+        }
+        if let controllerUUID, !controllerUUID.isEmpty {
+            return "Port-USB-C-" + controllerUUID
+        }
+        return nil
+    }
+
+    /// The UUID normally belongs to the HPM parent, but some models add
+    /// intermediate nodes. Read it only from an actual HPM controller ancestor.
+    private static func controllerUUID(of service: io_registry_entry_t) -> String? {
+        var current = service
+        IOObjectRetain(current)
+        defer { IOObjectRelease(current) }
+        for _ in 0..<12 {
+            var buffer = [CChar](repeating: 0, count: 128)
+            if IOObjectGetClass(current, &buffer) == KERN_SUCCESS {
+                let length = buffer.firstIndex(of: 0) ?? buffer.count
+                let className = String(decoding: buffer[..<length].map {
+                    UInt8(bitPattern: $0)
+                }, as: UTF8.self)
+                if className == "AppleHPMDevice" ||
+                    className.hasPrefix("AppleHPMDeviceHAL") {
+                    return properties(current)?["UUID"] as? String
+                }
+            }
+            var parent: io_registry_entry_t = 0
+            guard IORegistryEntryGetParentEntry(current, kIOServicePlane, &parent)
+                    == KERN_SUCCESS else { return nil }
+            IOObjectRelease(current)
+            current = parent
+        }
+        return nil
     }
 
     static func normalisedUUID(_ raw: String?) -> String? {
