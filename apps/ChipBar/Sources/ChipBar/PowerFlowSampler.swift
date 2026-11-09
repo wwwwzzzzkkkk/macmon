@@ -36,11 +36,11 @@ actor ChipBarPowerSampler {
     private var smc: SMCReader?
     private var missed = 0
 
-    func read() -> ChipBarPowerReading {
+    func read(includeUSBDevices: Bool = false) -> ChipBarPowerReading {
         if smc == nil { smc = SMCReader() }
         // Collect USB-C telemetry from this same SMC connection, at the same
         // three-second cadence. No secondary timer or subprocess is needed.
-        let usb = USBCPowerReader.read(smc: smc)
+        let usb = USBCPowerReader.read(smc: smc, includeDevices: includeUSBDevices)
         let battery = Self.batteryState()
 
         if let battery {
@@ -154,9 +154,11 @@ actor ChipBarPowerSampler {
     @Published private(set) var chipWattsAtReading: Double?
     private let sampler = ChipBarPowerSampler()
 
-    func watch(chipPower: @MainActor @escaping () -> Double?) async {
+    func watch(chipPower: @MainActor @escaping () -> Double?,
+               needsUSBDevices: @MainActor @escaping () -> Bool = { false }) async {
         while !Task.isCancelled {
-            let result = await sampler.read()
+            let shouldEnumerateDevices = needsUSBDevices()
+            let result = await sampler.read(includeUSBDevices: shouldEnumerateDevices)
             guard !Task.isCancelled else { return }
             chipWattsAtReading = chipPower()
             reading = result
