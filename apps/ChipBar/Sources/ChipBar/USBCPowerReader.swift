@@ -98,7 +98,7 @@ enum USBCPowerReader {
         }
     }
 
-    static func read(smc: SMCReader?) -> USBCPowerSnapshot {
+    static func read(smc: SMCReader?, includeDevices: Bool = false) -> USBCPowerSnapshot {
         let channels: [Channel] = (1...4).map { number in
             let raw = smc?.describe("D\(number)UI")
             let uuid: String? = {
@@ -196,7 +196,10 @@ enum USBCPowerReader {
             if $0.isConnected != $1.isConnected { return $0.isConnected }
             return ($0.number ?? Int.max) < ($1.number ?? Int.max)
         }
-        return USBCPowerSnapshot(ports: ports, devices: usbDevices())
+        // Deep USB device/ancestor enumeration is only needed while the
+        // power sidecar is visible, not on every idle Home refresh.
+        return USBCPowerSnapshot(ports: ports,
+                                 devices: includeDevices ? usbDevices() : [])
     }
 
     private static func properties(_ service: io_registry_entry_t) -> [String: Any]? {
