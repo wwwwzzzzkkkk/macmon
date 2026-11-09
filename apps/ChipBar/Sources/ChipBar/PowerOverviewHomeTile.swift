@@ -51,7 +51,7 @@ struct PowerOverviewHomeTile: View {
                 }
 
                 HStack(spacing: 5) {
-                    Text("内部 / 适配器")
+                    Text("每 3 秒刷新")
                     Spacer(minLength: 4)
                     Text("\(reading.usb.sourcingPorts.count) 个 USB-C 供电端口")
                 }
