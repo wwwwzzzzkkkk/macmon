@@ -76,36 +76,41 @@ class VersionTests(unittest.TestCase):
     def test_glass_widgets_use_real_snapshot_data_for_every_system_size(self):
         root = Path(__file__).resolve().parents[2]
         widget = (root / "Sources/ChipBarWidgets/ChipBarWidgets.swift").read_text()
+        glass = (root / "Sources/ChipBarWidgets/GlassWidgetViews.swift").read_text()
+        shared = (root / "Sources/ChipBarCore/ChipBarSnapshot.swift").read_text()
         publisher = (root / "Sources/ChipBar/WidgetTelemetryBridge.swift").read_text()
         for family in [".systemSmall", ".systemMedium", ".systemLarge"]:
             self.assertIn(family, widget)
-        for component in ["GlassMetricRing", "GlassConcentricRings",
-                          "GlassSparkline", "GlassCoreBars", "GlassStorageRow"]:
-            self.assertIn(component, widget)
-        self.assertIn("ChipBarTelemetryWidget<OverviewWidgetModule>()", widget)
-        for metric in ["averagePower", "peakPower", "chipName", "externalFreeGB",
-                       "externalTotalGB", "storageReadMB", "storageWriteMB",
-                       "externalReadMB", "externalWriteMB", "coreTiers"]:
-            self.assertIn(f'"{metric}"', widget)
-            self.assertIn(f'"{metric}"', publisher)
-        for misleading_mock in ["11.6 W", "29%", "42%", "84%", "Zark",
-                                "Apple M5 Pro"]:
-            self.assertNotIn(misleading_mock, widget)
-        self.assertIn("private var fresh", widget)
-        self.assertIn("WidgetCenter.shared.reloadAllTimelines()", publisher)
+        for component in ["RingView", "SparklineView", "CoreBarsView",
+                          "UsageBar", "PillView", "IconChip"]:
+            self.assertIn(f"struct {component}: View", glass)
+        for metric in ["chipPower", "avgPower", "peakPower", "powerSeries",
+                       "internalPower", "cpu", "gpu", "mem", "cores",
+                       "fanRPM", "aneWatts", "volumes"]:
+            self.assertIn(f"var {metric}:", shared)
+        self.assertIn("ChipBarSnapshotStore.write(snapshot)", publisher)
+        self.assertIn("ChipBarSnapshotStore.readForWidget()", widget)
+        self.assertIn("CoreBarsView(values:", glass)
+        self.assertIn("containerBackground(for: .widget)", glass)
+        self.assertIn("widgetRenderingMode", glass)
+        self.assertNotIn("TimelineView(", glass)
+        self.assertNotIn("withAnimation(", glass)
+        self.assertIn("SnapshotEntry(date: .now, snapshot: .preview", widget)
 
-    def test_only_reference_widget_kinds_are_registered(self):
+    def test_new_widget_kinds_preserve_all_legacy_kinds(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "Sources/ChipBarWidgets/ChipBarWidgets.swift").read_text()
-        import re
-        kinds = re.findall(r'^\s+ChipBarTelemetryWidget<([A-Za-z]+WidgetModule)>\(\)',
-                           source, re.MULTILINE)
-        self.assertEqual(kinds, ["OverviewWidgetModule", "StorageWidgetModule"])
-        self.assertIn("case overview, storage", source)
-        self.assertIn("tile == .storage", source)
-        self.assertIn(".systemSmall, .systemMedium, .systemLarge", source)
-        self.assertNotIn("ChipBarTelemetryWidget<CPUWidgetModule>", source)
-        self.assertNotIn("ChipBarTelemetryWidget<GPUWidgetModule>", source)
+        shared = (root / "Sources/ChipBarCore/ChipBarSnapshot.swift").read_text()
+        self.assertIn('newOverviewKind = "ChipBar.Overview"', shared)
+        self.assertIn('newStorageKind = "ChipBar.Storage"', shared)
+        self.assertIn("ChipBarOverviewWidget()", source)
+        self.assertIn("ChipBarStorageWidget()", source)
+        for module in ["OldOverview", "OldPowerTrend", "OldCPU", "OldGPU",
+                       "OldMemory", "OldCores", "OldFan", "OldANE", "OldStorage",
+                       "OldPowerSupply", "OldApplications"]:
+            self.assertIn(f"LegacyWidget<{module}>()", source)
+        self.assertIn('"local.chipbar.telemetry.\\(Module.tile.rawValue)"', source)
+        self.assertIn("case overview, powerTrend, cpu, gpu, memory, cpuCores", source)
 
     def test_core_sampler_independent_of_dashboard_and_refreshes_host_snapshot(self):
         root = Path(__file__).resolve().parents[2]
@@ -118,7 +123,8 @@ class VersionTests(unittest.TestCase):
         self.assertNotIn("CPUCoreLoadModel.shared.values", bridge)
         self.assertIn("now.timeIntervalSince(lastWrite) < 15", bridge)
         self.assertIn(">= 120", bridge)
-        self.assertIn("date.addingTimeInterval(2 * 60)", widget)
+        self.assertIn("now.addingTimeInterval(5 * 60)", widget)
+        self.assertIn("reloadTimelines(", bridge)
         self.assertIn("lastCoreAttempt", bridge)
 
     def test_storage_snapshots_refresh_without_opening_the_menu(self):
@@ -155,11 +161,13 @@ class VersionTests(unittest.TestCase):
                   "Sources/ChipBarWidgets/ChipBarWidgets.swift").read_text()
         import re
         lines = re.findall(r'^\s*\.description\([^\n]*', source, re.MULTILINE)
-        self.assertEqual(len(lines), 1, "Expected one WidgetKit gallery description")
+        self.assertGreaterEqual(len(lines), 3,
+                                "All new and legacy configurations require descriptions")
         for line in lines:
             self.assertRegex(line, r'^\s*\.description\("[^"]*"\)')
             self.assertNotIn(chr(92) + "(", line, "No interpolation in WidgetKit description")
-        self.assertIn("var galleryTitle: LocalizedStringKey", source)
+        self.assertIn("ChipBar.Overview", (Path(__file__).resolve().parents[2] /
+                      "Sources/ChipBarCore/ChipBarSnapshot.swift").read_text())
         self.assertNotIn('.configurationDisplayName("ChipBar · ' + chr(92) + '(', source)
 
     def test_widget_extension_is_required_and_must_identify_widgetkit(self):
