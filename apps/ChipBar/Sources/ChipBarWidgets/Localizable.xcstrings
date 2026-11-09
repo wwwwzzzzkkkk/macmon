@@ -816,6 +816,118 @@
           }
         }
       }
+    },
+    "%@ 占用 %@%%，功率 %@ 瓦，温度 %@ 度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ usage %@%%, power %@ W, temperature %@°C"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 占用 %@%%，功率 %@ 瓦，温度 %@ 度"
+          }
+        }
+      }
+    },
+    "最近 10 分钟芯片功率，均值 %@ 瓦，当前 %@ 瓦": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chip power over the last 10 minutes, average %@ W, current %@ W"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最近 10 分钟芯片功率，均值 %@ 瓦，当前 %@ 瓦"
+          }
+        }
+      }
+    },
+    "已使用 %lld%%": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld%% used"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已使用 %lld%%"
+          }
+        }
+      }
+    },
+    "已用 %@%%": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%% used"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已用 %@%%"
+          }
+        }
+      }
+    },
+    "%@ %@ 可用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@ free"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@ 可用"
+          }
+        }
+      }
+    },
+    "CPU 各核心占用尚无数据": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CPU core utilization unavailable"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CPU 各核心占用尚无数据"
+          }
+        }
+      }
+    },
+    "%lld 个 CPU 核心的占用情况": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilization across %lld CPU cores"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 个 CPU 核心的占用情况"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
