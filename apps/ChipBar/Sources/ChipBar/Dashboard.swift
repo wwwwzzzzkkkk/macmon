@@ -242,6 +242,8 @@ struct Dashboard: View {
                   !monitor.sleeping else { return }
             await powerReading.watch(chipPower: {
                 monitor.connected ? monitor.sample?.total : nil
+            }, needsUSBDevices: {
+                state.sidePanel == .power
             })
         }
     }
