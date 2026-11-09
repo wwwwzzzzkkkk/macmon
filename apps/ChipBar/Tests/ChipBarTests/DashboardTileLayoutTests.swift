@@ -14,14 +14,13 @@ struct DashboardTileLayoutTests {
         #expect(DashboardTile.fan.columns == 3)
         #expect(DashboardTile.ane.columns == 3)
         #expect(DashboardTile.storage.columns == 6)
-        #expect(DashboardTile.powerSupply.columns == 3)
-        #expect(DashboardTile.usbOutput.columns == 6)
+        #expect(DashboardTile.powerSupply.columns == 6)
         #expect(DashboardTile.applications.columns == 3)
     }
 
     @Test func corruptOrOldPreferencesCannotLoseModulesOrDuplicateTiles() {
         let arrangement = DashboardTileArrangement(
-            savedOrder: ["gpu", "gpu", "unknown", "cpu"],
+            savedOrder: ["gpu", "gpu", "usbOutput", "unknown", "cpu"],
             savedHidden: ["ane", "ane", "unknown"])
         #expect(arrangement.order.count == DashboardTile.allCases.count)
         #expect(Set(arrangement.order).count == DashboardTile.allCases.count)
