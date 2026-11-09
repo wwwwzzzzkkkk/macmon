@@ -61,38 +61,41 @@ struct ChipBarOverviewWidget: Widget {
     }
 }
 
+// The same new kind is backed by an App Intent on macOS 14+ and a
+// non-configurable StaticConfiguration on macOS 13. The WidgetBundle builder,
+// not a function returning opaque WidgetConfiguration, selects the branch:
+// the two opaque configuration types must never share an ordinary if/else
+// return expression (Swift reports "branches have mismatching types").
+@available(macOS 14.0, *)
+struct ChipBarStorageIntentWidget: Widget {
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(kind: ChipBarSnapshotStore.newStorageKind,
+                               intent: StorageVolumeIntent.self,
+                               provider: StorageIntentProvider()) { entry in
+            GlassStorageContent(snapshot: entry.snapshot,
+                                selectedVolume: entry.selectedVolume == "全部"
+                                    ? nil : entry.selectedVolume,
+                                now: entry.date,
+                                placeholder: entry.isPlaceholder)
+        }
+        .configurationDisplayName("ChipBar · 储存空间")
+        .description("查看磁盘容量和读写速率，可选择单个卷。")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
 struct ChipBarStorageWidget: Widget {
     var body: some WidgetConfiguration {
-        makeConfiguration()
-    }
-
-    // Apple's backward-compatibility pattern for macOS 13 + App Intents 14+.
-    private func makeConfiguration() -> some WidgetConfiguration {
-        if #available(macOS 14.0, *) {
-            AppIntentConfiguration(kind: ChipBarSnapshotStore.newStorageKind,
-                                   intent: StorageVolumeIntent.self,
-                                   provider: StorageIntentProvider()) { entry in
-                GlassStorageContent(snapshot: entry.snapshot,
-                                    selectedVolume: entry.selectedVolume == "全部"
-                                        ? nil : entry.selectedVolume,
-                                    now: entry.date,
-                                    placeholder: entry.isPlaceholder)
-            }
-            .configurationDisplayName("ChipBar · 储存空间")
-            .description("查看磁盘容量和读写速率，可选择单个卷。")
-            .supportedFamilies([.systemSmall])
-        } else {
-            StaticConfiguration(kind: ChipBarSnapshotStore.newStorageKind,
-                                provider: SnapshotProvider()) { entry in
-                GlassStorageContent(snapshot: entry.snapshot,
-                                    selectedVolume: nil,
-                                    now: entry.date,
-                                    placeholder: entry.isPlaceholder)
-            }
-            .configurationDisplayName("ChipBar · 储存空间")
-            .description("查看两个储存卷的剩余容量和读写速率。")
-            .supportedFamilies([.systemSmall])
+        StaticConfiguration(kind: ChipBarSnapshotStore.newStorageKind,
+                            provider: SnapshotProvider()) { entry in
+            GlassStorageContent(snapshot: entry.snapshot,
+                                selectedVolume: nil,
+                                now: entry.date,
+                                placeholder: entry.isPlaceholder)
         }
+        .configurationDisplayName("ChipBar · 储存空间")
+        .description("查看两个储存卷的剩余容量和读写速率。")
+        .supportedFamilies([.systemSmall])
     }
 }
 
@@ -308,7 +311,11 @@ private struct LegacyCard: View {
 struct ChipBarWidgets: WidgetBundle {
     @WidgetBundleBuilder var body: some Widget {
         ChipBarOverviewWidget()
-        ChipBarStorageWidget()
+        if #available(macOS 14.0, *) {
+            ChipBarStorageIntentWidget()
+        } else {
+            ChipBarStorageWidget()
+        }
 
         // Keeping all eleven legacy IDs prevents placed widgets disappearing.
         LegacyWidget<OldOverview>()
