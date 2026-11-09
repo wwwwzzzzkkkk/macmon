@@ -407,28 +407,39 @@ struct PowerSupplyDetailView: View {
             }
             .frame(height: 40)
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("功率流向").font(.caption.weight(.semibold))
-                    Spacer(minLength: 4)
-                    Text("左 → 右 · 条带粗细 = 瓦数")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                }
-                PowerSankeyFlow(distribution: breakdown, externalWatts: supplyWatts,
-                                sourceTitle: supplyTitle, active: active && reading.live)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.70),
-                               value: breakdown.internalWatts)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.70),
-                               value: breakdown.chipWatts)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.70),
-                               value: supplyWatts)
-            }
-            .padding(12)
-            .glassTile(radius: 26)
+            // A fixed native side-panel frame avoids the jump seen when an
+            // expandable port row changes its intrinsic height. Only the
+            // interior scrolls, leaving the existing Sankey geometry intact.
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("功率流向").font(.caption.weight(.semibold))
+                            Spacer(minLength: 4)
+                            Text("左 → 右 · 条带粗细 = 瓦数")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                        }
+                        PowerSankeyFlow(distribution: breakdown, externalWatts: supplyWatts,
+                                        sourceTitle: supplyTitle, active: active && reading.live)
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.70),
+                                       value: breakdown.internalWatts)
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.70),
+                                       value: breakdown.chipWatts)
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.70),
+                                       value: supplyWatts)
+                    }
+                    .padding(12)
+                    .glassTile(radius: 26)
 
+                    USBCPowerSection(snapshot: reading.usb)
+                    USBDeviceLinkSection(devices: reading.usb.devices)
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(height: SidePanelLayout.powerHeight - SidePanelLayout.padding * 2 - 50)
         }
     }
 }
