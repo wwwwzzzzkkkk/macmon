@@ -56,6 +56,7 @@ jobs:
         run: python3 -m unittest discover -s Tests/ReleaseTests -v
       - name: Parser tests
         run: ./scripts/test.sh
+      # Re-run the 3.4.0 release after splitting complex SwiftUI ViewBuilders.
       - name: Build arm64 app
         run: ./scripts/build.sh
       - name: Verify embedded macOS WidgetKit extension

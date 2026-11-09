@@ -688,17 +688,29 @@ struct GlassOverviewContent: View {
     }
 
     private var largeCoreHeader: some View {
-        HStack(spacing: 5) {
+        // Compute localized content before entering ViewBuilder; combining
+        // nested optional.map, String(localized:) and Text overload resolution
+        // in one HStack exhausted the release compiler's type-check budget.
+        let performanceCount: String
+        let efficiencyCount: String
+        if let snapshot {
+            performanceCount = String(snapshot.performanceCoreCount)
+            efficiencyCount = String(max(0, snapshot.cores.count - snapshot.performanceCoreCount))
+        } else {
+            performanceCount = "—"
+            efficiencyCount = "—"
+        }
+        let performanceLabel = "● " + String(localized: "性能核") + " " + performanceCount
+        let efficiencyLabel = "● " + String(localized: "超级核") + " " + efficiencyCount
+        return HStack(spacing: 5) {
             Text("CPU 各核心")
                 .font(.system(size: 9, weight: .semibold))
             Spacer(minLength: 1)
-            Text("● " + String(localized: "性能核") + " " +
-                 (snapshot.map { String($0.performanceCoreCount) } ?? "—"))
+            Text(performanceLabel)
                 .foregroundStyle(.secondary)
                 .font(.system(size: 8))
                 .lineLimit(1)
-            Text("● " + String(localized: "超级核") + " " +
-                 (snapshot.map { String(max(0, $0.cores.count - $0.performanceCoreCount)) } ?? "—"))
+            Text(efficiencyLabel)
                 .foregroundStyle(.secondary)
                 .font(.system(size: 8))
                 .lineLimit(1)
