@@ -365,7 +365,7 @@ private struct SystemWidgetBackground: ViewModifier {
     }
 }
 
-private func widgetURL(_ path: String) -> URL {
+private func chipBarDeepLink(_ path: String) -> URL {
     var url = URLComponents()
     url.scheme = "chipbar"
     if path.hasPrefix("disk/") {
@@ -444,7 +444,7 @@ struct GlassOverviewContent: View {
                 .redacted(reason: placeholder ? .placeholder : [])
             }
         }
-        .widgetURL(widgetURL("main"))
+        .widgetURL(chipBarDeepLink("main"))
         .accessibilityElement(children: .contain)
     }
 
@@ -687,7 +687,7 @@ struct GlassOverviewContent: View {
                          value: rpm(snapshot?.fanRPM), color: GlassPalette.fan)
                 PillView(icon: "sparkles", label: "ANE",
                          value: GlassFormat.power(snapshot?.aneWatts), color: GlassPalette.ane)
-                Link(destination: widgetURL("power")) {
+                Link(destination: chipBarDeepLink("power")) {
                     PillView(icon: "bolt.fill", label: "内部",
                              value: GlassFormat.power(snapshot?.internalPower),
                              color: GlassPalette.power)
@@ -811,7 +811,7 @@ struct GlassStorageContent: View {
                             .frame(maxWidth: .infinity)
                     } else {
                         ForEach(volumes) { volume in
-                            Link(destination: widgetURL("disk/" + volume.name)) {
+                            Link(destination: chipBarDeepLink("disk/" + volume.name)) {
                                 StorageVolumeRow(volume: volume,
                                                  enlarged: volumes.count == 1)
                             }
@@ -827,6 +827,6 @@ struct GlassStorageContent: View {
                 .redacted(reason: placeholder ? .placeholder : [])
             }
         }
-        .widgetURL(widgetURL("disk/" + (selectedVolume ?? volumes.first?.name ?? "")))
+        .widgetURL(chipBarDeepLink("disk/" + (selectedVolume ?? volumes.first?.name ?? "")))
     }
 }
