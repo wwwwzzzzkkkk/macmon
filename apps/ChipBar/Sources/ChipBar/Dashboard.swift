@@ -295,10 +295,9 @@ struct Dashboard: View {
     /// The only secondary page: system facts, hardware details and settings.
     /// Home remains compact, with internal/external storage space bars.
     private var settingsScreen: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             settingsNavigation
             MacHardwareInformationSection(chip: monitor.sample?.chip ?? monitor.hardware)
-            fanOverview
             settingsPanel
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -319,20 +318,11 @@ struct Dashboard: View {
             }
             .buttonStyle(ChipBarPressStyle())
             .accessibilityLabel("返回监控面板")
-            VStack(alignment: .leading, spacing: 2) {
-                Text("设备与设置")
-                    .font(.headline)
-                Text("硬件概览 · 显示偏好")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Image(systemName: "slider.horizontal.3")
-                .foregroundStyle(accent)
-                .font(.system(size: 15))
-                .accessibilityHidden(true)
+            Text("设备与设置")
+                .font(.headline)
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder private var header: some View {
@@ -550,39 +540,20 @@ struct Dashboard: View {
         .glassTile(radius: 26)
     }
 
-    private var fanOverview: some View {
-        HStack(spacing: 9) {
-            Label("风扇转速", systemImage: "fanblades")
-                .font(.caption.weight(.medium))
-            Spacer()
-            let fans = monitor.connected ? monitor.sample?.fans ?? [] : []
-            Text(fans.isEmpty ? "不可用" :
-                 fans.map { String(format: "%.0f", $0.rpm) }.joined(separator: " / ") + " RPM")
-                .font(.caption.weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(fans.isEmpty ? Color.secondary : Color.primary)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 35)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 11))
-    }
-
     private var settingsPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Label("采样频率", systemImage: "clock.arrow.circlepath")
                         .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Text("影响刷新与功耗")
-                        .font(.caption2).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
                 }
                 RefreshIntervalSelector(selection: $monitor.interval)
             }
-            .padding(12)
+            .padding(11)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
 
-            VStack(alignment: .leading, spacing: 11) {
+            VStack(alignment: .leading, spacing: 9) {
                 HStack {
                     Label("菜单栏显示", systemImage: "menubar.rectangle")
                         .font(.subheadline.weight(.semibold))
@@ -619,10 +590,10 @@ struct Dashboard: View {
                     )
                 }
             }
-            .padding(12)
+            .padding(11)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
 
-            VStack(alignment: .leading, spacing: 9) {
+            VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 8) {
                     Label("应用更新", systemImage: "arrow.triangle.2.circlepath")
                         .font(.subheadline.weight(.semibold))
@@ -635,10 +606,13 @@ struct Dashboard: View {
                         .font(.caption)
                         .disabled(updater.busy)
                 }
-                Text(updater.status)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if updater.busy || updater.availableVersion != nil ||
+                    updater.status != "检查是否有可用的新版本。" {
+                    Text(updater.status)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let version = updater.availableVersion {
                     Button {
                         updater.install()
@@ -649,7 +623,7 @@ struct Dashboard: View {
                     .disabled(updater.busy)
                 }
             }
-            .padding(12)
+            .padding(11)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
 
             if !monitor.connected {
