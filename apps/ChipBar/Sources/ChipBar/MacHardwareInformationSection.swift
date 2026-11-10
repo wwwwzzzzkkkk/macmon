@@ -54,16 +54,16 @@ struct MacHardwareInformationSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 9) {
                 Image(systemName: "desktopcomputer")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(accent)
-                    .frame(width: 38, height: 38)
-                    .background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 11))
-                VStack(alignment: .leading, spacing: 3) {
+                    .frame(width: 32, height: 32)
+                    .background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 9))
+                VStack(alignment: .leading, spacing: 2) {
                     Text(chip.isEmpty ? "Apple Silicon" : chip)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .lineLimit(1)
                         .minimumScaleFactor(0.80)
                     Text(info.modelIdentifier)
@@ -73,28 +73,26 @@ struct MacHardwareInformationSection: View {
                 }
                 Spacer(minLength: 0)
             }
-            Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 0.5)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 7),
-                                GridItem(.flexible(), spacing: 7)], spacing: 7) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6),
+                                GridItem(.flexible(), spacing: 6)], spacing: 6) {
                 fact("系统版本", info.macOSVersion, symbol: "apple.logo")
                 fact("统一内存", info.installedMemory, symbol: "memorychip")
                 fact("CPU 核心", "\(info.logicalCPUCount) 核", symbol: "cpu")
                 fact("核心结构", coreDescription, symbol: "square.grid.3x3")
             }
         }
-        .padding(12)
+        .padding(11)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
         .accessibilityElement(children: .contain)
     }
 
     private func fact(_ title: String, _ value: String, symbol: String) -> some View {
-        HStack(alignment: .top, spacing: 6) {
+        HStack(alignment: .center, spacing: 6) {
             Image(systemName: symbol)
                 .font(.system(size: 11))
                 .foregroundStyle(accent.opacity(0.8))
                 .frame(width: 15)
-                .padding(.top, 1)
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(.secondary)
@@ -106,8 +104,8 @@ struct MacHardwareInformationSection: View {
             }
             Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, minHeight: 39, alignment: .topLeading)
-        .padding(8)
+        .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+        .padding(7)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
         .accessibilityElement(children: .combine)
     }

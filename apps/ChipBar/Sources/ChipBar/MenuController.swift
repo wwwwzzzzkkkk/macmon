@@ -3,6 +3,14 @@ import SwiftUI
 import Combine
 import ChipBarCore
 
+/// Page transitions hold the outgoing viewport until the slide completes;
+/// the destination then returns to its natural content height.
+enum DashboardViewportHeight {
+    static func fitted(content: CGFloat, maximum: CGFloat, pinned: CGFloat?) -> CGFloat {
+        min(pinned ?? content, maximum)
+    }
+}
+
 @MainActor private final class MenuPanel: NSPanel {
     var onEscape: (() -> Void)?
     override var canBecomeKey: Bool { true }
@@ -294,7 +302,11 @@ import ChipBarCore
                   self.dashboardMounted, self.panelRequestedVisible else { return }
             self.navigationTask = nil
             self.navigationResizeInFlight = false
-            self.refresh(forceLayout: true)
+            // The outgoing Home viewport was pinned only for the page slide.
+            // Release it after navigation so shorter Settings content can
+            // shrink the native glass panel instead of leaving a large void.
+            self.navigationViewportHeight = nil
+            self.refresh(forceLayout: true, animateResize: true)
         }
     }
 
@@ -495,7 +507,7 @@ import ChipBarCore
         button.setAccessibilityLabel(snapshot.accessibilityLabel)
     }
 
-    private func refresh(forceLayout: Bool = false) {
+    private func refresh(forceLayout: Bool = false, animateResize: Bool = false) {
         if forceLayout { layoutCoordinator.cancelPending() }
         guard dashboardMounted, forceLayout || panel.isVisible else { return }
         // Sensor/status updates may arrive during a tile lift. Do not ask
@@ -526,15 +538,26 @@ import ChipBarCore
         let onHome = !dashboardState.showSettings && !dashboardState.showSystemDetails
         let pinnedHeight = onHome ? tileEditViewportHeight : nil
         let size = NSSize(width: DashboardLayout.width,
-                          height: min(navigationViewportHeight ?? pinnedHeight ?? height,
-                                      maximumHeight))
+                          height: DashboardViewportHeight.fitted(
+                              content: height, maximum: maximumHeight,
+                              pinned: navigationViewportHeight ?? pinnedHeight))
         // A short destination page still needs a full viewport-sized document,
         // otherwise NSClipView can retain an invalid origin on the next return.
         let documentHeight = max(height, size.height)
         let documentSize = NSSize(width: DashboardLayout.width, height: documentHeight)
         if hostingView.frame.size != documentSize { hostingView.setFrameSize(documentSize) }
         if let frame = panelFrame(size: size), contentHeightChanged || forceLayout {
-            if frame != panel.frame { panel.setFrame(frame, display: false) }
+            if frame != panel.frame {
+                if animateResize && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                    NSAnimationContext.runAnimationGroup { context in
+                        context.duration = DashboardMotion.navigationResize
+                        context.timingFunction = DashboardMotion.navigationSpringCurve
+                        panel.animator().setFrame(frame, display: true)
+                    }
+                } else {
+                    panel.setFrame(frame, display: false)
+                }
+            }
             panelMaterial.layoutSubtreeIfNeeded()
         }
         if switchingPage || contentHeightChanged || oldViewportHeight != size.height || forceLayout {
