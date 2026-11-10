@@ -3,6 +3,14 @@ import SwiftUI
 import Combine
 import ChipBarCore
 
+/// Page transitions hold the outgoing viewport until the slide completes;
+/// the destination then returns to its natural content height.
+enum DashboardViewportHeight {
+    static func fitted(content: CGFloat, maximum: CGFloat, pinned: CGFloat?) -> CGFloat {
+        min(pinned ?? content, maximum)
+    }
+}
+
 @MainActor private final class MenuPanel: NSPanel {
     var onEscape: (() -> Void)?
     override var canBecomeKey: Bool { true }
@@ -530,8 +538,9 @@ import ChipBarCore
         let onHome = !dashboardState.showSettings && !dashboardState.showSystemDetails
         let pinnedHeight = onHome ? tileEditViewportHeight : nil
         let size = NSSize(width: DashboardLayout.width,
-                          height: min(navigationViewportHeight ?? pinnedHeight ?? height,
-                                      maximumHeight))
+                          height: DashboardViewportHeight.fitted(
+                              content: height, maximum: maximumHeight,
+                              pinned: navigationViewportHeight ?? pinnedHeight))
         // A short destination page still needs a full viewport-sized document,
         // otherwise NSClipView can retain an invalid origin on the next return.
         let documentHeight = max(height, size.height)
