@@ -294,7 +294,11 @@ import ChipBarCore
                   self.dashboardMounted, self.panelRequestedVisible else { return }
             self.navigationTask = nil
             self.navigationResizeInFlight = false
-            self.refresh(forceLayout: true)
+            // The outgoing Home viewport was pinned only for the page slide.
+            // Release it after navigation so shorter Settings content can
+            // shrink the native glass panel instead of leaving a large void.
+            self.navigationViewportHeight = nil
+            self.refresh(forceLayout: true, animateResize: true)
         }
     }
 
@@ -495,7 +499,7 @@ import ChipBarCore
         button.setAccessibilityLabel(snapshot.accessibilityLabel)
     }
 
-    private func refresh(forceLayout: Bool = false) {
+    private func refresh(forceLayout: Bool = false, animateResize: Bool = false) {
         if forceLayout { layoutCoordinator.cancelPending() }
         guard dashboardMounted, forceLayout || panel.isVisible else { return }
         // Sensor/status updates may arrive during a tile lift. Do not ask
@@ -534,7 +538,17 @@ import ChipBarCore
         let documentSize = NSSize(width: DashboardLayout.width, height: documentHeight)
         if hostingView.frame.size != documentSize { hostingView.setFrameSize(documentSize) }
         if let frame = panelFrame(size: size), contentHeightChanged || forceLayout {
-            if frame != panel.frame { panel.setFrame(frame, display: false) }
+            if frame != panel.frame {
+                if animateResize && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                    NSAnimationContext.runAnimationGroup { context in
+                        context.duration = DashboardMotion.navigationResize
+                        context.timingFunction = DashboardMotion.navigationSpringCurve
+                        panel.animator().setFrame(frame, display: true)
+                    }
+                } else {
+                    panel.setFrame(frame, display: false)
+                }
+            }
             panelMaterial.layoutSubtreeIfNeeded()
         }
         if switchingPage || contentHeightChanged || oldViewportHeight != size.height || forceLayout {
