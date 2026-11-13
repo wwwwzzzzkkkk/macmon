@@ -58,6 +58,7 @@ struct ClusterPairingCandidate: Equatable {
     private let identity: Curve25519.KeyAgreement.PrivateKey
     private var trusted: [String: Data]
     private var panelVisible = false
+    private var discoveryGraceTask: Task<Void, Never>?
     private var listener: NWListener?
     private var browser: NWBrowser?
     private var tickTimer: Timer?
@@ -87,8 +88,24 @@ struct ClusterPairingCandidate: Equatable {
     /// already participating in an explicitly approved cluster.
     func setPanelVisible(_ value: Bool) {
         panelVisible = value
-        if value { start() }
-        else if !enabled { stop(); nearby = []; pairingCandidate = nil }
+        discoveryGraceTask?.cancel()
+        discoveryGraceTask = nil
+        if value {
+            start()
+        } else if !enabled {
+            // Switching to the other Mac can dismiss the menu panel.
+            // Keep discovery (but never telemetry) alive briefly so that
+            // a user can open both machines' menus and compare codes.
+            discoveryGraceTask = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: .seconds(120)) }
+                catch { return }
+                guard let self, !self.panelVisible, !self.enabled else { return }
+                self.stop()
+                self.nearby = []
+                self.pairingCandidate = nil
+                self.discoveryGraceTask = nil
+            }
+        }
     }
 
     func setEnabled(_ value: Bool) {
