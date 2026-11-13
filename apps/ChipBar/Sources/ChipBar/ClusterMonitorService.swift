@@ -27,6 +27,7 @@ struct ClusterPairingCandidate: Equatable {
     var hello: ClusterPeerHello?
     var key: Data?
     var remoteApproved = false
+    var localApprovalSent = false
 
     init(connection: NWConnection, endpointID: String?) {
         self.connection = connection
@@ -101,6 +102,10 @@ struct ClusterPairingCandidate: Equatable {
             start()
             sendToTrustedPeers()
         } else {
+            sessions.values.forEach {
+                $0.localApprovalSent = false
+                $0.remoteApproved = false
+            }
             peers = []
             lastSeen = [:]
             status = "已暂停监控共享"
@@ -302,9 +307,10 @@ struct ClusterPairingCandidate: Equatable {
         let session = ClusterPeerSession(connection: connection, endpointID: endpointID)
         sessions[session.id] = session
         if let endpointID { outgoing[endpointID] = session.id }
-        connection.stateUpdateHandler = { [weak self] state in
+        connection.stateUpdateHandler = { [weak self, weak session] state in
             Task { @MainActor in
-                guard let self, self.sessions[session.id] === session else { return }
+                guard let self, let session,
+                      self.sessions[session.id] === session else { return }
                 switch state {
                 case .ready:
                     self.sendHello(to: session)
@@ -343,9 +349,10 @@ struct ClusterPairingCandidate: Equatable {
     private func receive(on session: ClusterPeerSession) {
         session.connection.receive(minimumIncompleteLength: 1,
                                    maximumLength: ClusterSecureWire.maximumFrameBytes) {
-            [weak self] data, _, complete, error in
+            [weak self, weak session] data, _, complete, error in
             Task { @MainActor in
-                guard let self, self.sessions[session.id] === session else { return }
+                guard let self, let session,
+                      self.sessions[session.id] === session else { return }
                 if let data, !data.isEmpty { self.process(data, from: session) }
                 if complete || error != nil {
                     self.remove(session)
@@ -412,7 +419,7 @@ struct ClusterPairingCandidate: Equatable {
     }
 
     private func sendApproval(to session: ClusterPeerSession) {
-        guard enabled,
+        guard enabled, !session.localApprovalSent,
               let hello = session.hello,
               trusted[hello.id] == hello.publicKey,
               let key = session.key,
@@ -421,6 +428,7 @@ struct ClusterPairingCandidate: Equatable {
               let encrypted = sealed.combined,
               let packet = ClusterPacket.encode(type: ClusterPacket.approval, body: encrypted)
         else { return }
+        session.localApprovalSent = true
         session.connection.send(content: packet, completion: .contentProcessed { _ in })
     }
 
