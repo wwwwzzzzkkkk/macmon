@@ -1,10 +1,16 @@
-# ChipBar v3.3.6 · Apple Silicon 菜单栏监控
+# ChipBar v3.6.0 · Apple Silicon 菜单栏监控
 
 > macOS 13+ · Apple Silicon (arm64) · 原生 SwiftUI + AppKit · macOS 26+ Liquid Glass
 >
 > 最新界面采用三个独立圆环磁贴、紧凑的 CPU 各核心图、风扇与 ANE 并排布局，以及“电源与功率 / 应用占用 / 外置硬盘”独立二级卡片。
 
-**[GitHub 产品主页](../../readme.md)** · **[下载 v3.3.6](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.3.6)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+**[GitHub 产品主页](../../readme.md)** · **[最新正式版 v3.5.1](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.5.1)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+
+## v3.6.0 双机 Cluster Monitor
+
+主页新增可自由排列的「计算集群」玻璃磁贴，可展开独立侧边面板查看本机和已授权局域网 Mac 的 CPU/GPU、内存、芯片功率、CPU 温度、在线状态与外部脚本提供的仿真状态。首次打开集群页即可发现附近设备，核对双方六位数字后确认配对；钥匙串保存授权设备，遥测使用 AES-GCM 加密数据帧；不提供远程 Shell 或仿真开始、结束、任务调度功能。沿用本地 macmon 采样逻辑，不改动 WidgetKit kind。
+
+[双机配对与雷雳桥接检查、外部任务状态 JSON 格式](docs/CLUSTER_MONITOR.md)；初版要求两台 Mac 上的 ChipBar 都运行，不包括独立 LaunchAgent。没有真实外部任务进度时显示「进度未知」，不能凭 CPU 占用猜测仿真完成率。
 
 ## v3.3.6 小组件精简与数据同步
 

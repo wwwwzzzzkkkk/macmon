@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import QuartzCore
+import Combine
 
 @MainActor private final class ChipBarSideWindow: NSPanel {
     var escape: (() -> Void)?
@@ -22,6 +23,8 @@ import QuartzCore
     private var transition = UUID()
     private var lastOpenedOnRight = true
     private var mountTask: Task<Void, Never>?
+    private var clusterFitTask: Task<Void, Never>?
+    private var clusterLayoutSubscription: AnyCancellable?
 
     var isKeyWindow: Bool { panel.isKeyWindow }
     var isVisible: Bool { panel.isVisible }
@@ -60,6 +63,17 @@ import QuartzCore
         panel.title = "ChipBar 侧边卡片"
         panel.delegate = delegate
         panel.escape = onClose
+        let cluster = ClusterMonitorService.shared
+        clusterLayoutSubscription = Publishers.CombineLatest4(
+            cluster.$nearby.map(\.count),
+            cluster.$peers.map { $0.map { "\($0.id):\($0.tasks.count)" }.joined(separator: ";") },
+            cluster.$pairingCandidate.map { $0 == nil ? 0 : 1 },
+            cluster.$enabled
+        )
+        .map { values in "\(values.0):\(values.1):\(values.2):\(values.3)" }
+        .removeDuplicates()
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] _ in self?.scheduleClusterFit() }
         // The hosted view is mounted on demand to avoid reading processes or SMC on startup.
     }
 
@@ -109,6 +123,7 @@ import QuartzCore
                 monitor: self.monitor, state: self.state, close: self.onClose
             ))
             self.mountTask = nil
+            if kind == .cluster { self.scheduleClusterFit() }
         }
         let motion = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         guard motion else {
@@ -126,11 +141,46 @@ import QuartzCore
         }
     }
 
+    /// Refit only when device structure changes, not on each power sample.
+    /// A short document shrinks to its intrinsic height; larger clusters
+    /// scroll in a bounded panel without moving the parent menu.
+    private func scheduleClusterFit() {
+        guard openedKind == .cluster, panel.isVisible else { return }
+        clusterFitTask?.cancel()
+        let token = transition
+        clusterFitTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(85)) }
+            catch { return }
+            guard let self, self.transition == token,
+                  self.openedKind == .cluster, self.panel.isVisible,
+                  let visible = self.panel.screen?.visibleFrame else { return }
+            let width = SidePanelLayout.width(for: .cluster)
+            // Remove the stale viewport constraint before asking SwiftUI
+            // for its natural height (otherwise the empty area feeds back).
+            self.host.setFrameSize(NSSize(width: width, height: 1))
+            let measured = ceil(self.host.fittingSize.height)
+            let intrinsic = measured.isFinite && measured > 0 ? min(2000, measured) : SidePanelLayout.clusterHeight
+            let height = min(max(210, intrinsic), min(540, visible.height - 16))
+            self.host.setFrameSize(NSSize(width: width,
+                                          height: max(intrinsic, height)))
+            let old = self.panel.frame
+            let top = min(visible.maxY - 8, old.maxY)
+            let y = max(visible.minY + 8, top - height)
+            let frame = NSRect(x: old.minX, y: y, width: width, height: height)
+            if abs(old.height - height) > 1 {
+                self.panel.setFrame(frame, display: true)
+            }
+            self.clusterFitTask = nil
+        }
+    }
+
     func hide(animated: Bool = true) {
         transition = UUID()
         openedKind = nil
         mountTask?.cancel()
         mountTask = nil
+        clusterFitTask?.cancel()
+        clusterFitTask = nil
         let token = transition
         guard panel.isVisible else {
             host.rootView = AnyView(EmptyView())

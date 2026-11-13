@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Stable identifiers: never persist an array index or a localized title.
 enum DashboardTile: String, CaseIterable, Identifiable {
-    case powerTrend, cpu, gpu, memory, cpuCores, fan, ane, storage, powerSupply, applications
+    case powerTrend, cpu, gpu, memory, cpuCores, fan, ane, storage, powerSupply, applications, cluster
 
     var id: String { rawValue }
 
@@ -18,6 +18,7 @@ enum DashboardTile: String, CaseIterable, Identifiable {
         case .storage: return "储存空间"
         case .powerSupply: return "电源与供电"
         case .applications: return "应用占用"
+        case .cluster: return "计算集群"
         }
     }
 
@@ -33,6 +34,7 @@ enum DashboardTile: String, CaseIterable, Identifiable {
         case .storage: return "internaldrive"
         case .powerSupply: return "bolt.horizontal.circle"
         case .applications: return "square.stack.3d.up"
+        case .cluster: return "point.3.connected.trianglepath.dotted"
         }
     }
 
@@ -40,7 +42,7 @@ enum DashboardTile: String, CaseIterable, Identifiable {
     /// changes where tiles flow but does not squash ring gauges or charts.
     var columns: Int {
         switch self {
-        case .powerTrend, .cpuCores, .storage, .powerSupply, .applications: return 6
+        case .powerTrend, .cpuCores, .storage, .powerSupply, .applications, .cluster: return 6
         case .cpu, .gpu, .memory: return 2
         case .fan, .ane: return 3
         }

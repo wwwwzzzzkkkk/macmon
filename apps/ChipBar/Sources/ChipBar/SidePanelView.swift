@@ -4,6 +4,7 @@ enum DashboardSidePanelKind: String, Equatable {
     case applications
     case power
     case externalDisk
+    case cluster
 }
 
 /// Shared native-window sizing for each independent tile page.
@@ -19,9 +20,10 @@ enum SidePanelLayout {
     // must never resize the parent menu or its glass sidecar.
     static let powerHeight: CGFloat = 640
     static let diskHeight: CGFloat = 410
+    static let clusterHeight: CGFloat = 310
 
     static func width(for kind: DashboardSidePanelKind?) -> CGFloat {
-        kind == .power ? powerWidth : width
+        kind == .power ? powerWidth : kind == .cluster ? 378 : width
     }
 
     static func contentWidth(for kind: DashboardSidePanelKind?) -> CGFloat {
@@ -33,6 +35,7 @@ enum SidePanelLayout {
         case .applications: return applicationHeight
         case .power: return powerHeight
         case .externalDisk: return diskHeight
+        case .cluster: return clusterHeight
         }
     }
 }
@@ -42,9 +45,11 @@ struct SidePanelLoadingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label(kind == .power ? "电源与功率" :
-                  kind == .externalDisk ? "外置硬盘" : "应用占用",
+                  kind == .externalDisk ? "外置硬盘" :
+                  kind == .cluster ? "计算集群" : "应用占用",
                   systemImage: kind == .power ? "bolt.horizontal.circle" :
-                  kind == .externalDisk ? "externaldrive" : "square.stack.3d.up")
+                  kind == .externalDisk ? "externaldrive" :
+                  kind == .cluster ? "point.3.connected.trianglepath.dotted" : "square.stack.3d.up")
                 .font(.headline)
                 .frame(height: 28)
             RoundedRectangle(cornerRadius: 12)
@@ -89,12 +94,15 @@ struct DashboardSidePanelView: View {
                 if let id = state.selectedExternalVolumeID {
                     ExternalDiskDetailView(volumeID: id, ssd: monitor.ssd, close: close)
                 }
+            case .cluster:
+                ClusterMonitorPanel(monitor: monitor, close: close)
             case nil:
                 EmptyView()
             }
         }
         .frame(width: SidePanelLayout.contentWidth(for: state.sidePanel), alignment: .topLeading)
         .padding(SidePanelLayout.padding)
+        .frame(maxHeight: state.sidePanel == .cluster ? .infinity : nil, alignment: .top)
         .buttonStyle(ChipBarPressStyle())
     }
 }

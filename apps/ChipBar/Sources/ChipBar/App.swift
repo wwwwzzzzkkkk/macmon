@@ -25,6 +25,7 @@ import ChipBarCore
         qaDefaults.setVolatileDomain(qaOptions, forName: UserDefaults.argumentDomain)
         let monitor = Monitor(start: fixture == nil, ssdDefaults: ssdQA ? qaDefaults : .standard, initialSample: fixture)
         Self.monitor = monitor
+        ClusterMonitorService.shared.attach(monitor: monitor)
         let controller = MenuController(monitor: monitor)
         menuController = controller
         NSAppleEventManager.shared().setEventHandler(
