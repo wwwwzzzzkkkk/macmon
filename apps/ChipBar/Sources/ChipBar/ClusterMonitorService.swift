@@ -26,6 +26,7 @@ struct ClusterPairingCandidate: Equatable {
     var buffer = Data()
     var hello: ClusterPeerHello?
     var key: Data?
+    var remoteApproved = false
 
     init(connection: NWConnection, endpointID: String?) {
         self.connection = connection
@@ -155,7 +156,7 @@ struct ClusterPairingCandidate: Equatable {
         UserDefaults.standard.set(true, forKey: Self.enabledKey)
         publishNearby()
         status = "已信任 " + candidate.name + "，等待对方确认后自动连接"
-        sendSnapshot(to: session)
+        sendApproval(to: session)
         sendToTrustedPeers()
     }
 
@@ -218,11 +219,11 @@ struct ClusterPairingCandidate: Equatable {
             listener = service
             service.start(queue: .main)
 
-            let parameters = NWParameters.tcp
-            parameters.includePeerToPeer = true
+            // Bonjour also traverses a configured Thunderbolt Bridge without
+            // the higher-power Wi-Fi peer-to-peer discovery mode.
             let browser = NWBrowser(
                 for: .bonjour(type: ClusterSecureWire.serviceType, domain: nil),
-                using: parameters)
+                using: .tcp)
             browser.browseResultsChangedHandler = { [weak self] results, _ in
                 Task { @MainActor in self?.updateDiscovered(results) }
             }
@@ -377,6 +378,7 @@ struct ClusterPairingCandidate: Equatable {
             switch kind {
             case ClusterPacket.hello: processHello(body, from: session)
             case ClusterPacket.telemetry: processTelemetry(body, from: session)
+            case ClusterPacket.approval: processApproval(body, from: session)
             default:
                 remove(session)
                 return
@@ -400,8 +402,37 @@ struct ClusterPairingCandidate: Equatable {
         session.key = key
         publishNearby()
         if trusted[hello.id] == hello.publicKey && enabled {
-            sendSnapshot(to: session)
+            sendApproval(to: session)
         }
+    }
+
+    private struct Consent: Codable {
+        let nodeID: String
+        let approved: Bool
+    }
+
+    private func sendApproval(to session: ClusterPeerSession) {
+        guard enabled,
+              let hello = session.hello,
+              trusted[hello.id] == hello.publicKey,
+              let key = session.key,
+              let plaintext = try? JSONEncoder().encode(Consent(nodeID: nodeID, approved: true)),
+              let sealed = try? AES.GCM.seal(plaintext, using: SymmetricKey(data: key)),
+              let encrypted = sealed.combined,
+              let packet = ClusterPacket.encode(type: ClusterPacket.approval, body: encrypted)
+        else { return }
+        session.connection.send(content: packet, completion: .contentProcessed { _ in })
+    }
+
+    private func processApproval(_ body: Data, from session: ClusterPeerSession) {
+        guard let hello = session.hello,
+              let key = session.key,
+              let box = try? AES.GCM.SealedBox(combined: body),
+              let plaintext = try? AES.GCM.open(box, using: SymmetricKey(data: key)),
+              let consent = try? JSONDecoder().decode(Consent.self, from: plaintext),
+              consent.approved, consent.nodeID == hello.id else { return }
+        session.remoteApproved = true
+        sendSnapshot(to: session)
     }
 
     private func processTelemetry(_ body: Data, from session: ClusterPeerSession) {
@@ -449,12 +480,13 @@ struct ClusterPairingCandidate: Equatable {
     private func sendToTrustedPeers() {
         guard enabled else { return }
         for session in sessions.values {
+            sendApproval(to: session)
             sendSnapshot(to: session)
         }
     }
 
     private func sendSnapshot(to session: ClusterPeerSession) {
-        guard enabled,
+        guard enabled, session.remoteApproved,
               let hello = session.hello,
               trusted[hello.id] == hello.publicKey,
               let key = session.key,
