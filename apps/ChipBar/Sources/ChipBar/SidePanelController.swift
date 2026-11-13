@@ -25,6 +25,8 @@ import Combine
     private var mountTask: Task<Void, Never>?
     private var clusterFitTask: Task<Void, Never>?
     private var clusterLayoutSubscription: AnyCancellable?
+    private var clusterTaskSubscription: AnyCancellable?
+    private var externalTaskSubscription: AnyCancellable?
 
     var isKeyWindow: Bool { panel.isKeyWindow }
     var isVisible: Bool { panel.isVisible }
@@ -66,7 +68,7 @@ import Combine
         let cluster = ClusterMonitorService.shared
         clusterLayoutSubscription = Publishers.CombineLatest4(
             cluster.$nearby.map(\.count),
-            cluster.$peers.map { $0.map { "\($0.id):\($0.tasks.count)" }.joined(separator: ";") },
+            cluster.$peers.map { $0.map { "\($0.id):\($0.tasks.count):\($0.tasks.filter { $0.progress != nil }.count)" }.joined(separator: ";") },
             cluster.$pairingCandidate.map { $0 == nil ? 0 : 1 },
             cluster.$enabled
         )
@@ -74,6 +76,16 @@ import Combine
         .removeDuplicates()
         .receive(on: DispatchQueue.main)
         .sink { [weak self] _ in self?.scheduleClusterFit() }
+        clusterTaskSubscription = cluster.$observedOpenFASTTasks
+            .map { "\($0.count):\($0.filter { $0.progress != nil }.count)" }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.scheduleClusterFit() }
+        externalTaskSubscription = cluster.$externalTasks
+            .map { "\($0.count):\($0.filter { $0.progress != nil }.count)" }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.scheduleClusterFit() }
         // The hosted view is mounted on demand to avoid reading processes or SMC on startup.
     }
 

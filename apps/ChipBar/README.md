@@ -1,10 +1,14 @@
-# ChipBar v3.6.0 · Apple Silicon 菜单栏监控
+# ChipBar v3.6.1 · Apple Silicon 菜单栏监控
 
 > macOS 13+ · Apple Silicon (arm64) · 原生 SwiftUI + AppKit · macOS 26+ Liquid Glass
 >
 > 最新界面采用三个独立圆环磁贴、紧凑的 CPU 各核心图、风扇与 ANE 并排布局，以及“电源与功率 / 应用占用 / 外置硬盘”独立二级卡片。
 
 **[GitHub 产品主页](../../readme.md)** · **[最新正式版 v3.5.1](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.5.1)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+
+## v3.6.1 OpenFAST 只读进度监测
+
+ChipBar Cluster 现在可自动识别当前用户运行的原生 OpenFAST 进程：从进程对应的 `.fst` 中读取 `TMax`，在其同名文本 `.out` 持续写入时读取实际已计算仿真时间，展示百分比、运行时长与估算剩余时间。监测每约 9 秒以低优先级进行，不启动或停止仿真、不运行 Shell，也不改变现有传感器采样机制。只有 `.outb`、尚未写出 `.out`、受系统权限限制或输出过期时，将清楚显示「进度未知」。外部 GPT/Codex 写入 `cluster-status.json` 仍然优先，可提供更可靠的状态和进度。 [使用条件和局限](docs/CLUSTER_MONITOR.md)。
 
 ## v3.6.0 双机 Cluster Monitor
 

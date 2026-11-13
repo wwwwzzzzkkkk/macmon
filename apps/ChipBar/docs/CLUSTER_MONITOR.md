@@ -1,4 +1,4 @@
-# ChipBar Cluster Monitor v3.6
+# ChipBar Cluster Monitor v3.6.1
 
 ChipBar 3.6 introduces **opt-in, read-only LAN monitoring**. It does **not**
 start, stop, cancel, schedule, execute, or otherwise control simulations.
@@ -33,6 +33,40 @@ Users and external tools such as GPT/Codex retain full control of computations.
 ChipBar 通过 Bonjour 搜索本地网络，可经可达的雷雳桥接或 Wi-Fi
 进行通信；目前不会将任意检测到的雷雳设备误认为计算节点。
 若打开了网络隔离、防火墙阻断或 MacBook 睡眠，设备可能不可达。
+
+## v3.6.1 自动识别 OpenFAST 仿真进度
+
+ChipBar **不会**启动、结束、暂停、取消或调度仿真。OpenFAST 仍由用户、
+GPT/Codex 或用户自己的脚本管理。只有当「计算集群」面板打开或共享
+已启用时，ChipBar 才在本地约每 9 秒低优先级读取现有进程和必要文件，
+不另外启动 Shell、lsof 或其他任务执行进程。
+
+对本机可读取的**正在运行的 OpenFAST 可执行进程**，只读采集：
+
+- 通过进程参数确定 .fst 文件；相对路径使用该进程的真实工作目录，
+  不使用 ChipBar 自身目录猜测。
+- 从 .fst 的 TMax 字段读取总模拟时长。
+- 仅从该次运行中近期写入的同名 .out **文本结果**读取最后完整数据行
+  的 Time (s)，计算 progress = Time / TMax。
+- 显示进度百分比、模拟时长/总模拟时长、进程实际运行时长，且在
+  进度足够大时提供**近似**的墙上时钟剩余时间，不能保证准时完成。
+- 对同一用户的多个 OpenFAST 进程最多显示 8 项；在当前集群设备间
+  通过原有已授权 AES-GCM 遥测展示，不暴露绝对仿真文件路径。
+
+**重要局限：** 默认只写入二进制 .outb 的 OpenFAST 情形，运行中通常
+无法从输出文件可靠计算进度。必要时可由 GPT 的独立仿真脚本写出
+cluster-status.json，或在未来仿真中启用 OutFileFmt=1/3 的文本输出
+（修改仿真输入由用户/GPT 负责，ChipBar 永不修改）。
+如果进程参数、文件权限、TMax 或新鲜的 .out 读数不可用，
+ChipBar 只显示「进度未知」，绝不按 CPU 使用率、输出文件大小
+或旧运行的 .out 猜测进度。只有外部状态文件时，
+继续显示该文件中的真实状态。
+
+### 与外部 GPT/Codex 状态文件的优先级
+
+如果外部 cluster-status.json 提供了任务，ChipBar **优先采用该文件**；
+否则回退到自动发现的 OpenFAST 进程。外部脚本可以提供更可靠的
+运行状态和进度，包括只输出 .outb 的任务。
 
 ## External simulation state (optional)
 
