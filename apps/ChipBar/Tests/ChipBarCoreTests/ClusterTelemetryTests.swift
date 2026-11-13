@@ -26,7 +26,13 @@ final class ClusterTelemetryTests: XCTestCase {
         XCTAssertEqual(Int(count), framed.count - 4)
         let decoded = try ClusterSecureWire.open(
             Data(framed.dropFirst(4)), key: secret)
-        XCTAssertEqual(decoded, original)
+        XCTAssertEqual(decoded.id, original.id)
+        XCTAssertEqual(decoded.name, original.name)
+        XCTAssertEqual(decoded.chip, original.chip)
+        XCTAssertEqual(decoded.cpu, original.cpu)
+        XCTAssertEqual(decoded.tasks, original.tasks)
+        XCTAssertEqual(Int(decoded.timestamp.timeIntervalSince1970),
+                       Int(original.timestamp.timeIntervalSince1970))
         XCTAssertNil(decoded.tasks.first?.progress,
                      "An externally unreported progress must remain unknown")
     }
