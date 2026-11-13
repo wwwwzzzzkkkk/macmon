@@ -22,6 +22,8 @@ metadata = {
     "CFBundleShortVersionString": version, "CFBundleVersion": version,
     "LSMinimumSystemVersion": "13.0", "LSUIElement": True,
     "NSHighResolutionCapable": True,
+    "NSLocalNetworkUsageDescription": "在局域网发现并加密查看已授权 Mac 的只读性能监控数据。",
+    "NSBonjourServices": ["_chipbar-mon._tcp"],
     "CFBundleURLTypes": [{
         "CFBundleURLName": "local.chipbar.monitor.url",
         "CFBundleURLSchemes": ["chipbar"]
