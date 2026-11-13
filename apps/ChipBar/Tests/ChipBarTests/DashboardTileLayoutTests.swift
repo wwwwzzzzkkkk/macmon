@@ -16,6 +16,7 @@ struct DashboardTileLayoutTests {
         #expect(DashboardTile.storage.columns == 6)
         #expect(DashboardTile.powerSupply.columns == 6)
         #expect(DashboardTile.applications.columns == 6)
+        #expect(DashboardTile.cluster.columns == 6)
     }
 
     @Test func corruptOrOldPreferencesCannotLoseModulesOrDuplicateTiles() {
@@ -35,8 +36,9 @@ struct DashboardTileLayoutTests {
         #expect(arrangement.visible[2] == .cpu)
         #expect(arrangement.visible[3] == .gpu)
         arrangement.move(.powerTrend, before: .applications)
-        #expect(arrangement.visible.last == .applications)
-        #expect(arrangement.visible[arrangement.visible.count - 2] == .powerTrend)
+        #expect(arrangement.visible.last == .cluster)
+        #expect(arrangement.visible[arrangement.visible.count - 2] == .applications)
+        #expect(arrangement.visible[arrangement.visible.count - 3] == .powerTrend)
     }
 
     @Test func lastDropSlotMovesTileToExactEnd() {
