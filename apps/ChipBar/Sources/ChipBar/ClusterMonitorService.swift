@@ -230,7 +230,7 @@ import Security
             visible[identifier] = result.endpoint
         }
         discovered = visible
-        for (identifier, connection) in outgoing where visible[identifier] == nil {
+        for (identifier, connection) in outgoing.filter({ visible[$0.key] == nil }) {
             connection.cancel()
             outgoing.removeValue(forKey: identifier)
             buffers.removeValue(forKey: identifier)
@@ -338,7 +338,8 @@ import Security
             for: .applicationSupportDirectory, in: .userDomainMask).first else { return [] }
         let url = folder.appendingPathComponent("ChipBar/cluster-status.json")
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-              (attributes[.size] as? NSNumber)?.intValue ?? 0 <= 64 * 1024,
+              let fileSize = (attributes[.size] as? NSNumber)?.intValue,
+              fileSize <= 64 * 1024,
               let data = try? Data(contentsOf: url),
               data.count <= 64 * 1024 else { return [] }
         struct ExternalStatus: Decodable { let tasks: [ClusterTaskReadout] }
