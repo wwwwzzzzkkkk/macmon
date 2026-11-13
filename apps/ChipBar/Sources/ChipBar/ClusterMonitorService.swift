@@ -37,9 +37,10 @@ import Security
         let id = defaults.string(forKey: Self.nodeIDKey) ?? UUID().uuidString
         defaults.set(id, forKey: Self.nodeIDKey)
         nodeID = id
-        key = Self.readKey()
-        hasKey = key?.count == 32
-        enabled = defaults.bool(forKey: Self.enabledKey) && hasKey
+        let storedKey = Self.readKey()
+        key = storedKey
+        hasKey = storedKey?.count == 32
+        enabled = defaults.bool(forKey: Self.enabledKey) && storedKey?.count == 32
     }
 
     func attach(monitor: Monitor) {
