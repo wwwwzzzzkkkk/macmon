@@ -72,9 +72,10 @@ public enum ClusterPairing {
 public enum ClusterPacket {
     public static let hello: UInt8 = 1
     public static let telemetry: UInt8 = 2
+    public static let approval: UInt8 = 3
 
     public static func encode(type: UInt8, body: Data) -> Data? {
-        guard (type == hello || type == telemetry),
+        guard (type == hello || type == telemetry || type == approval),
               !body.isEmpty, body.count + 1 <= ClusterSecureWire.maximumFrameBytes
         else { return nil }
         let size = UInt32(body.count + 1)
