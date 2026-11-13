@@ -20,7 +20,7 @@ enum SidePanelLayout {
     // must never resize the parent menu or its glass sidecar.
     static let powerHeight: CGFloat = 640
     static let diskHeight: CGFloat = 410
-    static let clusterHeight: CGFloat = 620
+    static let clusterHeight: CGFloat = 310
 
     static func width(for kind: DashboardSidePanelKind?) -> CGFloat {
         kind == .power ? powerWidth : kind == .cluster ? 378 : width
@@ -102,6 +102,7 @@ struct DashboardSidePanelView: View {
         }
         .frame(width: SidePanelLayout.contentWidth(for: state.sidePanel), alignment: .topLeading)
         .padding(SidePanelLayout.padding)
+        .frame(maxHeight: state.sidePanel == .cluster ? .infinity : nil, alignment: .top)
         .buttonStyle(ChipBarPressStyle())
     }
 }
