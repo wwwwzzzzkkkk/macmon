@@ -1,35 +1,68 @@
 import AppKit
 import ChipBarCore
 import Combine
+import CryptoKit
 import Foundation
 import Network
 import Security
 
-/// Opt-in, read-only LAN telemetry. Neither transport direction accepts task
-/// commands or launches processes. The existing macmon sampling loop is reused.
+struct ClusterNearbyDevice: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let paired: Bool
+}
+
+struct ClusterPairingCandidate: Equatable {
+    let id: String
+    let name: String
+    let publicKey: Data
+    let code: String
+}
+
+@MainActor private final class ClusterPeerSession {
+    let id = UUID()
+    let connection: NWConnection
+    let endpointID: String?
+    var buffer = Data()
+    var hello: ClusterPeerHello?
+    var key: Data?
+
+    init(connection: NWConnection, endpointID: String?) {
+        self.connection = connection
+        self.endpointID = endpointID
+    }
+}
+
+/// v3.6 read-only monitor: Bonjour is used for discovery, X25519 + a
+/// user-verified six-digit code for pairing, and AES-GCM for observations.
+/// Absolutely no shell, simulation lifecycle or job execution messages exist.
 @MainActor final class ClusterMonitorService: ObservableObject {
     static let shared = ClusterMonitorService()
 
-    @Published private(set) var enabled: Bool
-    @Published private(set) var hasKey: Bool
+    @Published private(set) var enabled: Bool = false
     @Published private(set) var peers: [ClusterNodeReadout] = []
-    @Published private(set) var status: String = "未启用"
+    @Published private(set) var nearby: [ClusterNearbyDevice] = []
+    @Published private(set) var pairingCandidate: ClusterPairingCandidate?
+    @Published private(set) var status = "打开两台 Mac 的计算集群页面即可搜索"
 
-    private static let enabledKey = "chipbar.cluster.enabled.v1"
+    private static let enabledKey = "chipbar.cluster.enabled.v2"
     private static let nodeIDKey = "chipbar.cluster.node-id.v1"
     private static let keychainService = "local.chipbar.monitor.cluster"
-    private static let keychainAccount = "shared-key-v1"
+    private static let identityAccount = "identity-x25519-v2"
+    private static let trustedAccount = "trusted-device-keys-v2"
 
     private weak var monitor: Monitor?
     private let nodeID: String
-    private var key: Data?
+    private let identity: Curve25519.KeyAgreement.PrivateKey
+    private var trusted: [String: Data]
+    private var panelVisible = false
     private var listener: NWListener?
     private var browser: NWBrowser?
     private var tickTimer: Timer?
-    private var incoming: [UUID: NWConnection] = [:]
-    private var outgoing: [String: NWConnection] = [:]
-    private var buffers: [String: Data] = [:]
-    private var discovered: [String: NWEndpoint] = [:]
+    private var sessions: [UUID: ClusterPeerSession] = [:]
+    private var outgoing: [String: UUID] = [:]
+    private var endpoints: [String: NWEndpoint] = [:]
+    private var attempts: [String: Date] = [:]
     private var lastSeen: [String: Date] = [:]
 
     private init() {
@@ -37,10 +70,10 @@ import Security
         let id = defaults.string(forKey: Self.nodeIDKey) ?? UUID().uuidString
         defaults.set(id, forKey: Self.nodeIDKey)
         nodeID = id
-        let storedKey = Self.readKey()
-        key = storedKey
-        hasKey = storedKey?.count == 32
-        enabled = defaults.bool(forKey: Self.enabledKey) && storedKey?.count == 32
+        identity = Self.identityKey()
+        trusted = (Self.readKeychain(account: Self.trustedAccount))
+            .flatMap { try? JSONDecoder().decode([String: Data].self, from: $0) } ?? [:]
+        enabled = defaults.bool(forKey: Self.enabledKey) && !trusted.isEmpty
     }
 
     func attach(monitor: Monitor) {
@@ -48,67 +81,97 @@ import Security
         if enabled { start() }
     }
 
-    /// Copy the same random 256-bit key onto both Macs. The Keychain stores
-    /// the secret locally; never advertise or transmit it over Bonjour.
-    func createKey() -> String? {
-        var bytes = [UInt8](repeating: 0, count: 32)
-        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
-            status = "无法生成安全密钥"
-            return nil
-        }
-        let encoded = Data(bytes).base64EncodedString()
-        return importKey(encoded) ? encoded : nil
-    }
-
-    @discardableResult
-    func importKey(_ string: String) -> Bool {
-        let candidate = string.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let decoded = Data(base64Encoded: candidate), decoded.count == 32 else {
-            status = "密钥格式不正确，应为 32 字节的 Base64 密钥"
-            return false
-        }
-        guard Self.storeKey(decoded) else {
-            status = "无法写入 macOS 钥匙串"
-            return false
-        }
-        let wasEnabled = enabled
-        stop()
-        key = decoded
-        hasKey = true
-        peers = []
-        lastSeen = [:]
-        if wasEnabled { start() }
-        else { status = "密钥已保存在本机钥匙串" }
-        return true
-    }
-
-    func copyKeyToPasteboard() {
-        guard let key else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(key.base64EncodedString(), forType: .string)
-        status = "密钥已复制；请仅在受信任的另一台 Mac 上导入"
-    }
-
-    func importKeyFromPasteboard() {
-        guard let string = NSPasteboard.general.string(forType: .string) else {
-            status = "剪贴板没有可用的密钥"
-            return
-        }
-        _ = importKey(string)
+    /// Discovery runs only while the detail panel is open, or if this Mac is
+    /// already participating in an explicitly approved cluster.
+    func setPanelVisible(_ value: Bool) {
+        panelVisible = value
+        if value { start() }
+        else if !enabled { stop(); nearby = []; pairingCandidate = nil }
     }
 
     func setEnabled(_ value: Bool) {
-        guard !value || hasKey else {
-            status = "请先生成或导入共享密钥"
+        if value && trusted.isEmpty {
+            status = "请先选择并确认另一台 Mac"
             return
         }
         enabled = value
         UserDefaults.standard.set(value, forKey: Self.enabledKey)
-        if value { start() } else {
-            stop()
+        if value {
+            start()
+            sendToTrustedPeers()
+        } else {
             peers = []
-            status = "未启用"
+            lastSeen = [:]
+            status = "已暂停监控共享"
+            if !panelVisible { stop() }
         }
+    }
+
+    func refreshDiscovery() {
+        stop()
+        if enabled || panelVisible { start() }
+    }
+
+    func requestPairing(with id: String) {
+        guard let session = sessions.values.first(where: { $0.hello?.id == id }),
+              let hello = session.hello,
+              let key = session.key,
+              trusted[id] != hello.publicKey else {
+            status = "设备尚未就绪，请确认两端 ChipBar 已打开"
+            return
+        }
+        let code = ClusterPairing.verificationCode(
+            sessionKey: key,
+            localPublicKey: identity.publicKey.rawRepresentation,
+            remotePublicKey: hello.publicKey)
+        pairingCandidate = ClusterPairingCandidate(
+            id: id, name: hello.name, publicKey: hello.publicKey, code: code)
+        status = "请对照两台 Mac 上显示的六位数字；相同才确认"
+    }
+
+    func cancelPairing() { pairingCandidate = nil }
+
+    func confirmPairing() {
+        guard let candidate = pairingCandidate,
+              let session = sessions.values.first(where: {
+                  $0.hello?.id == candidate.id &&
+                  $0.hello?.publicKey == candidate.publicKey &&
+                  $0.key != nil
+              }) else {
+            status = "配对连接已断开，请重新选择设备"
+            pairingCandidate = nil
+            return
+        }
+        let previous = trusted
+        trusted[candidate.id] = candidate.publicKey
+        guard let encoded = try? JSONEncoder().encode(trusted),
+              Self.storeKeychain(encoded, account: Self.trustedAccount) else {
+            trusted = previous
+            status = "无法保存配对，请检查 macOS 钥匙串"
+            return
+        }
+        pairingCandidate = nil
+        enabled = true
+        UserDefaults.standard.set(true, forKey: Self.enabledKey)
+        publishNearby()
+        status = "已信任 " + candidate.name + "，等待对方确认后自动连接"
+        sendSnapshot(to: session)
+        sendToTrustedPeers()
+    }
+
+    func forgetPeer(_ id: String) {
+        guard trusted.removeValue(forKey: id) != nil else { return }
+        if let data = try? JSONEncoder().encode(trusted) {
+            _ = Self.storeKeychain(data, account: Self.trustedAccount)
+        }
+        peers.removeAll { $0.id == id }
+        lastSeen.removeValue(forKey: id)
+        if trusted.isEmpty { setEnabled(false) }
+        publishNearby()
+    }
+
+    var onlinePeers: [ClusterNodeReadout] {
+        peers.filter { $0.isOnline() && enabled }
     }
 
     var localNode: ClusterNodeReadout {
@@ -124,50 +187,53 @@ import Security
             memoryTotalGB: sample?.memory?.totalGiB,
             chipWatts: sample?.total,
             cpuTemperatureC: sample?.cpuTemperature,
-            tasks: Self.readExternalTasks()
-        )
+            tasks: Self.readExternalTasks())
     }
 
-    var onlinePeers: [ClusterNodeReadout] {
-        peers.filter { $0.isOnline() }
-    }
-
-    private var bonjourName: String {
-        "ChipBar-" + String(nodeID.prefix(8))
-    }
+    private var bonjourName: String { "ChipBar-" + String(nodeID.prefix(8)) }
 
     private func start() {
-        guard enabled, key?.count == 32, listener == nil else { return }
+        guard listener == nil else { return }
         do {
-            let listener = try NWListener(using: .tcp)
-            listener.service = NWListener.Service(
+            let service = try NWListener(using: .tcp)
+            service.service = NWListener.Service(
                 name: bonjourName, type: ClusterSecureWire.serviceType)
-            listener.newConnectionHandler = { [weak self] connection in
-                Task { @MainActor in self?.accept(connection) }
+            service.newConnectionHandler = { [weak self] connection in
+                Task { @MainActor in self?.register(connection, endpointID: nil) }
             }
-            listener.stateUpdateHandler = { [weak self] state in
+            service.stateUpdateHandler = { [weak self] state in
                 Task { @MainActor in
                     guard let self else { return }
                     switch state {
-                    case .ready: self.status = "已开启局域网加密监控"
-                    case .failed(let error): self.status = "共享服务失败：\(error.localizedDescription)"
+                    case .ready:
+                        if self.nearby.isEmpty {
+                            self.status = "正在搜索附近的 Mac…"
+                        }
+                    case .waiting(let error), .failed(let error):
+                        self.status = "共享服务不可用：" + error.localizedDescription
                     default: break
                     }
                 }
             }
-            self.listener = listener
-            listener.start(queue: .main)
+            listener = service
+            service.start(queue: .main)
 
+            let parameters = NWParameters.tcp
+            parameters.includePeerToPeer = true
             let browser = NWBrowser(
                 for: .bonjour(type: ClusterSecureWire.serviceType, domain: nil),
-                using: .tcp)
+                using: parameters)
             browser.browseResultsChangedHandler = { [weak self] results, _ in
                 Task { @MainActor in self?.updateDiscovered(results) }
             }
             browser.stateUpdateHandler = { [weak self] state in
                 Task { @MainActor in
-                    if case .failed(let error) = state {
-                        self?.status = "设备发现失败：\(error.localizedDescription)"
+                    guard let self else { return }
+                    switch state {
+                    case .waiting(let error), .failed(let error):
+                        self.status = "搜索不可用：" + error.localizedDescription +
+                            "。请检查本地网络授权与雷雳桥接"
+                    default: break
                     }
                 }
             }
@@ -179,10 +245,9 @@ import Security
                 Task { @MainActor in self?.tick() }
             }
             tickTimer?.tolerance = 0.5
-            status = "正在发现局域网设备…"
             tick()
         } catch {
-            status = "无法启动集群服务：\(error.localizedDescription)"
+            status = "无法搜索局域网设备：" + error.localizedDescription
         }
     }
 
@@ -193,28 +258,60 @@ import Security
         browser = nil
         listener?.cancel()
         listener = nil
-        incoming.values.forEach { $0.cancel() }
-        outgoing.values.forEach { $0.cancel() }
-        incoming.removeAll()
+        sessions.values.forEach { $0.connection.cancel() }
+        sessions.removeAll()
         outgoing.removeAll()
-        buffers.removeAll()
-        discovered.removeAll()
+        endpoints.removeAll()
+        attempts.removeAll()
     }
 
-    private func accept(_ connection: NWConnection) {
-        guard enabled, incoming.count < 8 else {
+    private func updateDiscovered(_ results: Set<NWBrowser.Result>) {
+        var found: [String: NWEndpoint] = [:]
+        for result in results {
+            if case .service(let name, _, _, _) = result.endpoint,
+               name == bonjourName { continue }
+            let id = String(describing: result.endpoint)
+            found[id] = result.endpoint
+        }
+        endpoints = found
+        for (id, sessionID) in outgoing.filter({ found[$0.key] == nil }) {
+            sessions[sessionID]?.connection.cancel()
+            sessions.removeValue(forKey: sessionID)
+            outgoing.removeValue(forKey: id)
+        }
+        connectDiscovered()
+        publishNearby()
+    }
+
+    private func connectDiscovered() {
+        guard enabled || panelVisible else { return }
+        let now = Date()
+        for (id, endpoint) in endpoints where outgoing[id] == nil {
+            if let last = attempts[id], now.timeIntervalSince(last) < 5 { continue }
+            attempts[id] = now
+            register(NWConnection(to: endpoint, using: .tcp), endpointID: id)
+        }
+    }
+
+    private func register(_ connection: NWConnection, endpointID: String?) {
+        guard enabled || panelVisible, sessions.count < 20 else {
             connection.cancel()
             return
         }
-        let id = UUID()
-        incoming[id] = connection
+        let session = ClusterPeerSession(connection: connection, endpointID: endpointID)
+        sessions[session.id] = session
+        if let endpointID { outgoing[endpointID] = session.id }
         connection.stateUpdateHandler = { [weak self] state in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.sessions[session.id] === session else { return }
                 switch state {
-                case .ready: self.sendSnapshot(to: connection)
-                case .cancelled, .failed:
-                    self.incoming.removeValue(forKey: id)
+                case .ready:
+                    self.sendHello(to: session)
+                    self.receive(on: session)
+                case .failed, .cancelled:
+                    self.remove(session)
+                case .waiting(let error):
+                    self.status = "设备连接等待中：" + error.localizedDescription
                 default: break
                 }
             }
@@ -222,118 +319,154 @@ import Security
         connection.start(queue: .main)
     }
 
-    private func updateDiscovered(_ results: Set<NWBrowser.Result>) {
-        var visible: [String: NWEndpoint] = [:]
-        for result in results {
-            if case .service(let name, _, _, _) = result.endpoint,
-               name == bonjourName { continue }
-            let identifier = String(describing: result.endpoint)
-            visible[identifier] = result.endpoint
+    private func remove(_ session: ClusterPeerSession) {
+        sessions.removeValue(forKey: session.id)
+        if let id = session.endpointID, outgoing[id] == session.id {
+            outgoing.removeValue(forKey: id)
         }
-        discovered = visible
-        for (identifier, connection) in outgoing.filter({ visible[$0.key] == nil }) {
-            connection.cancel()
-            outgoing.removeValue(forKey: identifier)
-            buffers.removeValue(forKey: identifier)
-        }
-        connectDiscovered()
+        session.connection.cancel()
+        publishNearby()
     }
 
-    private func connectDiscovered() {
-        guard enabled else { return }
-        for (identifier, endpoint) in discovered where outgoing[identifier] == nil {
-            let connection = NWConnection(to: endpoint, using: .tcp)
-            outgoing[identifier] = connection
-            connection.stateUpdateHandler = { [weak self] state in
-                Task { @MainActor in
-                    guard let self else { return }
-                    switch state {
-                    case .ready: self.receive(on: connection, id: identifier)
-                    case .failed, .cancelled:
-                        if self.outgoing[identifier] === connection {
-                            self.outgoing.removeValue(forKey: identifier)
-                            self.buffers.removeValue(forKey: identifier)
-                        }
-                    default: break
-                    }
-                }
-            }
-            connection.start(queue: .main)
-        }
+    private func sendHello(to session: ClusterPeerSession) {
+        let hello = ClusterPeerHello(
+            id: nodeID,
+            name: Host.current().localizedName ?? ProcessInfo.processInfo.hostName,
+            publicKey: identity.publicKey.rawRepresentation)
+        guard let payload = try? JSONEncoder().encode(hello),
+              let data = ClusterPacket.encode(type: ClusterPacket.hello, body: payload)
+        else { return }
+        session.connection.send(content: data, completion: .contentProcessed { _ in })
     }
 
-    private func receive(on connection: NWConnection, id: String) {
-        connection.receive(minimumIncompleteLength: 1,
-                           maximumLength: ClusterSecureWire.maximumFrameBytes) {
+    private func receive(on session: ClusterPeerSession) {
+        session.connection.receive(minimumIncompleteLength: 1,
+                                   maximumLength: ClusterSecureWire.maximumFrameBytes) {
             [weak self] data, _, complete, error in
             Task { @MainActor in
-                guard let self, self.outgoing[id] === connection else { return }
-                if let data, !data.isEmpty { self.process(data, from: id) }
+                guard let self, self.sessions[session.id] === session else { return }
+                if let data, !data.isEmpty { self.process(data, from: session) }
                 if complete || error != nil {
-                    connection.cancel()
-                    self.outgoing.removeValue(forKey: id)
-                    self.buffers.removeValue(forKey: id)
+                    self.remove(session)
                 } else {
-                    self.receive(on: connection, id: id)
+                    self.receive(on: session)
                 }
             }
         }
     }
 
-    private func process(_ data: Data, from id: String) {
-        guard let key else { return }
-        var buffer = buffers[id] ?? Data()
-        buffer.append(data)
-        // Bound all unauthenticated input before attempting decryption.
-        if buffer.count > ClusterSecureWire.maximumFrameBytes * 2 {
-            outgoing[id]?.cancel()
-            buffers.removeValue(forKey: id)
+    private func process(_ bytes: Data, from session: ClusterPeerSession) {
+        session.buffer.append(bytes)
+        if session.buffer.count > ClusterSecureWire.maximumFrameBytes * 2 {
+            remove(session)
             return
         }
-        while buffer.count >= 4 {
-            let count = buffer.prefix(4).reduce(UInt32(0)) {
+        while session.buffer.count >= 4 {
+            let count = session.buffer.prefix(4).reduce(UInt32(0)) {
                 ($0 << 8) | UInt32($1)
             }
-            guard count >= 28, count <= ClusterSecureWire.maximumFrameBytes else {
-                outgoing[id]?.cancel()
-                buffers.removeValue(forKey: id)
+            guard count >= 2, count <= ClusterSecureWire.maximumFrameBytes else {
+                remove(session)
                 return
             }
             let end = Int(count) + 4
-            guard buffer.count >= end else { break }
-            let frame = Data(buffer[4..<end])
-            buffer.removeSubrange(0..<end)
-            guard let node = try? ClusterSecureWire.open(frame, key: key),
-                  node.id != nodeID else { continue }
-            // Ignore out-of-order frames from old connections or replays.
-            if let last = lastSeen[node.id], node.timestamp <= last { continue }
-            lastSeen[node.id] = node.timestamp
-            if let index = peers.firstIndex(where: { $0.id == node.id }) {
-                peers[index] = node
-            } else if peers.count < 16 {
-                peers.append(node)
+            guard session.buffer.count >= end else { break }
+            let kind = session.buffer[4]
+            let body = Data(session.buffer[5..<end])
+            session.buffer.removeSubrange(0..<end)
+            switch kind {
+            case ClusterPacket.hello: processHello(body, from: session)
+            case ClusterPacket.telemetry: processTelemetry(body, from: session)
+            default:
+                remove(session)
+                return
             }
+            guard sessions[session.id] === session else { return }
         }
-        buffers[id] = buffer
+    }
+
+    private func processHello(_ body: Data, from session: ClusterPeerSession) {
+        guard body.count <= 2048,
+              let hello = try? JSONDecoder().decode(ClusterPeerHello.self, from: body),
+              hello.isValid, hello.id != nodeID,
+              let key = try? ClusterPairing.sessionKey(
+                privateKey: identity, remotePublicKey: hello.publicKey)
+        else {
+            remove(session)
+            return
+        }
+        // Never silently replace the public key of an already paired device.
+        session.hello = hello
+        session.key = key
+        publishNearby()
+        if trusted[hello.id] == hello.publicKey && enabled {
+            sendSnapshot(to: session)
+        }
+    }
+
+    private func processTelemetry(_ body: Data, from session: ClusterPeerSession) {
+        guard enabled,
+              let hello = session.hello,
+              trusted[hello.id] == hello.publicKey,
+              let key = session.key,
+              let node = try? ClusterSecureWire.open(body, key: key),
+              node.id == hello.id else { return }
+        if let last = lastSeen[node.id], node.timestamp <= last { return }
+        lastSeen[node.id] = node.timestamp
+        if let index = peers.firstIndex(where: { $0.id == node.id }) {
+            peers[index] = node
+        } else if peers.count < 16 {
+            peers.append(node)
+        }
+        if status.hasPrefix("正在搜索") || status.hasPrefix("已信任") {
+            status = "已连接 " + hello.name
+        }
+    }
+
+    private func publishNearby() {
+        var devices: [String: ClusterNearbyDevice] = [:]
+        for session in sessions.values {
+            guard let hello = session.hello else { continue }
+            devices[hello.id] = ClusterNearbyDevice(
+                id: hello.id,
+                name: hello.name,
+                paired: trusted[hello.id] == hello.publicKey)
+        }
+        let latest = devices.values.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        if latest != nearby { nearby = latest }
     }
 
     private func tick() {
-        guard enabled else { return }
         connectDiscovered()
-        for connection in incoming.values { sendSnapshot(to: connection) }
+        sendToTrustedPeers()
         let cutoff = Date().addingTimeInterval(-60)
         peers.removeAll { $0.timestamp < cutoff }
         lastSeen = lastSeen.filter { $0.value >= cutoff }
     }
 
-    private func sendSnapshot(to connection: NWConnection) {
-        guard enabled, let key,
-              let data = try? ClusterSecureWire.seal(localNode, key: key) else { return }
-        connection.send(content: data, completion: .contentProcessed { _ in })
+    private func sendToTrustedPeers() {
+        guard enabled else { return }
+        for session in sessions.values {
+            sendSnapshot(to: session)
+        }
     }
 
-    /// External tools own simulation start/stop. They may optionally publish
-    /// this small JSON file; ChipBar never writes it or launches a process.
+    private func sendSnapshot(to session: ClusterPeerSession) {
+        guard enabled,
+              let hello = session.hello,
+              trusted[hello.id] == hello.publicKey,
+              let key = session.key,
+              let sealed = try? ClusterSecureWire.seal(localNode, key: key),
+              let packet = ClusterPacket.encode(
+                type: ClusterPacket.telemetry, body: Data(sealed.dropFirst(4)))
+        else { return }
+        session.connection.send(content: packet, completion: .contentProcessed { _ in })
+    }
+
+    /// Simulation lifecycle and progress are exclusively managed by external
+    /// users/GPT tools. ChipBar only reads this optional small local file.
     private static func readExternalTasks() -> [ClusterTaskReadout] {
         guard let folder = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask).first else { return [] }
@@ -349,31 +482,42 @@ import Security
         return Array(decoded.tasks.prefix(12))
     }
 
-    private static func readKey() -> Data? {
+    private static func identityKey() -> Curve25519.KeyAgreement.PrivateKey {
+        if let stored = readKeychain(account: identityAccount),
+           let privateKey = try? Curve25519.KeyAgreement.PrivateKey(
+               rawRepresentation: stored) { return privateKey }
+        let generated = Curve25519.KeyAgreement.PrivateKey()
+        _ = storeKeychain(generated.rawRepresentation, account: identityAccount)
+        return generated
+    }
+
+    private static func readKeychain(account: String) -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: keychainAccount,
+            kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else {
-            return nil
-        }
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess
+        else { return nil }
         return item as? Data
     }
 
-    private static func storeKey(_ data: Data) -> Bool {
+    private static func storeKeychain(_ data: Data, account: String) -> Bool {
         let identity: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: keychainAccount
+            kSecAttrAccount as String: account
         ]
-        SecItemDelete(identity as CFDictionary)
-        var entry = identity
-        entry[kSecValueData as String] = data
-        entry[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        return SecItemAdd(entry as CFDictionary, nil) == errSecSuccess
+        var record = identity
+        record[kSecValueData as String] = data
+        record[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let update = SecItemUpdate(identity as CFDictionary,
+                                   [kSecValueData as String: data] as CFDictionary)
+        if update == errSecSuccess { return true }
+        if update != errSecItemNotFound { return false }
+        return SecItemAdd(record as CFDictionary, nil) == errSecSuccess
     }
 }
