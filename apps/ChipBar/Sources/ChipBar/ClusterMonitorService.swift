@@ -43,6 +43,7 @@ struct ClusterPairingCandidate: Equatable {
 
     @Published private(set) var enabled: Bool = false
     @Published private(set) var peers: [ClusterNodeReadout] = []
+    @Published private(set) var observedOpenFASTTasks: [ClusterTaskReadout] = []
     @Published private(set) var nearby: [ClusterNearbyDevice] = []
     @Published private(set) var pairingCandidate: ClusterPairingCandidate?
     @Published private(set) var status = "打开两台 Mac 的计算集群页面即可搜索"
@@ -67,6 +68,8 @@ struct ClusterPairingCandidate: Equatable {
     private var endpoints: [String: NWEndpoint] = [:]
     private var attempts: [String: Date] = [:]
     private var lastSeen: [String: Date] = [:]
+    private var openFASTScan: Task<Void, Never>?
+    private var lastOpenFASTScan = Date.distantPast
 
     private init() {
         let defaults = UserDefaults.standard
@@ -92,6 +95,7 @@ struct ClusterPairingCandidate: Equatable {
         discoveryGraceTask = nil
         if value {
             start()
+            scanOpenFASTIfNeeded(force: true)
         } else if !enabled {
             // Switching to the other Mac can dismiss the menu panel.
             // Keep discovery (but never telemetry) alive briefly so that
@@ -210,7 +214,12 @@ struct ClusterPairingCandidate: Equatable {
             memoryTotalGB: sample?.memory?.totalGiB,
             chipWatts: sample?.total,
             cpuTemperatureC: sample?.cpuTemperature,
-            tasks: Self.readExternalTasks())
+            // External GPT/Codex status is authoritative when present.
+            // Otherwise scan only the local running OpenFAST process.
+            tasks: {
+                let external = Self.readExternalTasks()
+                return external.isEmpty ? observedOpenFASTTasks : external
+            }())
     }
 
     private var bonjourName: String { "ChipBar-" + String(nodeID.prefix(8)) }
@@ -496,10 +505,35 @@ struct ClusterPairingCandidate: Equatable {
 
     private func tick() {
         connectDiscovered()
+        scanOpenFASTIfNeeded()
         sendToTrustedPeers()
         let cutoff = Date().addingTimeInterval(-60)
         peers.removeAll { $0.timestamp < cutoff }
         lastSeen = lastSeen.filter { $0.value >= cutoff }
+    }
+
+    /// Background process enumeration is deliberately throttled and never
+    /// runs in the main menu sampling path or while Cluster is inactive.
+    /// No shell, stdout interception, task submission or process control.
+    private func scanOpenFASTIfNeeded(force: Bool = false) {
+        guard enabled || panelVisible, openFASTScan == nil else { return }
+        let now = Date()
+        guard force || now.timeIntervalSince(lastOpenFASTScan) >= 9 else { return }
+        lastOpenFASTScan = now
+        openFASTScan = Task.detached(priority: .utility) { [weak self] in
+            let tasks = await OpenFASTProcessScanner.shared.scan()
+            await MainActor.run {
+                guard let self else { return }
+                if self.enabled || self.panelVisible {
+                    if self.observedOpenFASTTasks != tasks {
+                        self.observedOpenFASTTasks = tasks
+                    }
+                } else {
+                    self.observedOpenFASTTasks = []
+                }
+                self.openFASTScan = nil
+            }
+        }
     }
 
     private func sendToTrustedPeers() {
