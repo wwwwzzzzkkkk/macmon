@@ -7,15 +7,32 @@ public struct ClusterTaskReadout: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let title: String
     public let state: String
-    /// Optional value 0...1 supplied by an external simulation supervisor.
+    /// Optional value 0...1. Never derived from CPU usage.
     public let progress: Double?
+    /// Simulated seconds written to a live OpenFAST ASCII .out file.
+    public let currentSimTime: Double?
+    public let targetSimTime: Double?
+    /// Real wall-clock runtime and approximate remaining wall-clock seconds.
+    public let elapsedSeconds: Double?
+    public let remainingSeconds: Double?
 
-    public init(id: String, title: String, state: String, progress: Double?) {
+    public init(id: String, title: String, state: String, progress: Double?,
+                currentSimTime: Double? = nil, targetSimTime: Double? = nil,
+                elapsedSeconds: Double? = nil, remainingSeconds: Double? = nil) {
         self.id = String(id.prefix(96))
         self.title = String(title.prefix(120))
         self.state = String(state.prefix(32))
         self.progress = progress?.isFinite == true
             ? min(1, max(0, progress!)) : nil
+        self.currentSimTime = Self.validNonnegative(currentSimTime)
+        self.targetSimTime = Self.validNonnegative(targetSimTime)
+        self.elapsedSeconds = Self.validNonnegative(elapsedSeconds)
+        self.remainingSeconds = Self.validNonnegative(remainingSeconds)
+    }
+
+    private static func validNonnegative(_ value: Double?) -> Double? {
+        guard let value, value.isFinite, value >= 0 else { return nil }
+        return value
     }
 }
 
