@@ -44,6 +44,7 @@ struct ClusterPairingCandidate: Equatable {
     @Published private(set) var enabled: Bool = false
     @Published private(set) var peers: [ClusterNodeReadout] = []
     @Published private(set) var observedOpenFASTTasks: [ClusterTaskReadout] = []
+    @Published private(set) var externalTasks: [ClusterTaskReadout] = []
     @Published private(set) var nearby: [ClusterNearbyDevice] = []
     @Published private(set) var pairingCandidate: ClusterPairingCandidate?
     @Published private(set) var status = "打开两台 Mac 的计算集群页面即可搜索"
@@ -216,10 +217,7 @@ struct ClusterPairingCandidate: Equatable {
             cpuTemperatureC: sample?.cpuTemperature,
             // External GPT/Codex status is authoritative when present.
             // Otherwise scan only the local running OpenFAST process.
-            tasks: {
-                let external = Self.readExternalTasks()
-                return external.isEmpty ? observedOpenFASTTasks : external
-            }())
+            tasks: externalTasks.isEmpty ? observedOpenFASTTasks : externalTasks)
     }
 
     private var bonjourName: String { "ChipBar-" + String(nodeID.prefix(8)) }
@@ -505,6 +503,10 @@ struct ClusterPairingCandidate: Equatable {
 
     private func tick() {
         connectDiscovered()
+        // Refresh external GPT/Codex manifest when it changes, without
+        // reading it on every SwiftUI body evaluation.
+        let updatedExternalTasks = Self.readExternalTasks()
+        if updatedExternalTasks != externalTasks { externalTasks = updatedExternalTasks }
         scanOpenFASTIfNeeded()
         sendToTrustedPeers()
         let cutoff = Date().addingTimeInterval(-60)
