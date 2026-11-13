@@ -259,21 +259,57 @@ struct ClusterMonitorPanel: View {
         if !node.tasks.isEmpty {
             Divider()
             ForEach(node.tasks) { task in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "waveform.path")
+                            .font(.caption2)
+                            .foregroundStyle(accent)
                         Text(task.title).font(.caption.weight(.medium))
                             .lineLimit(1)
-                        Spacer()
+                        Spacer(minLength: 0)
                         Text(task.state).font(.caption2).foregroundStyle(.secondary)
+                        if let value = task.progress {
+                            Text(String(format: "%.1f%%", value * 100))
+                                .font(.caption2.weight(.semibold))
+                                .monospacedDigit()
+                        }
                     }
                     if let value = task.progress {
                         ProgressView(value: value).tint(accent).controlSize(.mini)
                     } else {
-                        Text("进度未知").font(.caption2).foregroundStyle(.secondary)
+                        Text("进度未知（等待 OpenFAST 文本输出）")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    if task.currentSimTime != nil || task.elapsedSeconds != nil {
+                        HStack(spacing: 6) {
+                            if let current = task.currentSimTime,
+                               let target = task.targetSimTime {
+                                Text(String(format: "仿真 %.1f / %.1f s", current, target))
+                            } else if let elapsed = task.elapsedSeconds {
+                                Text("已运行 " + duration(elapsed))
+                            }
+                            Spacer(minLength: 0)
+                            if let remaining = task.remainingSeconds {
+                                Text("预计剩余 " + duration(remaining))
+                            }
+                        }
+                        .font(.system(size: 10))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                     }
                 }
             }
         }
+    }
+
+    private func duration(_ seconds: Double) -> String {
+        let total = max(0, min(Int(seconds), 604_800))
+        let hours = total / 3_600
+        let minutes = (total / 60) % 60
+        let remainder = total % 60
+        return hours > 0
+            ? String(format: "%d:%02d:%02d", hours, minutes, remainder)
+            : String(format: "%02d:%02d", minutes, remainder)
     }
 
     private func metric(_ label: String, _ value: String) -> some View {
