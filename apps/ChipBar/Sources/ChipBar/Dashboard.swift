@@ -289,6 +289,11 @@ struct Dashboard: View {
             }
         case .applications:
             sidePanelEntry("应用占用", icon: "square.stack.3d.up", kind: .applications)
+        case .cluster:
+            ClusterOverviewTile(selected: state.sidePanel == .cluster) {
+                guard !tileLayout.editing else { return }
+                state.sidePanel = state.sidePanel == .cluster ? nil : .cluster
+            }
         }
     }
 
