@@ -9,7 +9,7 @@ actor OpenFASTProcessScanner {
     static let shared = OpenFASTProcessScanner()
 
     private static let maximumProcesses = 8
-    private static let maximumArgumentsBytes = 32_768
+    private static let maximumArgumentsBytes = 131_072
     private static let maximumInputBytes = 1_048_576
     private static let tailBytes = 16_384
 
