@@ -70,7 +70,7 @@ import Combine
             cluster.$pairingCandidate.map { $0 == nil ? 0 : 1 },
             cluster.$enabled
         )
-        .map { "\($0):\($1):\($2):\($3)" }
+        .map { values in "\(values.0):\(values.1):\(values.2):\(values.3)" }
         .removeDuplicates()
         .receive(on: DispatchQueue.main)
         .sink { [weak self] _ in self?.scheduleClusterFit() }
@@ -158,7 +158,8 @@ import Combine
             // Remove the stale viewport constraint before asking SwiftUI
             // for its natural height (otherwise the empty area feeds back).
             self.host.setFrameSize(NSSize(width: width, height: 1))
-            let intrinsic = ceil(self.host.fittingSize.height)
+            let measured = ceil(self.host.fittingSize.height)
+            let intrinsic = measured.isFinite && measured > 0 ? min(2000, measured) : SidePanelLayout.clusterHeight
             let height = min(max(210, intrinsic), min(540, visible.height - 16))
             self.host.setFrameSize(NSSize(width: width,
                                           height: max(intrinsic, height)))
