@@ -40,6 +40,14 @@ enum SidePanelLayout {
     }
 }
 
+/// Keep Cluster's first frame stable. Other pages retain their previous
+/// fast-to-open placeholder strategy to avoid delaying expensive samplers.
+enum SidePanelOpeningPolicy {
+    static func presentsFinalContentBeforeShowing(_ kind: DashboardSidePanelKind) -> Bool {
+        kind == .cluster
+    }
+}
+
 struct SidePanelLoadingView: View {
     let kind: DashboardSidePanelKind
     var body: some View {
@@ -90,17 +98,32 @@ enum ClusterSidecarSizing {
     static func bottomY(anchoredTop: CGFloat, height: CGFloat, visibleMinY: CGFloat) -> CGFloat {
         max(visibleMinY + edgeInset, anchoredTop - height)
     }
+
+    /// NSScrollView's content origin depends on the document view's flipped
+    /// coordinate system. Scrolling to y=0 can show the *bottom* on some Macs.
+    static func topScrollOffset(documentHeight: CGFloat, viewportHeight: CGFloat,
+                                isFlipped: Bool) -> CGFloat {
+        isFlipped ? 0 : max(0, documentHeight - viewportHeight)
+    }
 }
 
 struct DashboardSidePanelView: View {
     @ObservedObject var monitor: Monitor
     @ObservedObject var state: DashboardState
     var close: () -> Void
+    /// @Published delivers the new panel selection before storage changes.
+    /// An explicit kind lets the Cluster render its final content *before*
+    /// the NSPanel becomes visible, rather than flashing the old/empty page.
+    var kindOverride: DashboardSidePanelKind? = nil
     var onClusterContentHeightChange: ((CGFloat) -> Void)? = nil
+
+    private var displayedKind: DashboardSidePanelKind? {
+        kindOverride ?? state.sidePanel
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            switch state.sidePanel {
+            switch displayedKind {
             case .applications:
                 HStack(spacing: 8) {
                     Image(systemName: "square.stack.3d.up")
@@ -131,16 +154,16 @@ struct DashboardSidePanelView: View {
                 EmptyView()
             }
         }
-        .frame(width: SidePanelLayout.contentWidth(for: state.sidePanel), alignment: .topLeading)
+        .frame(width: SidePanelLayout.contentWidth(for: displayedKind), alignment: .topLeading)
         .padding(SidePanelLayout.padding)
         // Fit the full vertical content even if the NSScrollView currently
         // proposes a shorter viewport. Only cluster uses this intrinsic fit.
-        .fixedSize(horizontal: false, vertical: state.sidePanel == .cluster)
+        .fixedSize(horizontal: false, vertical: displayedKind == .cluster)
         // A flexible maxHeight here made the preferred height equal to the
         // old scroll viewport, not the actual tiles, and fed stale dimensions
         // back into the AppKit window.
         .background {
-            if state.sidePanel == .cluster {
+            if displayedKind == .cluster {
                 GeometryReader { geometry in
                     Color.clear.preference(
                         key: ClusterSidecarContentHeightKey.self,
@@ -150,7 +173,7 @@ struct DashboardSidePanelView: View {
             }
         }
         .onPreferenceChange(ClusterSidecarContentHeightKey.self) { height in
-            if state.sidePanel == .cluster, height.isFinite, height > 0 {
+            if displayedKind == .cluster, height.isFinite, height > 0 {
                 onClusterContentHeightChange?(height)
             }
         }
