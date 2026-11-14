@@ -26,6 +26,7 @@ import Combine
     private var clusterFitTask: Task<Void, Never>?
     private var measuredClusterContentHeight: CGFloat = 0
     private var resetClusterScrollOnFit = false
+    private var clusterFirstFitNotBefore: CFTimeInterval = 0
     private var clusterLayoutSubscription: AnyCancellable?
     private var clusterTaskSubscription: AnyCancellable?
     private var externalTaskSubscription: AnyCancellable?
@@ -104,6 +105,11 @@ import Combine
         clusterFitTask?.cancel()
         measuredClusterContentHeight = 0
         resetClusterScrollOnFit = kind == .cluster
+        // Do not resize a live window while its 0.26s opening animation
+        // is still animating a different frame. Prevents frame flicker.
+        clusterFirstFitNotBefore = kind == .cluster &&
+            !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            ? CACurrentMediaTime() + 0.30 : 0
         let token = transition
         openedKind = kind
         scrollView.hasVerticalScroller = false
@@ -181,8 +187,9 @@ import Combine
         guard openedKind == .cluster, panel.isVisible else { return }
         clusterFitTask?.cancel()
         let token = transition
+        let delay = max(0.075, clusterFirstFitNotBefore - CACurrentMediaTime())
         clusterFitTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(75)) }
+            do { try await Task.sleep(for: .milliseconds(Int64(ceil(delay * 1000)))) }
             catch { return }
             guard let self, self.transition == token,
                   self.openedKind == .cluster, self.panel.isVisible,
@@ -232,6 +239,7 @@ import Combine
         clusterFitTask = nil
         measuredClusterContentHeight = 0
         resetClusterScrollOnFit = false
+        clusterFirstFitNotBefore = 0
         let token = transition
         guard panel.isVisible else {
             host.rootView = AnyView(EmptyView())
