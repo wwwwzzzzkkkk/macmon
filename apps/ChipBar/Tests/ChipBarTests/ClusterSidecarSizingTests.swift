@@ -1,0 +1,32 @@
+import Foundation
+import Testing
+@testable import ChipBar
+
+struct ClusterSidecarSizingTests {
+    @Test func compactContentDoesNotLeaveLargeEmptyViewport() {
+        #expect(ClusterSidecarSizing.windowHeight(content: 340, available: 1100) == 340)
+        #expect(ClusterSidecarSizing.windowHeight(content: 620, available: 1100) == 620)
+        #expect(ClusterSidecarSizing.windowHeight(content: 310, available: 1100) == 310)
+    }
+
+    @Test func expandsForMoreNodesAndDisclosedParallelTasks() {
+        let folded = ClusterSidecarSizing.windowHeight(content: 410, available: 1000)
+        let expanded = ClusterSidecarSizing.windowHeight(content: 780, available: 1000)
+        #expect(expanded > folded)
+        #expect(expanded == 780)
+        #expect(ClusterSidecarSizing.windowHeight(content: 410, available: 1000) == folded)
+    }
+
+    @Test func shortDisplaysCapToVisibleHeightAndRequireInternalScroll() {
+        #expect(ClusterSidecarSizing.windowHeight(content: 950, available: 610) == 594)
+        #expect(ClusterSidecarSizing.windowHeight(content: 125, available: 600) == 210)
+        #expect(ClusterSidecarSizing.windowHeight(content: .infinity, available: 600) == 210)
+    }
+
+    @Test func panelKeepsTopAnchorUntilReachingScreenBottom() {
+        #expect(ClusterSidecarSizing.bottomY(
+            anchoredTop: 980, height: 620, visibleMinY: 24) == 360)
+        #expect(ClusterSidecarSizing.bottomY(
+            anchoredTop: 510, height: 600, visibleMinY: 24) == 32)
+    }
+}
