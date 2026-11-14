@@ -26,7 +26,6 @@ import Combine
     private var clusterFitTask: Task<Void, Never>?
     private var measuredClusterContentHeight: CGFloat = 0
     private var resetClusterScrollOnFit = false
-    private var clusterFirstFitNotBefore: CFTimeInterval = 0
     private var clusterLayoutSubscription: AnyCancellable?
     private var clusterTaskSubscription: AnyCancellable?
     private var externalTaskSubscription: AnyCancellable?
@@ -105,20 +104,45 @@ import Combine
         clusterFitTask?.cancel()
         measuredClusterContentHeight = 0
         resetClusterScrollOnFit = kind == .cluster
-        // Do not resize a live window while its 0.26s opening animation
-        // is still animating a different frame. Prevents frame flicker.
-        clusterFirstFitNotBefore = kind == .cluster &&
-            !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            ? CACurrentMediaTime() + 0.30 : 0
         let token = transition
         openedKind = kind
         scrollView.hasVerticalScroller = false
         parentWindow = parent
         let visible = screen.visibleFrame
         let width = SidePanelLayout.width(for: kind)
-        let desiredHeight = SidePanelLayout.height(for: kind)
-        let height = min(desiredHeight, max(200, visible.height - 16))
-        host.setFrameSize(NSSize(width: width, height: desiredHeight))
+        let eagerCluster = kind == .cluster
+        let desiredHeight: CGFloat
+        if eagerCluster {
+            // The cluster is lightweight: construct and measure the actual
+            // content while the NSPanel is still hidden. Showing a 310pt
+            // loading shell and swapping it after 90ms caused a visible flash
+            // followed by a second window-size correction.
+            host.setFrameSize(NSSize(width: width,
+                                     height: SidePanelLayout.clusterHeight))
+            host.rootView = AnyView(DashboardSidePanelView(
+                monitor: monitor, state: state, close: onClose,
+                kindOverride: kind,
+                onClusterContentHeightChange: { [weak self] contentHeight in
+                    self?.scheduleClusterFit(measuredHeight: contentHeight)
+                }
+            ))
+            host.layoutSubtreeIfNeeded()
+            let fitted = ceil(host.fittingSize.height)
+            desiredHeight = fitted.isFinite && fitted > 0
+                ? min(10_000, fitted) : SidePanelLayout.clusterHeight
+            measuredClusterContentHeight = desiredHeight
+        } else {
+            desiredHeight = SidePanelLayout.height(for: kind)
+        }
+        let height = eagerCluster
+            ? ClusterSidecarSizing.windowHeight(content: desiredHeight,
+                                               available: visible.height)
+            : min(desiredHeight, max(200, visible.height - 16))
+        host.setFrameSize(NSSize(width: width,
+                                 height: max(desiredHeight, height)))
+        if eagerCluster {
+            scrollView.hasVerticalScroller = desiredHeight > height + 2
+        }
         let spacing: CGFloat = 9
         let rightSpace = visible.maxX - parent.frame.maxX - 8
         let leftSpace = parent.frame.minX - visible.minX - 8
@@ -133,16 +157,33 @@ import Combine
         host.appearance = parent.appearance
         panel.contentView?.appearance = parent.appearance
 
-        // Present a lightweight shell first: creating the full ranking or
-        // SMC SwiftUI tree synchronously delays the native window first frame.
-        host.rootView = AnyView(SidePanelLoadingView(kind: kind))
+        // Other side pages keep their lazy loading shell. Cluster must show
+        // a complete first frame with no fade, slide, or placeholder swap.
+        if !eagerCluster {
+            host.rootView = AnyView(SidePanelLoadingView(kind: kind))
+        }
         if !panel.isVisible {
-            let offset: CGFloat = openRight ? -14 : 14
-            panel.setFrame(target.offsetBy(dx: offset, dy: 0), display: false)
-            panel.alphaValue = 0
+            if eagerCluster {
+                panel.setFrame(target, display: true)
+                panel.alphaValue = 1
+            } else {
+                let offset: CGFloat = openRight ? -14 : 14
+                panel.setFrame(target.offsetBy(dx: offset, dy: 0), display: false)
+                panel.alphaValue = 0
+            }
             panel.makeKeyAndOrderFront(nil)
         } else {
+            if eagerCluster {
+                panel.setFrame(target, display: true)
+                panel.alphaValue = 1
+            }
             panel.makeKeyAndOrderFront(nil)
+        }
+        if eagerCluster {
+            scrollClusterToTop()
+            // The preference callback will handle genuine structural changes
+            // after display, without a second artificial first-frame resize.
+            return
         }
         mountTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .milliseconds(90)) }
@@ -187,9 +228,8 @@ import Combine
         guard openedKind == .cluster, panel.isVisible else { return }
         clusterFitTask?.cancel()
         let token = transition
-        let delay = max(0.075, clusterFirstFitNotBefore - CACurrentMediaTime())
         clusterFitTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(Int64(ceil(delay * 1000)))) }
+            do { try await Task.sleep(for: .milliseconds(75)) }
             catch { return }
             guard let self, self.transition == token,
                   self.openedKind == .cluster, self.panel.isVisible,
@@ -222,12 +262,23 @@ import Combine
                 self.panel.setFrame(frame, display: true)
             }
             if self.resetClusterScrollOnFit {
-                self.scrollView.contentView.scroll(to: .zero)
-                self.scrollView.reflectScrolledClipView(self.scrollView.contentView)
+                self.scrollClusterToTop()
                 self.resetClusterScrollOnFit = false
             }
             self.clusterFitTask = nil
         }
+    }
+
+    /// AppKit scroll coordinates are not always top-origin: flipped
+    /// NSHostingViews use 0, nonflipped document views use max offset.
+    /// Always restore the title to the visible edge when a panel opens
+    /// or its disclosure structure changes.
+    private func scrollClusterToTop() {
+        let clip = scrollView.contentView
+        let maximumOffset = max(0, host.frame.height - clip.bounds.height)
+        let topY: CGFloat = host.isFlipped ? 0 : maximumOffset
+        clip.scroll(to: NSPoint(x: 0, y: topY))
+        scrollView.reflectScrolledClipView(clip)
     }
 
     func hide(animated: Bool = true) {
@@ -239,7 +290,6 @@ import Combine
         clusterFitTask = nil
         measuredClusterContentHeight = 0
         resetClusterScrollOnFit = false
-        clusterFirstFitNotBefore = 0
         let token = transition
         guard panel.isVisible else {
             host.rootView = AnyView(EmptyView())
