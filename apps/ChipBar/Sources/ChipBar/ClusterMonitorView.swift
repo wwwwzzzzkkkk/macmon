@@ -45,6 +45,7 @@ struct ClusterMonitorPanel: View {
     @ObservedObject var monitor: Monitor
     let close: () -> Void
     @State private var showNetworkHelp = false
+    @State private var expandedTaskNodeIDs: Set<String> = []
 
     private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
 
@@ -255,51 +256,106 @@ struct ClusterMonitorPanel: View {
         }
     }
 
+    /// Each Mac owns one collapsible group. Multiple simulations default
+    /// to a compact summary so the sidecar stays readable at high density.
     @ViewBuilder private func taskList(_ node: ClusterNodeReadout) -> some View {
         if !node.tasks.isEmpty {
             Divider()
-            ForEach(node.tasks) { task in
-                VStack(alignment: .leading, spacing: 5) {
+            if node.tasks.count > 1 {
+                let expanded = expandedTaskNodeIDs.contains(node.id)
+                Button {
+                    if expanded { expandedTaskNodeIDs.remove(node.id) }
+                    else { expandedTaskNodeIDs.insert(node.id) }
+                    cluster.requestTaskLayoutFit()
+                } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "waveform.path")
-                            .font(.caption2)
+                        Image(systemName: "square.stack.3d.up")
                             .foregroundStyle(accent)
-                        Text(task.title).font(.caption.weight(.medium))
-                            .lineLimit(1)
+                        Text("并行仿真 · \(node.tasks.count) 项")
+                            .font(.caption.weight(.semibold))
                         Spacer(minLength: 0)
-                        Text(task.state).font(.caption2).foregroundStyle(.secondary)
-                        if let value = task.progress {
-                            Text(String(format: "%.1f%%", value * 100))
-                                .font(.caption2.weight(.semibold))
-                                .monospacedDigit()
-                        }
-                    }
-                    if let value = task.progress {
-                        ProgressView(value: value).tint(accent).controlSize(.mini)
-                    } else {
-                        Text("进度未知（等待 OpenFAST 文本输出）")
+                        Text(groupSummary(node.tasks))
                             .font(.caption2).foregroundStyle(.secondary)
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
                     }
-                    if task.currentSimTime != nil || task.elapsedSeconds != nil {
-                        HStack(spacing: 6) {
-                            if let current = task.currentSimTime,
-                               let target = task.targetSimTime {
-                                Text(String(format: "仿真 %.1f / %.1f s", current, target))
-                            } else if let elapsed = task.elapsedSeconds {
-                                Text("已运行 " + duration(elapsed))
-                            }
-                            Spacer(minLength: 0)
-                            if let remaining = task.remainingSeconds {
-                                Text("预计剩余 " + duration(remaining))
-                            }
-                        }
-                        .font(.system(size: 10))
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(expanded ? "折叠并行仿真" : "展开并行仿真")
+                if let average = averageKnownProgress(node.tasks) {
+                    ProgressView(value: average).tint(accent).controlSize(.mini)
+                }
+                if expanded {
+                    ForEach(node.tasks) { task in
+                        taskDetail(task)
                     }
                 }
+            } else if let task = node.tasks.first {
+                taskDetail(task)
             }
         }
+    }
+
+    /// Only show an average when all progress numbers are known. This is a
+    /// simple per-job average, not a claim about aggregate compute work.
+    private func averageKnownProgress(_ tasks: [ClusterTaskReadout]) -> Double? {
+        guard !tasks.isEmpty, tasks.allSatisfy({ $0.progress != nil }) else { return nil }
+        return tasks.compactMap(\.progress).reduce(0, +) / Double(tasks.count)
+    }
+
+    private func groupSummary(_ tasks: [ClusterTaskReadout]) -> String {
+        if let average = averageKnownProgress(tasks) {
+            return String(format: "平均 %.0f%%", average * 100)
+        }
+        let count = tasks.filter { $0.progress != nil }.count
+        return "\(count)/\(tasks.count) 项有进度"
+    }
+
+    private func taskDetail(_ task: ClusterTaskReadout) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
+                Image(systemName: "waveform.path")
+                    .font(.caption2).foregroundStyle(accent)
+                Text(task.title).font(.caption.weight(.medium))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if let source = task.progressSource {
+                    Text(source == "log" ? "LOG" : source == "out" ? "OUT" : source.uppercased())
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                Text(task.state).font(.caption2).foregroundStyle(.secondary)
+                if let progress = task.progress {
+                    Text(String(format: "%.1f%%", progress * 100))
+                        .font(.caption2.weight(.semibold)).monospacedDigit()
+                }
+            }
+            if let progress = task.progress {
+                ProgressView(value: progress).tint(accent).controlSize(.mini)
+            } else {
+                Text("进度未知").font(.caption2).foregroundStyle(.secondary)
+            }
+            if task.currentSimTime != nil || task.elapsedSeconds != nil {
+                HStack(spacing: 6) {
+                    if let current = task.currentSimTime,
+                       let maximum = task.targetSimTime {
+                        Text(String(format: "仿真 %.1f / %.1f s", current, maximum))
+                    } else if let elapsed = task.elapsedSeconds {
+                        Text("已运行 " + duration(elapsed))
+                    }
+                    Spacer(minLength: 0)
+                    if let remaining = task.remainingSeconds {
+                        Text("预计剩余 " + duration(remaining))
+                    }
+                }
+                .font(.system(size: 10))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 3)
     }
 
     private func duration(_ seconds: Double) -> String {
