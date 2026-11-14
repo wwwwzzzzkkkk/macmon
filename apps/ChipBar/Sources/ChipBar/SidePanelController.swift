@@ -24,6 +24,8 @@ import Combine
     private var lastOpenedOnRight = true
     private var mountTask: Task<Void, Never>?
     private var clusterFitTask: Task<Void, Never>?
+    private var measuredClusterContentHeight: CGFloat = 0
+    private var resetClusterScrollOnFit = false
     private var clusterLayoutSubscription: AnyCancellable?
     private var clusterTaskSubscription: AnyCancellable?
     private var externalTaskSubscription: AnyCancellable?
@@ -90,7 +92,7 @@ import Combine
         taskDisclosureSubscription = cluster.$taskLayoutVersion
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.scheduleClusterFit() }
+            .sink { [weak self] _ in self?.scheduleClusterFit(resetScroll: true) }
         // The hosted view is mounted on demand to avoid reading processes or SMC on startup.
     }
 
@@ -98,6 +100,9 @@ import Combine
         guard let screen = parent.screen ?? NSScreen.main else { return }
         transition = UUID()
         mountTask?.cancel()
+        clusterFitTask?.cancel()
+        measuredClusterContentHeight = 0
+        resetClusterScrollOnFit = kind == .cluster
         let token = transition
         openedKind = kind
         parentWindow = parent
@@ -137,10 +142,13 @@ import Combine
             guard let self, self.transition == token, self.panel.isVisible,
                   self.openedKind == kind else { return }
             self.host.rootView = AnyView(DashboardSidePanelView(
-                monitor: self.monitor, state: self.state, close: self.onClose
+                monitor: self.monitor, state: self.state, close: self.onClose,
+                onClusterContentHeightChange: { [weak self] height in
+                    self?.scheduleClusterFit(measuredHeight: height)
+                }
             ))
             self.mountTask = nil
-            if kind == .cluster { self.scheduleClusterFit() }
+            if kind == .cluster { self.scheduleClusterFit(resetScroll: true) }
         }
         let motion = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         guard motion else {
@@ -158,34 +166,53 @@ import Combine
         }
     }
 
-    /// Refit only when device structure changes, not on each power sample.
-    /// A short document shrinks to its intrinsic height; larger clusters
-    /// scroll in a bounded panel without moving the parent menu.
-    private func scheduleClusterFit() {
+    /// The live SwiftUI view reports its natural content height via a
+    /// PreferenceKey. Never temporarily compress the NSHostingView to 1pt:
+    /// that changes the scroll document origin and clips its first rows.
+    /// Shrink-wrap on large displays; only scroll on small displays.
+    private func scheduleClusterFit(measuredHeight: CGFloat? = nil,
+                                    resetScroll: Bool = false) {
+        if let measuredHeight, measuredHeight.isFinite, measuredHeight > 0 {
+            measuredClusterContentHeight = min(10_000, measuredHeight)
+        }
+        if resetScroll { resetClusterScrollOnFit = true }
         guard openedKind == .cluster, panel.isVisible else { return }
         clusterFitTask?.cancel()
         let token = transition
         clusterFitTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(85)) }
+            do { try await Task.sleep(for: .milliseconds(75)) }
             catch { return }
             guard let self, self.transition == token,
                   self.openedKind == .cluster, self.panel.isVisible,
-                  let visible = self.panel.screen?.visibleFrame else { return }
+                  let visible = (self.parentWindow?.screen ?? self.panel.screen)?.visibleFrame else {
+                return
+            }
             let width = SidePanelLayout.width(for: .cluster)
-            // Remove the stale viewport constraint before asking SwiftUI
-            // for its natural height (otherwise the empty area feeds back).
-            self.host.setFrameSize(NSSize(width: width, height: 1))
-            let measured = ceil(self.host.fittingSize.height)
-            let intrinsic = measured.isFinite && measured > 0 ? min(2000, measured) : SidePanelLayout.clusterHeight
-            let height = min(max(210, intrinsic), min(540, visible.height - 16))
-            self.host.setFrameSize(NSSize(width: width,
-                                          height: max(intrinsic, height)))
+            let measured = self.measuredClusterContentHeight
+            // Fallback for the very first geometry pass only. No viewport
+            // reset, and no forced hard-coded maximum window height.
+            let natural = measured > 0 ? measured : self.host.fittingSize.height
+            let content = natural.isFinite && natural > 0
+                ? min(10_000, ceil(natural)) : SidePanelLayout.clusterHeight
+            let height = ClusterSidecarSizing.windowHeight(
+                content: content, available: visible.height)
             let old = self.panel.frame
-            let top = min(visible.maxY - 8, old.maxY)
-            let y = max(visible.minY + 8, top - height)
+            let parentTop = self.parentWindow?.frame.maxY ?? old.maxY
+            let top = min(visible.maxY - ClusterSidecarSizing.edgeInset, parentTop)
+            let y = ClusterSidecarSizing.bottomY(
+                anchoredTop: top, height: height, visibleMinY: visible.minY)
+            // Document must be at least as tall as the viewport. If longer,
+            // NSScrollView can scroll; otherwise there is no empty padding.
+            self.host.setFrameSize(NSSize(width: width,
+                                         height: max(content, height)))
             let frame = NSRect(x: old.minX, y: y, width: width, height: height)
-            if abs(old.height - height) > 1 {
+            if abs(old.height - height) > 1 || abs(old.minY - y) > 1 {
                 self.panel.setFrame(frame, display: true)
+            }
+            if self.resetClusterScrollOnFit {
+                self.scrollView.contentView.scroll(to: .zero)
+                self.scrollView.reflectScrolledClipView(self.scrollView.contentView)
+                self.resetClusterScrollOnFit = false
             }
             self.clusterFitTask = nil
         }
@@ -198,6 +225,8 @@ import Combine
         mountTask = nil
         clusterFitTask?.cancel()
         clusterFitTask = nil
+        measuredClusterContentHeight = 0
+        resetClusterScrollOnFit = false
         let token = transition
         guard panel.isVisible else {
             host.rootView = AnyView(EmptyView())
