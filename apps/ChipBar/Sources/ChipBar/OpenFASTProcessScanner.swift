@@ -152,6 +152,7 @@ actor OpenFASTProcessScanner {
             let path = url.standardizedFileURL.path
             guard seen.insert(path).inserted else { continue }
             guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+                  attributes[.type] as? FileAttributeType == .typeRegular,
                   let length = (attributes[.size] as? NSNumber)?.uint64Value,
                   length > 0,
                   let modified = attributes[.modificationDate] as? Date,
