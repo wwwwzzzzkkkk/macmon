@@ -115,7 +115,7 @@ import Combine
         host.appearance = parent.appearance
         panel.contentView?.appearance = parent.appearance
         let width = SidePanelLayout.width(for: kind)
-        let eagerCluster = kind == .cluster
+        let eagerCluster = SidePanelOpeningPolicy.presentsFinalContentBeforeShowing(kind)
         let desiredHeight: CGFloat
         if eagerCluster {
             // The cluster is lightweight: construct and measure the actual
@@ -276,8 +276,10 @@ import Combine
     /// or its disclosure structure changes.
     private func scrollClusterToTop() {
         let clip = scrollView.contentView
-        let maximumOffset = max(0, host.frame.height - clip.bounds.height)
-        let topY: CGFloat = host.isFlipped ? 0 : maximumOffset
+        let topY = ClusterSidecarSizing.topScrollOffset(
+            documentHeight: host.frame.height,
+            viewportHeight: clip.bounds.height,
+            isFlipped: host.isFlipped)
         clip.scroll(to: NSPoint(x: 0, y: topY))
         scrollView.reflectScrolledClipView(clip)
     }
