@@ -10,7 +10,7 @@ final class ClusterTelemetryTests: XCTestCase {
             id: "node-a", name: "Mac mini", chip: "Apple M5 Pro",
             timestamp: date, cpu: 55, gpu: 16,
             memoryUsedGB: 12, memoryTotalGB: 24,
-            chipWatts: 22, cpuTemperatureC: 60,
+            chipWatts: 22, cpuTemperatureC: 60, fanRPM: 1450,
             tasks: [ClusterTaskReadout(
                 id: "openfast-001", title: "OpenFAST case 001",
                 state: "running", progress: nil)])
@@ -30,11 +30,31 @@ final class ClusterTelemetryTests: XCTestCase {
         XCTAssertEqual(decoded.name, original.name)
         XCTAssertEqual(decoded.chip, original.chip)
         XCTAssertEqual(decoded.cpu, original.cpu)
+        XCTAssertEqual(decoded.fanRPM, 1450)
         XCTAssertEqual(decoded.tasks, original.tasks)
         XCTAssertEqual(Int(decoded.timestamp.timeIntervalSince1970),
                        Int(original.timestamp.timeIntervalSince1970))
         XCTAssertNil(decoded.tasks.first?.progress,
                      "An externally unreported progress must remain unknown")
+    }
+
+    func testFanRPMBackwardCompatibleWithLegacyNodes() throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: encoder.encode(node())) as? [String: Any])
+        json.removeValue(forKey: "fanRPM")
+        let legacy = try JSONSerialization.data(withJSONObject: json)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let oldNode = try decoder.decode(ClusterNodeReadout.self, from: legacy)
+        XCTAssertNil(oldNode.fanRPM)
+        XCTAssertEqual(oldNode.cpu, 55)
+        let bad = ClusterNodeReadout(
+            id: "fan", name: "Mac", chip: "M1", timestamp: Date(),
+            cpu: nil, gpu: nil, memoryUsedGB: nil, memoryTotalGB: nil,
+            chipWatts: nil, cpuTemperatureC: nil, fanRPM: -.infinity, tasks: [])
+        XCTAssertNil(bad.fanRPM)
     }
 
     func testWrongKeyAndTamperingFailAuthentication() throws {

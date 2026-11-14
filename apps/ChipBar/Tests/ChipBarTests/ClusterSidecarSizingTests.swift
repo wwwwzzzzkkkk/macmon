@@ -17,6 +17,12 @@ struct ClusterSidecarSizingTests {
         #expect(SidePanelLayout.clusterDisclosureAnimationDuration > 0)
     }
 
+    @Test func clusterTopIsIndependentOfParentResize() {
+        let opened: CGFloat = 890
+        #expect(ClusterSidecarSizing.stableTop(openedAt: opened, visibleMaxY: 1100) == 890)
+        #expect(ClusterSidecarSizing.stableTop(openedAt: opened, visibleMaxY: 800) == 792)
+    }
+
     @Test func resizedPanelKeepsTopWithoutDiscardingManualScroll() {
         #expect(ClusterSidecarSizing.isAtTop(
             offsetY: 0, documentHeight: 850, viewportHeight: 510, isFlipped: true))

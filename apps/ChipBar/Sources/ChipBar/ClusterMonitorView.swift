@@ -129,10 +129,8 @@ struct ClusterMonitorPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 Button {
-                    withAnimation(.easeInOut(
-                        duration: SidePanelLayout.clusterDisclosureAnimationDuration)) {
-                        showNetworkHelp.toggle()
-                    }
+                    showNetworkHelp.toggle()
+                    cluster.requestTaskLayoutFit()
                 } label: {
                     Image(systemName: "questionmark.circle")
                         .foregroundStyle(.secondary)
@@ -148,8 +146,6 @@ struct ClusterMonitorPanel: View {
         }
         .frame(width: SidePanelLayout.contentWidth(for: .cluster),
                alignment: .topLeading)
-        .onAppear { cluster.setPanelVisible(true) }
-        .onDisappear { cluster.setPanelVisible(false) }
     }
 
     private var localCard: some View {
@@ -176,10 +172,7 @@ struct ClusterMonitorPanel: View {
             if device.paired,
                let reading = cluster.peers.first(where: { $0.id == device.id }) {
                 metricRow(reading)
-                if let temp = reading.cpuTemperatureC {
-                    Text(String(format: "CPU 温度 %.1f°C", temp))
-                        .font(.caption2).foregroundStyle(.secondary)
-                }
+                healthRow(reading)
                 taskList(reading)
             } else if device.paired {
                 HStack {
@@ -237,10 +230,7 @@ struct ClusterMonitorPanel: View {
             }
             Text(node.chip).font(.caption2).foregroundStyle(.secondary)
             metricRow(node)
-            if let temp = node.cpuTemperatureC {
-                Text(String(format: "CPU 温度 %.1f°C", temp))
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
+            healthRow(node)
             taskList(node)
         }
         .padding(11)
@@ -259,6 +249,25 @@ struct ClusterMonitorPanel: View {
         }
     }
 
+    /// Keep CPU temperature and measured fan RPM in one stable-height row.
+    /// Unavailable fan sensors are explicitly unknown (not fabricated 0 RPM).
+    private func healthRow(_ node: ClusterNodeReadout) -> some View {
+        HStack(spacing: 10) {
+            Label(node.cpuTemperatureC.map {
+                String(format: "CPU %.1f°C", $0)
+            } ?? "CPU —", systemImage: "thermometer.medium")
+            Spacer(minLength: 2)
+            Label(node.fanRPM.map {
+                String(format: "风扇 %.0f RPM", $0)
+            } ?? "风扇 —", systemImage: "fanblades")
+        }
+        .font(.system(size: 10))
+        .monospacedDigit()
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+    }
+
     /// Each Mac owns one collapsible group. Multiple simulations default
     /// to a compact summary so the sidecar stays readable at high density.
     @ViewBuilder private func taskList(_ node: ClusterNodeReadout) -> some View {
@@ -267,11 +276,10 @@ struct ClusterMonitorPanel: View {
             if node.tasks.count > 1 {
                 let expanded = expandedTaskNodeIDs.contains(node.id)
                 Button {
-                    withAnimation(.easeInOut(
-                        duration: SidePanelLayout.clusterDisclosureAnimationDuration)) {
-                        if expanded { expandedTaskNodeIDs.remove(node.id) }
-                        else { expandedTaskNodeIDs.insert(node.id) }
-                    }
+                    // Do not put the entire panel in a SwiftUI animation
+                    // transaction. Only the rows below this header animate.
+                    if expanded { expandedTaskNodeIDs.remove(node.id) }
+                    else { expandedTaskNodeIDs.insert(node.id) }
                     cluster.requestTaskLayoutFit()
                 } label: {
                     HStack(spacing: 6) {
@@ -294,14 +302,19 @@ struct ClusterMonitorPanel: View {
                 if let average = averageKnownProgress(node.tasks) {
                     ProgressView(value: average).tint(accent).controlSize(.mini)
                 }
-                if expanded {
-                    VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
+                    if expanded {
                         ForEach(node.tasks) { task in
                             taskDetail(task)
                         }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
-                    .transition(.opacity)
                 }
+                .animation(
+                    .easeInOut(duration: SidePanelLayout.clusterDisclosureAnimationDuration),
+                    value: expanded
+                )
+                .clipped()
             } else if let task = node.tasks.first {
                 taskDetail(task)
             }
