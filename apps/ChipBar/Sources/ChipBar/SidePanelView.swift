@@ -62,10 +62,41 @@ struct SidePanelLoadingView: View {
     }
 }
 
+/// Measures the SwiftUI content's intrinsic height independently of the
+/// AppKit scroll viewport. Only the Cluster sidecar consumes this preference.
+private struct ClusterSidecarContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// Pure sizing logic shared by the sidecar and its regression tests.
+/// There is intentionally no arbitrary 540pt cap: tall displays can show
+/// every node and task; compact displays scroll within the screen bounds.
+enum ClusterSidecarSizing {
+    static let minimumHeight: CGFloat = 210
+    static let edgeInset: CGFloat = 8
+
+    static func windowHeight(content: CGFloat, available: CGFloat) -> CGFloat {
+        let limit = max(1, available - edgeInset * 2)
+        guard content.isFinite, content > 0 else {
+            return min(minimumHeight, limit)
+        }
+        return min(max(minimumHeight, ceil(content)), limit)
+    }
+
+    static func bottomY(anchoredTop: CGFloat, height: CGFloat, visibleMinY: CGFloat) -> CGFloat {
+        max(visibleMinY + edgeInset, anchoredTop - height)
+    }
+}
+
 struct DashboardSidePanelView: View {
     @ObservedObject var monitor: Monitor
     @ObservedObject var state: DashboardState
     var close: () -> Void
+    var onClusterContentHeightChange: ((CGFloat) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -102,7 +133,24 @@ struct DashboardSidePanelView: View {
         }
         .frame(width: SidePanelLayout.contentWidth(for: state.sidePanel), alignment: .topLeading)
         .padding(SidePanelLayout.padding)
-        .frame(maxHeight: state.sidePanel == .cluster ? .infinity : nil, alignment: .top)
+        // A flexible maxHeight here made the preferred height equal to the
+        // old scroll viewport, not the actual tiles, and fed stale dimensions
+        // back into the AppKit window.
+        .background {
+            if state.sidePanel == .cluster {
+                GeometryReader { geometry in
+                    Color.clear.preference(
+                        key: ClusterSidecarContentHeightKey.self,
+                        value: geometry.size.height
+                    )
+                }
+            }
+        }
+        .onPreferenceChange(ClusterSidecarContentHeightKey.self) { height in
+            if state.sidePanel == .cluster, height.isFinite, height > 0 {
+                onClusterContentHeightChange?(height)
+            }
+        }
         .buttonStyle(ChipBarPressStyle())
     }
 }
