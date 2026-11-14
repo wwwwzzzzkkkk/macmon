@@ -1,10 +1,14 @@
-# ChipBar v3.6.2 · Apple Silicon 菜单栏监控
+# ChipBar v3.6.3 · Apple Silicon 菜单栏监控
 
 > macOS 13+ · Apple Silicon (arm64) · 原生 SwiftUI + AppKit · macOS 26+ Liquid Glass
 >
 > 最新界面采用三个独立圆环磁贴、紧凑的 CPU 各核心图、风扇与 ANE 并排布局，以及“电源与功率 / 应用占用 / 外置硬盘”独立二级卡片。
 
-**[GitHub 产品主页](../../readme.md)** · **[最新正式版 v3.5.1](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.5.1)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+**[GitHub 产品主页](../../readme.md)** · **[最新正式版 v3.6.3](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.6.3)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+
+## v3.6.3 Cluster 侧边窗口动态适配
+
+计算集群中 Mac 节点、并行仿真摘要或展开的任务一旦出现，原生玻璃侧边面板便跟随 SwiftUI 实际内容高度自动拉伸；折叠和减少任务时自动收缩。取消原先固定 540pt 高度上限，只以显示器可用屏幕作为最大窗口高度；屏幕放不下时使用内部滚动，保持标题和节点卡片完整可访问，避免旧滚动位置导致顶部裁切。只改变界面布局，不影响仿真读取和运行。
 
 ## v3.6.2 OpenFAST 日志进度和并行任务折叠
 
