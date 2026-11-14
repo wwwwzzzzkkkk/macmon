@@ -1,10 +1,14 @@
-# ChipBar v3.6.3 · Apple Silicon 菜单栏监控
+# ChipBar v3.6.4 · Apple Silicon 菜单栏监控
 
 > macOS 13+ · Apple Silicon (arm64) · 原生 SwiftUI + AppKit · macOS 26+ Liquid Glass
 >
 > 最新界面采用三个独立圆环磁贴、紧凑的 CPU 各核心图、风扇与 ANE 并排布局，以及“电源与功率 / 应用占用 / 外置硬盘”独立二级卡片。
 
-**[GitHub 产品主页](../../readme.md)** · **[最新正式版 v3.6.3](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.6.3)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+**[GitHub 产品主页](../../readme.md)** · **[最新正式版 v3.6.4](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.6.4)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+
+## v3.6.4 计算集群窗口无闪烁打开
+
+修复打开计算集群时先出现加载占位、随后变为双机数据且高度再次变化所造成的闪屏：现在显示窗口前就计算并绘制完整内容，首次打开不做额外淡入或位移动画，仍保留动态高度及超过屏幕时的内部滚动。其他二级页面行为不变。此版本只调整 UI，不影响监控采样和仿真控制。
 
 ## v3.6.3 Cluster 侧边窗口动态适配
 
