@@ -51,12 +51,15 @@ public struct ClusterNodeReadout: Codable, Equatable, Identifiable, Sendable {
     public let memoryTotalGB: Double?
     public let chipWatts: Double?
     public let cpuTemperatureC: Double?
+    /// Highest actually sampled fan speed. nil means no readable sensor.
+    public let fanRPM: Double?
     public let tasks: [ClusterTaskReadout]
 
     public init(id: String, name: String, chip: String, timestamp: Date,
                 cpu: Double?, gpu: Double?, memoryUsedGB: Double?,
                 memoryTotalGB: Double?, chipWatts: Double?,
-                cpuTemperatureC: Double?, tasks: [ClusterTaskReadout]) {
+                cpuTemperatureC: Double?, fanRPM: Double? = nil,
+                tasks: [ClusterTaskReadout]) {
         self.id = String(id.prefix(64))
         self.name = String(name.prefix(64))
         self.chip = String(chip.prefix(64))
@@ -68,6 +71,7 @@ public struct ClusterNodeReadout: Codable, Equatable, Identifiable, Sendable {
         self.chipWatts = Self.nonnegative(chipWatts)
         self.cpuTemperatureC = cpuTemperatureC?.isFinite == true
             ? cpuTemperatureC : nil
+        self.fanRPM = Self.nonnegative(fanRPM)
         self.tasks = Array(tasks.prefix(12))
     }
 

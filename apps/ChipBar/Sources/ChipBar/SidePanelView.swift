@@ -99,6 +99,10 @@ enum ClusterSidecarSizing {
         return min(max(minimumHeight, ceil(content)), limit)
     }
 
+    static func stableTop(openedAt: CGFloat, visibleMaxY: CGFloat) -> CGFloat {
+        min(visibleMaxY - edgeInset, openedAt)
+    }
+
     static func bottomY(anchoredTop: CGFloat, height: CGFloat, visibleMinY: CGFloat) -> CGFloat {
         max(visibleMinY + edgeInset, anchoredTop - height)
     }

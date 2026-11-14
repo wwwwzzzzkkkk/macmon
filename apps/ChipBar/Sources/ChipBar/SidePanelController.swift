@@ -28,6 +28,7 @@ import Combine
     private var resetClusterScrollOnFit = false
     private var clusterOpeningAnimationInProgress = false
     private var clusterDisclosureAnimationDeadline: TimeInterval = 0
+    private var clusterAnchoredTop: CGFloat?
     private var clusterLayoutSubscription: AnyCancellable?
     private var clusterTaskSubscription: AnyCancellable?
     private var externalTaskSubscription: AnyCancellable?
@@ -54,6 +55,9 @@ import Combine
         scrollView.focusRingType = .none
         scrollView.contentView.drawsBackground = false
         scrollView.contentView.focusRingType = .none
+        // NSHostingView exposes a mutable isFlipped property, not an
+        // overridable one. Pin the document origin at the top edge.
+        host.isFlipped = true
         scrollView.documentView = host
         host.setFrameSize(NSSize(width: SidePanelLayout.width,
                                  height: SidePanelLayout.applicationHeight))
@@ -93,13 +97,16 @@ import Combine
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.scheduleClusterFit() }
         taskDisclosureSubscription = cluster.$taskLayoutVersion
+            .dropFirst()
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
+                // Animate only the disclosure rows. Never resize the native
+                // window 15 times while SwiftUI is animating their height.
                 self.clusterDisclosureAnimationDeadline =
                     ProcessInfo.processInfo.systemUptime
-                    + SidePanelLayout.clusterDisclosureAnimationDuration + 0.10
+                    + SidePanelLayout.clusterDisclosureAnimationDuration + 0.02
                 self.scheduleClusterFit()
             }
         // The hosted view is mounted on demand to avoid reading processes or SMC on startup.
@@ -107,6 +114,15 @@ import Combine
 
     func show(_ kind: DashboardSidePanelKind, beside parent: NSWindow) {
         guard let screen = parent.screen ?? NSScreen.main else { return }
+        let priorKind = openedKind
+        // Discovery activation previously happened in SwiftUI.onAppear,
+        // *after* measuring the first frame. Start before measuring instead.
+        // The window controller owns the read-only monitor's visibility.
+        if kind == .cluster {
+            ClusterMonitorService.shared.setPanelVisible(true)
+        } else if priorKind == .cluster {
+            ClusterMonitorService.shared.setPanelVisible(false)
+        }
         transition = UUID()
         clusterOpeningAnimationInProgress = false
         clusterDisclosureAnimationDeadline = 0
@@ -114,8 +130,10 @@ import Combine
         clusterFitTask?.cancel()
         measuredClusterContentHeight = 0
         resetClusterScrollOnFit = kind == .cluster
+        clusterAnchoredTop = nil
         let token = transition
         openedKind = kind
+        scrollView.verticalScrollElasticity = kind == .cluster ? .none : .automatic
         scrollView.hasVerticalScroller = false
         parentWindow = parent
         let visible = screen.visibleFrame
@@ -167,6 +185,7 @@ import Combine
         let desiredX = openRight ? parent.frame.maxX + spacing : parent.frame.minX - width - spacing
         let x = min(max(visible.minX + 8, desiredX), visible.maxX - width - 8)
         let top = min(visible.maxY - 8, parent.frame.maxY)
+        if eagerCluster { clusterAnchoredTop = top }
         let y = max(visible.minY + 8, top - height)
         let target = NSRect(x: x, y: y, width: width, height: height)
         // Cluster mounts its final glass content before becoming visible.
@@ -262,17 +281,18 @@ import Combine
         }
         if resetScroll { resetClusterScrollOnFit = true }
         guard openedKind == .cluster, panel.isVisible else { return }
-        // Never resize the window midway through its entrance slide.
-        // During disclosure, coalesce geometry updates per display frame
-        // instead of restarting a 75ms debounce until the animation ends.
+        // Only the task rows animate. Wait until their transition ends,
+        // then fit the native NSPanel once. Repeated frame updates were
+        // moving the entire glass container during every disclosure.
         guard !clusterOpeningAnimationInProgress else { return }
-        let disclosureActive = ProcessInfo.processInfo.systemUptime
-            < clusterDisclosureAnimationDeadline
-        if disclosureActive && clusterFitTask != nil { return }
         clusterFitTask?.cancel()
         let token = transition
+        let remaining = clusterDisclosureAnimationDeadline
+            - ProcessInfo.processInfo.systemUptime
+        let delayMilliseconds = remaining > 0
+            ? max(1, Int((remaining * 1000).rounded(.up))) : 75
         clusterFitTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(disclosureActive ? 16 : 75)) }
+            do { try await Task.sleep(for: .milliseconds(delayMilliseconds)) }
             catch { return }
             guard let self, self.transition == token,
                   self.openedKind == .cluster, self.panel.isVisible,
@@ -280,12 +300,6 @@ import Combine
                 return
             }
             let width = SidePanelLayout.width(for: .cluster)
-            let clip = self.scrollView.contentView
-            let wasAtTop = ClusterSidecarSizing.isAtTop(
-                offsetY: clip.bounds.origin.y,
-                documentHeight: self.host.frame.height,
-                viewportHeight: clip.bounds.height,
-                isFlipped: self.host.isFlipped)
             let measured = self.measuredClusterContentHeight
             // Fallback for the very first geometry pass only. No viewport
             // reset, and no forced hard-coded maximum window height.
@@ -295,8 +309,12 @@ import Combine
             let height = ClusterSidecarSizing.windowHeight(
                 content: content, available: visible.height)
             let old = self.panel.frame
-            let parentTop = self.parentWindow?.frame.maxY ?? old.maxY
-            let top = min(visible.maxY - ClusterSidecarSizing.edgeInset, parentTop)
+            // Lock the top edge captured at opening. Parent menu geometry
+            // can change while the selected tile re-renders, but it must not
+            // drag the Cluster window (or its content) upward.
+            let top = ClusterSidecarSizing.stableTop(
+                openedAt: self.clusterAnchoredTop ?? old.maxY,
+                visibleMaxY: visible.maxY)
             let y = ClusterSidecarSizing.bottomY(
                 anchoredTop: top, height: height, visibleMinY: visible.minY)
             // Document must be at least as tall as the viewport. If longer,
@@ -310,21 +328,21 @@ import Combine
             if abs(old.height - height) > 1 || abs(old.minY - y) > 1 {
                 self.panel.setFrame(frame, display: true)
             }
-            // Preserve the visible top edge only when the user was there.
-            // Never forcibly scroll a manually scrolled task list to the top
-            // on task expansion, discovery, or incoming telemetry changes.
-            if self.resetClusterScrollOnFit || wasAtTop {
+            // The flipped document itself keeps content at top (y=0).
+            // Do not issue an additional scroll(to:) for every geometry
+            // change; that was visibly shifting the whole card.
+            if self.resetClusterScrollOnFit {
                 self.scrollClusterToTop()
+                self.resetClusterScrollOnFit = false
             }
-            self.resetClusterScrollOnFit = false
             self.clusterFitTask = nil
         }
     }
 
     /// AppKit scroll coordinates are not always top-origin: flipped
     /// NSHostingViews use 0, nonflipped document views use max offset.
-    /// Restore the title only when opening or when already scrolled to top;
-    /// disclosure must not discard a deliberate scroll position.
+    /// Scroll only during initial presentation, never during disclosure
+    /// or live telemetry updates.
     private func scrollClusterToTop() {
         let clip = scrollView.contentView
         let topY = ClusterSidecarSizing.topScrollOffset(
@@ -336,6 +354,9 @@ import Combine
     }
 
     func hide(animated: Bool = true) {
+        if openedKind == .cluster {
+            ClusterMonitorService.shared.setPanelVisible(false)
+        }
         transition = UUID()
         openedKind = nil
         mountTask?.cancel()
@@ -346,6 +367,7 @@ import Combine
         resetClusterScrollOnFit = false
         clusterOpeningAnimationInProgress = false
         clusterDisclosureAnimationDeadline = 0
+        clusterAnchoredTop = nil
         let token = transition
         guard panel.isVisible else {
             host.rootView = AnyView(EmptyView())

@@ -218,6 +218,7 @@ struct ClusterPairingCandidate: Equatable {
             memoryTotalGB: sample?.memory?.totalGiB,
             chipWatts: sample?.total,
             cpuTemperatureC: sample?.cpuTemperature,
+            fanRPM: sample?.fans.map(\.rpm).max(),
             // External GPT/Codex status is authoritative when present.
             // Otherwise scan only the local running OpenFAST process.
             tasks: externalTasks.isEmpty ? observedOpenFASTTasks : externalTasks)
