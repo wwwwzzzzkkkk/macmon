@@ -3,13 +3,6 @@ import SwiftUI
 import QuartzCore
 import Combine
 
-/// NSScrollView must lay out growing Cluster content from its top edge.
-/// NSHostingView's default document orientation can vary across macOS
-/// versions; an explicit flipped document eliminates bottom-origin jumps.
-@MainActor private final class TopAlignedSideHostingView: NSHostingView<AnyView> {
-    override var isFlipped: Bool { true }
-}
-
 @MainActor private final class ChipBarSideWindow: NSPanel {
     var escape: (() -> Void)?
     override var canBecomeKey: Bool { true }
@@ -23,7 +16,7 @@ import Combine
     private let panel = ChipBarSideWindow(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
                                           backing: .buffered, defer: false)
     private let scrollView = NSScrollView()
-    private let host = TopAlignedSideHostingView(rootView: AnyView(EmptyView()))
+    private let host = NSHostingView<AnyView>(rootView: AnyView(EmptyView()))
     private let state: DashboardState
     private let monitor: Monitor
     private let onClose: () -> Void
@@ -62,6 +55,9 @@ import Combine
         scrollView.focusRingType = .none
         scrollView.contentView.drawsBackground = false
         scrollView.contentView.focusRingType = .none
+        // NSHostingView exposes a mutable isFlipped property, not an
+        // overridable one. Pin the document origin at the top edge.
+        host.isFlipped = true
         scrollView.documentView = host
         host.setFrameSize(NSSize(width: SidePanelLayout.width,
                                  height: SidePanelLayout.applicationHeight))
