@@ -74,16 +74,21 @@ actor OpenFASTProcessScanner {
             }
             return status
         }
-        let textTime = verifiedLog == nil ? inputURL.flatMap {
+        let textTime = inputURL.flatMap {
             Self.readLatestSimulationTime(fst: $0, processBirth: birth, now: now)
-        } : nil
+        }
         let maximum = inputMaximum ?? verifiedLog?.maximum
-        let simulationTime = verifiedLog?.current ?? textTime
+        // When BOTH sources are available, use the later actual simulation
+        // time: OpenFAST stdout status can update far less often than .out.
+        let logTime = verifiedLog?.current
+        let useText = textTime != nil &&
+            (logTime == nil || textTime! > logTime!)
+        let simulationTime = useText ? textTime : logTime
         let fraction = OpenFASTProgressParsing.fraction(
             current: simulationTime, maximum: maximum)
         let remaining = OpenFASTProgressParsing.remainingSeconds(
             current: simulationTime, maximum: maximum, elapsed: elapsed)
-        let source: String? = fraction == nil ? nil : (verifiedLog != nil ? "log" : "out")
+        let source: String? = fraction == nil ? nil : (useText ? "out" : "log")
         return ClusterTaskReadout(
             id: taskID, title: title.isEmpty ? "OpenFAST" : title,
             state: "运行中", progress: fraction,
