@@ -3,6 +3,22 @@ import Testing
 @testable import ChipBar
 
 struct ClusterSidecarSizingTests {
+    @Test func clusterUsesFinalContentBeforeShowingInsteadOfPlaceholder() {
+        #expect(SidePanelOpeningPolicy.presentsFinalContentBeforeShowing(.cluster))
+        #expect(!SidePanelOpeningPolicy.presentsFinalContentBeforeShowing(.power))
+        #expect(!SidePanelOpeningPolicy.presentsFinalContentBeforeShowing(.applications))
+        #expect(!SidePanelOpeningPolicy.presentsFinalContentBeforeShowing(.externalDisk))
+    }
+
+    @Test func scrollTopUsesFlippedViewCoordinateSystem() {
+        #expect(ClusterSidecarSizing.topScrollOffset(
+            documentHeight: 850, viewportHeight: 510, isFlipped: true) == 0)
+        #expect(ClusterSidecarSizing.topScrollOffset(
+            documentHeight: 850, viewportHeight: 510, isFlipped: false) == 340)
+        #expect(ClusterSidecarSizing.topScrollOffset(
+            documentHeight: 210, viewportHeight: 510, isFlipped: false) == 0)
+    }
+
     @Test func compactContentDoesNotLeaveLargeEmptyViewport() {
         #expect(ClusterSidecarSizing.windowHeight(content: 340, available: 1100) == 340)
         #expect(ClusterSidecarSizing.windowHeight(content: 620, available: 1100) == 620)
