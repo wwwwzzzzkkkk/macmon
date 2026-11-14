@@ -40,6 +40,14 @@ enum SidePanelLayout {
     }
 }
 
+/// Keep Cluster's first frame stable. Other pages retain their previous
+/// fast-to-open placeholder strategy to avoid delaying expensive samplers.
+enum SidePanelOpeningPolicy {
+    static func presentsFinalContentBeforeShowing(_ kind: DashboardSidePanelKind) -> Bool {
+        kind == .cluster
+    }
+}
+
 struct SidePanelLoadingView: View {
     let kind: DashboardSidePanelKind
     var body: some View {
@@ -89,6 +97,13 @@ enum ClusterSidecarSizing {
 
     static func bottomY(anchoredTop: CGFloat, height: CGFloat, visibleMinY: CGFloat) -> CGFloat {
         max(visibleMinY + edgeInset, anchoredTop - height)
+    }
+
+    /// NSScrollView's content origin depends on the document view's flipped
+    /// coordinate system. Scrolling to y=0 can show the *bottom* on some Macs.
+    static func topScrollOffset(documentHeight: CGFloat, viewportHeight: CGFloat,
+                                isFlipped: Bool) -> CGFloat {
+        isFlipped ? 0 : max(0, documentHeight - viewportHeight)
     }
 }
 
