@@ -81,9 +81,15 @@ actor OpenFASTProcessScanner {
         // When BOTH sources are available, use the later actual simulation
         // time: OpenFAST stdout status can update far less often than .out.
         let logTime = verifiedLog?.current
-        let useText = textTime != nil &&
-            (logTime == nil || textTime! > logTime!)
-        let simulationTime = useText ? textTime : logTime
+        let validText = OpenFASTProgressParsing.fraction(
+            current: textTime, maximum: maximum) != nil ? textTime : nil
+        let useText: Bool
+        if let validText {
+            useText = logTime.map { validText > $0 } ?? true
+        } else {
+            useText = false
+        }
+        let simulationTime = useText ? validText : logTime
         let fraction = OpenFASTProgressParsing.fraction(
             current: simulationTime, maximum: maximum)
         let remaining = OpenFASTProgressParsing.remainingSeconds(
