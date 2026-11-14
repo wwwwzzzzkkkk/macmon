@@ -1,4 +1,4 @@
-# ChipBar Cluster Monitor v3.6.1
+# ChipBar Cluster Monitor v3.6.2
 
 ChipBar 3.6 introduces **opt-in, read-only LAN monitoring**. It does **not**
 start, stop, cancel, schedule, execute, or otherwise control simulations.
@@ -33,6 +33,41 @@ Users and external tools such as GPT/Codex retain full control of computations.
 ChipBar 通过 Bonjour 搜索本地网络，可经可达的雷雳桥接或 Wi-Fi
 进行通信；目前不会将任意检测到的雷雳设备误认为计算节点。
 若打开了网络隔离、防火墙阻断或 MacBook 睡眠，设备可能不可达。
+
+## v3.6.2 多来源日志监测和并行仿真分组
+
+**最佳监测方式**：由用户或 GPT/Codex 在启动 OpenFAST 时将其原本就会
+打印的 SttsTime 状态信息保存为日志，ChipBar 只负责读取该日志。
+OpenFAST 的 Time / Timestep: X of Y seconds 消息是真实的仿真时间，
+即使结果格式是二进制 .outb，也不需要为了监测而改成文字 .out。
+
+示例：外部脚本（不是 ChipBar）启动时，可使用以下命令保留标准输出：
+
+    set -o pipefail
+    openfast case.fst 2>&1 | tee case.log
+
+日志文件名 case.log 与 case.fst 对应。ChipBar 会自动检查关联进程的
+stdout/stderr 已重定向文件路径，以及 case.log、case.stdout.log、
+case.run.log、case.openfast.log、case.out.log。其它文件名如果不是
+直接重定向的 stdout/stderr、也不是上述同名日志，可由 GPT/Codex
+使用旧版 cluster-status.json 明确上报进度。
+
+**检测优先级：** 外部状态 JSON（由 GPT/Codex 管理）→ 运行中的
+OpenFAST 终端状态日志 → 同一运行生成的新鲜文本 .out → 进度未知。
+仅扫描正在运行的进程；每份文件只读取尾部 16 KiB，且要求文件
+修改时间不早于进程启动时间。日志报告的总仿真时长还需与
+当前 .fst 的 TMax 基本一致。没有保存终端输出时，ChipBar 无法
+事后读取已丢失的 stdout，亦不会强行抓取其它进程的输出或
+替用户重启仿真。OpenFAST SttsTime 若关闭、太稀疏或流式输出未
+及时写入日志，进度可能暂时未知或滞后。
+
+**并行任务 UI：** 每个 Mac 节点最多显示 12 项当前 OpenFAST 进程；
+同一节点有多个任务时默认折叠，仅展示「并行仿真 · N 项」。
+全部任务均有有效进度时，汇总显示「平均 X%」和进度条（只是各
+任务百分比的算术平均，不能解释为总计算量完成率）；否则显示
+「有进度的任务数/总任务数」，不虚构平均值。点击可展开并逐项显示
+LOG 或 OUT 来源、模拟时间、运行状态和预测剩余时间。
+点击折叠不发送任何仿真控制命令，也不影响监控采样。
 
 ## v3.6.1 自动识别 OpenFAST 仿真进度
 
