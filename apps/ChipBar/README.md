@@ -1,10 +1,14 @@
-# ChipBar v3.6.1 · Apple Silicon 菜单栏监控
+# ChipBar v3.6.2 · Apple Silicon 菜单栏监控
 
 > macOS 13+ · Apple Silicon (arm64) · 原生 SwiftUI + AppKit · macOS 26+ Liquid Glass
 >
 > 最新界面采用三个独立圆环磁贴、紧凑的 CPU 各核心图、风扇与 ANE 并排布局，以及“电源与功率 / 应用占用 / 外置硬盘”独立二级卡片。
 
 **[GitHub 产品主页](../../readme.md)** · **[最新正式版 v3.5.1](https://github.com/wwwwzzzzkkkk/macmon/releases/tag/chipbar-v3.5.1)** · **[更新记录](CHANGELOG.md)** · **[反馈问题](https://github.com/wwwwzzzzkkkk/macmon/issues)**
+
+## v3.6.2 OpenFAST 日志进度和并行任务折叠
+
+仿真进度现支持外部 GPT/Codex 状态、当前 OpenFAST 的终端日志（包括 stdout 重定向和同名日志）、持续更新的文本 `.out`，按可靠性依次回退；只读取少量文件末尾并核对运行时间及 `TMax`。即使仅输出 `.outb`，只要另有已记录的运行日志，就能显示真实模拟时间和进度。没有日志和文本输出时明确显示「进度未知」。集群中每台 Mac 的并行仿真默认折叠汇总，点击可展开每个任务、完成率、估算剩余时间和 LOG/OUT 来源；完全不控制仿真。详见 [集群监控说明](docs/CLUSTER_MONITOR.md)。
 
 ## v3.6.1 OpenFAST 只读进度监测
 

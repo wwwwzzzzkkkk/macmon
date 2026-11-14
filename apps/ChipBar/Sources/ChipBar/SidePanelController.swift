@@ -27,6 +27,7 @@ import Combine
     private var clusterLayoutSubscription: AnyCancellable?
     private var clusterTaskSubscription: AnyCancellable?
     private var externalTaskSubscription: AnyCancellable?
+    private var taskDisclosureSubscription: AnyCancellable?
 
     var isKeyWindow: Bool { panel.isKeyWindow }
     var isVisible: Bool { panel.isVisible }
@@ -83,6 +84,10 @@ import Combine
             .sink { [weak self] _ in self?.scheduleClusterFit() }
         externalTaskSubscription = cluster.$externalTasks
             .map { "\($0.count):\($0.filter { $0.progress != nil }.count)" }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.scheduleClusterFit() }
+        taskDisclosureSubscription = cluster.$taskLayoutVersion
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.scheduleClusterFit() }

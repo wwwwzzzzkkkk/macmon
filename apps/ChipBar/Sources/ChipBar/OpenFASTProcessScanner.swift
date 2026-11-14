@@ -8,7 +8,7 @@ import ChipBarCore
 actor OpenFASTProcessScanner {
     static let shared = OpenFASTProcessScanner()
 
-    private static let maximumProcesses = 8
+    private static let maximumProcesses = 12
     private static let maximumArgumentsBytes = 131_072
     private static let maximumInputBytes = 1_048_576
     private static let tailBytes = 16_384
@@ -61,20 +61,46 @@ actor OpenFASTProcessScanner {
             ?? "OpenFAST"
         // A PID can be reused; include its process birth time in the task ID.
         let taskID = "openfast-\(pid)-\(Int(birth))"
-        let maximum = inputURL.flatMap(Self.readTMax)
-        let simulationTime = inputURL.flatMap {
+        let inputMaximum = inputURL.flatMap(Self.readTMax)
+        let logStatus = inputURL.flatMap {
+            Self.readLatestStatus(fst: $0, pid: pid,
+                                  processBirth: birth, now: now)
+        }
+        // Logs for another run must not override the current .fst target.
+        let verifiedLog = logStatus.flatMap { status -> OpenFASTProgressParsing.StatusReading? in
+            if let inputMaximum,
+               abs(status.maximum - inputMaximum) > max(0.01, inputMaximum * 0.001) {
+                return nil
+            }
+            return status
+        }
+        let textTime = inputURL.flatMap {
             Self.readLatestSimulationTime(fst: $0, processBirth: birth, now: now)
         }
+        let maximum = inputMaximum ?? verifiedLog?.maximum
+        // When BOTH sources are available, use the later actual simulation
+        // time: OpenFAST stdout status can update far less often than .out.
+        let logTime = verifiedLog?.current
+        let validText = OpenFASTProgressParsing.fraction(
+            current: textTime, maximum: maximum) != nil ? textTime : nil
+        let useText: Bool
+        if let validText {
+            useText = logTime.map { validText > $0 } ?? true
+        } else {
+            useText = false
+        }
+        let simulationTime = useText ? validText : logTime
         let fraction = OpenFASTProgressParsing.fraction(
             current: simulationTime, maximum: maximum)
         let remaining = OpenFASTProgressParsing.remainingSeconds(
             current: simulationTime, maximum: maximum, elapsed: elapsed)
+        let source: String? = fraction == nil ? nil : (useText ? "out" : "log")
         return ClusterTaskReadout(
             id: taskID, title: title.isEmpty ? "OpenFAST" : title,
             state: "运行中", progress: fraction,
             currentSimTime: fraction == nil ? nil : simulationTime,
             targetSimTime: maximum, elapsedSeconds: elapsed,
-            remainingSeconds: remaining)
+            remainingSeconds: remaining, progressSource: source)
     }
 
     private static func readTMax(_ input: URL) -> Double? {
@@ -99,14 +125,72 @@ actor OpenFASTProcessScanner {
               modified.timeIntervalSince1970 >= processBirth - 2,
               now.timeIntervalSince(modified) >= -5,
               now.timeIntervalSince(modified) < 120 else { return nil }
-        guard let handle = try? FileHandle(forReadingFrom: out) else { return nil }
+        guard let tail = readTail(of: out, length: size) else { return nil }
+        return OpenFASTProgressParsing.latestTime(
+            in: tail.text, truncatedStart: tail.truncated)
+    }
+
+    /// Read only the last few KiB of a result or log file.
+    private static func readTail(of url: URL, length: UInt64)
+        -> (text: String, truncated: Bool)? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
-        let offset = size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0
+        let offset = length > UInt64(tailBytes) ? length - UInt64(tailBytes) : 0
         guard (try? handle.seek(toOffset: offset)) != nil,
               let bytes = try? handle.read(upToCount: tailBytes),
-              let text = String(data: bytes, encoding: .utf8) else { return nil }
-        return OpenFASTProgressParsing.latestTime(
-            in: text, truncatedStart: offset > 0)
+              !bytes.isEmpty else { return nil }
+        return (String(decoding: bytes, as: UTF8.self), offset > 0)
+    }
+
+    private static func readLatestStatus(fst: URL, pid: Int32,
+                                         processBirth: TimeInterval,
+                                         now: Date) -> OpenFASTProgressParsing.StatusReading? {
+        let root = fst.deletingPathExtension()
+        var candidates: [URL] = []
+        // A redirected stdout/stderr file can have any filename. Do not
+        // intercept live pipes or attach to the simulation process.
+        for fd in [STDOUT_FILENO, STDERR_FILENO] {
+            if let path = redirectedFilePath(pid: pid, fd: fd) {
+                candidates.append(URL(fileURLWithPath: path))
+            }
+        }
+        // If stdout is piped to tee, the input-associated log is discoverable.
+        for suffix in ["log", "stdout.log", "run.log", "openfast.log", "out.log"] {
+            candidates.append(URL(fileURLWithPath: root.path + "." + suffix))
+        }
+        var seen = Set<String>()
+        for url in candidates {
+            let path = url.standardizedFileURL.path
+            guard seen.insert(path).inserted else { continue }
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+                  attributes[.type] as? FileAttributeType == .typeRegular,
+                  let length = (attributes[.size] as? NSNumber)?.uint64Value,
+                  length > 0,
+                  let modified = attributes[.modificationDate] as? Date,
+                  modified.timeIntervalSince1970 >= processBirth - 2,
+                  now.timeIntervalSince(modified) >= -5,
+                  now.timeIntervalSince(modified) < 300,
+                  let tail = readTail(of: url, length: length),
+                  let status = OpenFASTProgressParsing.latestStatus(
+                    in: tail.text, truncatedStart: tail.truncated)
+            else { continue }
+            return status
+        }
+        return nil
+    }
+
+    private static func redirectedFilePath(pid: Int32, fd: Int32) -> String? {
+        var info = vnode_fdinfowithpath()
+        let size = Int32(MemoryLayout<vnode_fdinfowithpath>.size)
+        guard proc_pidfdinfo(pid, fd, PROC_PIDFDVNODEPATHINFO, &info, size) == size else {
+            return nil
+        }
+        let chars = withUnsafeBytes(of: info.pvip.vip_path) {
+            Array($0.prefix { $0 != 0 })
+        }
+        guard !chars.isEmpty, let path = String(bytes: chars, encoding: .utf8),
+              path.hasPrefix("/") else { return nil }
+        return path
     }
 
     private static func resolveInput(_ input: String, pid: Int32) -> URL? {

@@ -15,10 +15,13 @@ public struct ClusterTaskReadout: Codable, Equatable, Identifiable, Sendable {
     /// Real wall-clock runtime and approximate remaining wall-clock seconds.
     public let elapsedSeconds: Double?
     public let remainingSeconds: Double?
+    /// Observation provenance: "log", "out", or external reporter.
+    public let progressSource: String?
 
     public init(id: String, title: String, state: String, progress: Double?,
                 currentSimTime: Double? = nil, targetSimTime: Double? = nil,
-                elapsedSeconds: Double? = nil, remainingSeconds: Double? = nil) {
+                elapsedSeconds: Double? = nil, remainingSeconds: Double? = nil,
+                progressSource: String? = nil) {
         self.id = String(id.prefix(96))
         self.title = String(title.prefix(120))
         self.state = String(state.prefix(32))
@@ -28,6 +31,7 @@ public struct ClusterTaskReadout: Codable, Equatable, Identifiable, Sendable {
         self.targetSimTime = Self.validNonnegative(targetSimTime)
         self.elapsedSeconds = Self.validNonnegative(elapsedSeconds)
         self.remainingSeconds = Self.validNonnegative(remainingSeconds)
+        self.progressSource = progressSource.map { String($0.prefix(24)) }
     }
 
     private static func validNonnegative(_ value: Double?) -> Double? {
