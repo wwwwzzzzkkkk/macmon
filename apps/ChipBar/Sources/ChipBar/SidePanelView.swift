@@ -21,6 +21,7 @@ enum SidePanelLayout {
     static let powerHeight: CGFloat = 640
     static let diskHeight: CGFloat = 410
     static let clusterHeight: CGFloat = 310
+    static let clusterDisclosureAnimationDuration = 0.24
 
     static func width(for kind: DashboardSidePanelKind?) -> CGFloat {
         kind == .power ? powerWidth : kind == .cluster ? 378 : width
@@ -43,6 +44,9 @@ enum SidePanelLayout {
 /// Keep Cluster's first frame stable. Other pages retain their previous
 /// fast-to-open placeholder strategy to avoid delaying expensive samplers.
 enum SidePanelOpeningPolicy {
+    static let clusterSlidePoints: CGFloat = 12
+    static let clusterSlideDuration: TimeInterval = 0.24
+
     static func presentsFinalContentBeforeShowing(_ kind: DashboardSidePanelKind) -> Bool {
         kind == .cluster
     }
@@ -97,6 +101,15 @@ enum ClusterSidecarSizing {
 
     static func bottomY(anchoredTop: CGFloat, height: CGFloat, visibleMinY: CGFloat) -> CGFloat {
         max(visibleMinY + edgeInset, anchoredTop - height)
+    }
+
+    /// Preserve the title when a window resizes, without stealing a user's
+    /// scroll position when they are inspecting task details further down.
+    static func isAtTop(offsetY: CGFloat, documentHeight: CGFloat,
+                        viewportHeight: CGFloat, isFlipped: Bool) -> Bool {
+        abs(offsetY - topScrollOffset(documentHeight: documentHeight,
+                                     viewportHeight: viewportHeight,
+                                     isFlipped: isFlipped)) <= 2
     }
 
     /// NSScrollView's content origin depends on the document view's flipped

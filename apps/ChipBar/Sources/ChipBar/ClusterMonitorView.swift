@@ -129,7 +129,10 @@ struct ClusterMonitorPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 Button {
-                    showNetworkHelp.toggle()
+                    withAnimation(.easeInOut(
+                        duration: SidePanelLayout.clusterDisclosureAnimationDuration)) {
+                        showNetworkHelp.toggle()
+                    }
                 } label: {
                     Image(systemName: "questionmark.circle")
                         .foregroundStyle(.secondary)
@@ -264,8 +267,11 @@ struct ClusterMonitorPanel: View {
             if node.tasks.count > 1 {
                 let expanded = expandedTaskNodeIDs.contains(node.id)
                 Button {
-                    if expanded { expandedTaskNodeIDs.remove(node.id) }
-                    else { expandedTaskNodeIDs.insert(node.id) }
+                    withAnimation(.easeInOut(
+                        duration: SidePanelLayout.clusterDisclosureAnimationDuration)) {
+                        if expanded { expandedTaskNodeIDs.remove(node.id) }
+                        else { expandedTaskNodeIDs.insert(node.id) }
+                    }
                     cluster.requestTaskLayoutFit()
                 } label: {
                     HStack(spacing: 6) {
@@ -276,8 +282,9 @@ struct ClusterMonitorPanel: View {
                         Spacer(minLength: 0)
                         Text(groupSummary(node.tasks))
                             .font(.caption2).foregroundStyle(.secondary)
-                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        Image(systemName: "chevron.down")
                             .font(.caption2.weight(.medium))
+                            .rotationEffect(.degrees(expanded ? 180 : 0))
                             .foregroundStyle(.secondary)
                     }
                     .contentShape(Rectangle())
@@ -288,9 +295,12 @@ struct ClusterMonitorPanel: View {
                     ProgressView(value: average).tint(accent).controlSize(.mini)
                 }
                 if expanded {
-                    ForEach(node.tasks) { task in
-                        taskDetail(task)
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(node.tasks) { task in
+                            taskDetail(task)
+                        }
                     }
+                    .transition(.opacity)
                 }
             } else if let task = node.tasks.first {
                 taskDetail(task)

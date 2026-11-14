@@ -10,6 +10,24 @@ struct ClusterSidecarSizingTests {
         #expect(!SidePanelOpeningPolicy.presentsFinalContentBeforeShowing(.externalDisk))
     }
 
+    @Test func clusterOpenUsesSubtlePositionOnlyAnimation() {
+        #expect(SidePanelOpeningPolicy.clusterSlidePoints > 0)
+        #expect(SidePanelOpeningPolicy.clusterSlidePoints <= 14)
+        #expect(SidePanelOpeningPolicy.clusterSlideDuration > 0)
+        #expect(SidePanelLayout.clusterDisclosureAnimationDuration > 0)
+    }
+
+    @Test func resizedPanelKeepsTopWithoutDiscardingManualScroll() {
+        #expect(ClusterSidecarSizing.isAtTop(
+            offsetY: 0, documentHeight: 850, viewportHeight: 510, isFlipped: true))
+        #expect(!ClusterSidecarSizing.isAtTop(
+            offsetY: 150, documentHeight: 850, viewportHeight: 510, isFlipped: true))
+        #expect(ClusterSidecarSizing.isAtTop(
+            offsetY: 340, documentHeight: 850, viewportHeight: 510, isFlipped: false))
+        #expect(!ClusterSidecarSizing.isAtTop(
+            offsetY: 80, documentHeight: 850, viewportHeight: 510, isFlipped: false))
+    }
+
     @Test func scrollTopUsesFlippedViewCoordinateSystem() {
         #expect(ClusterSidecarSizing.topScrollOffset(
             documentHeight: 850, viewportHeight: 510, isFlipped: true) == 0)
