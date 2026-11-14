@@ -43,6 +43,7 @@ import Combine
         self.monitor = monitor
         self.onClose = onClose
         scrollView.hasVerticalScroller = false
+        scrollView.scrollerStyle = .overlay
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.verticalScrollElasticity = .automatic
@@ -78,17 +79,17 @@ import Combine
         .map { values in "\(values.0):\(values.1):\(values.2):\(values.3)" }
         .removeDuplicates()
         .receive(on: DispatchQueue.main)
-        .sink { [weak self] _ in self?.scheduleClusterFit() }
+        .sink { [weak self] _ in self?.scheduleClusterFit(resetScroll: true) }
         clusterTaskSubscription = cluster.$observedOpenFASTTasks
             .map { "\($0.count):\($0.filter { $0.progress != nil }.count)" }
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.scheduleClusterFit() }
+            .sink { [weak self] _ in self?.scheduleClusterFit(resetScroll: true) }
         externalTaskSubscription = cluster.$externalTasks
             .map { "\($0.count):\($0.filter { $0.progress != nil }.count)" }
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.scheduleClusterFit() }
+            .sink { [weak self] _ in self?.scheduleClusterFit(resetScroll: true) }
         taskDisclosureSubscription = cluster.$taskLayoutVersion
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
@@ -105,6 +106,7 @@ import Combine
         resetClusterScrollOnFit = kind == .cluster
         let token = transition
         openedKind = kind
+        scrollView.hasVerticalScroller = false
         parentWindow = parent
         let visible = screen.visibleFrame
         let width = SidePanelLayout.width(for: kind)
@@ -205,6 +207,9 @@ import Combine
             // NSScrollView can scroll; otherwise there is no empty padding.
             self.host.setFrameSize(NSSize(width: width,
                                          height: max(content, height)))
+            // Overlay scrollbars only when the screen cannot show the full
+            // document. The glass tile width stays unchanged.
+            self.scrollView.hasVerticalScroller = content > height + 2
             let frame = NSRect(x: old.minX, y: y, width: width, height: height)
             if abs(old.height - height) > 1 || abs(old.minY - y) > 1 {
                 self.panel.setFrame(frame, display: true)
