@@ -45,6 +45,7 @@ struct ClusterPairingCandidate: Equatable {
     @Published private(set) var peers: [ClusterNodeReadout] = []
     @Published private(set) var observedOpenFASTTasks: [ClusterTaskReadout] = []
     @Published private(set) var externalTasks: [ClusterTaskReadout] = []
+    @Published private(set) var taskLayoutVersion = 0
     @Published private(set) var nearby: [ClusterNearbyDevice] = []
     @Published private(set) var pairingCandidate: ClusterPairingCandidate?
     @Published private(set) var status = "打开两台 Mac 的计算集群页面即可搜索"
@@ -197,6 +198,8 @@ struct ClusterPairingCandidate: Equatable {
         if trusted.isEmpty { setEnabled(false) }
         publishNearby()
     }
+
+    func requestTaskLayoutFit() { taskLayoutVersion &+= 1 }
 
     var onlinePeers: [ClusterNodeReadout] {
         peers.filter { $0.isOnline() && enabled }
