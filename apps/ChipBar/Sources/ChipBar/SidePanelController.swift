@@ -109,6 +109,11 @@ import Combine
         scrollView.hasVerticalScroller = false
         parentWindow = parent
         let visible = screen.visibleFrame
+        // Adopt the parent appearance before pre-layout so Liquid Glass does
+        // not make an extra light/dark material pass after first presentation.
+        panel.appearance = parent.appearance
+        host.appearance = parent.appearance
+        panel.contentView?.appearance = parent.appearance
         let width = SidePanelLayout.width(for: kind)
         let eagerCluster = kind == .cluster
         let desiredHeight: CGFloat
@@ -153,10 +158,6 @@ import Combine
         let top = min(visible.maxY - 8, parent.frame.maxY)
         let y = max(visible.minY + 8, top - height)
         let target = NSRect(x: x, y: y, width: width, height: height)
-        panel.appearance = parent.appearance
-        host.appearance = parent.appearance
-        panel.contentView?.appearance = parent.appearance
-
         // Other side pages keep their lazy loading shell. Cluster must show
         // a complete first frame with no fade, slide, or placeholder swap.
         if !eagerCluster {
