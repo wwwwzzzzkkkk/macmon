@@ -133,6 +133,9 @@ struct DashboardSidePanelView: View {
         }
         .frame(width: SidePanelLayout.contentWidth(for: state.sidePanel), alignment: .topLeading)
         .padding(SidePanelLayout.padding)
+        // Fit the full vertical content even if the NSScrollView currently
+        // proposes a shorter viewport. Only cluster uses this intrinsic fit.
+        .fixedSize(horizontal: false, vertical: state.sidePanel == .cluster)
         // A flexible maxHeight here made the preferred height equal to the
         // old scroll viewport, not the actual tiles, and fed stale dimensions
         // back into the AppKit window.
