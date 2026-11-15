@@ -1,10 +1,7 @@
-__handlers__/
-.claude/
+.build/
+.swiftpm/
+dist/
+audit-results/
 .DS_Store
-internal/
-samples/
-target/
-3rd/
-/out/
-/.worktrees/
 __pycache__/
+*.pyc

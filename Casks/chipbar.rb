@@ -2,10 +2,10 @@ cask "chipbar" do
   version "3.6.6"
   sha256 "935deccdfd59682cf85f4c517dcd5c2163a29b1c83f71a366b44e6f07a3f429e"
 
-  url "https://github.com/wwwwzzzzkkkk/macmon/releases/download/chipbar-v#{version}/ChipBar-macOS-arm64.zip"
+  url "https://github.com/wwwwzzzzkkkk/ChipBar/releases/download/v#{version}/ChipBar-macOS-arm64.zip"
   name "ChipBar"
-  desc "Native menu bar client for macmon power and temperature monitoring"
-  homepage "https://github.com/wwwwzzzzkkkk/macmon"
+  desc "Native Apple Silicon resource and read-only cluster monitor"
+  homepage "https://github.com/wwwwzzzzkkkk/ChipBar"
 
   depends_on arch: :arm64
   depends_on macos: :ventura
