@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 4.0.0 candidate (not yet released)
+- Establish bilingual product documentation with explicit real-screenshot provenance and requirements.
+- Add main-app English Localizable.strings translations for primary dashboard, cluster, settings, storage, power and SSD labels.
+- Distinguish read-only cluster sharing off, searching, waiting for telemetry, offline and online conditions; avoid presenting stale remote readings as live.
+- Preserve existing release identifiers and distribution workflow until an independent GitHub repository actually exists.
+- v4.0.0 standalone repository and real-device high-resolution screenshot capture remain release blockers.
+
+
 ## [3.6.6] - 2026-11-15
 
 - 修复计算集群打开和展开时整张侧边卡片上下跳动：将滚动文档固定为顶部坐标，首次展示前启动集群发现并完成真实布局；打开时锁定侧窗上沿，不再追随主菜单位置变化。

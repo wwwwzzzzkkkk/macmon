@@ -38,6 +38,41 @@ struct ClusterOverviewTile: View {
     }
 }
 
+/// Distinguish discovery, shared telemetry, and explicit sharing opt-out.
+enum ClusterPanelConnectionState: Equatable {
+    case sharingOff, searching, waitingForData, offline, online
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .sharingOff: return "共享未开启"
+        case .searching: return "正在搜索设备"
+        case .waitingForData: return "等待监控数据"
+        case .offline: return "远端设备离线"
+        case .online: return "监控已连接"
+        }
+    }
+
+    var detail: LocalizedStringKey {
+        switch self {
+        case .sharingOff: return "本机共享已关闭。仍可搜索并配对附近的 Mac。"
+        case .searching: return "尚未发现其他 Mac。请在另一台 Mac 上打开 ChipBar 集群页面。"
+        case .waitingForData: return "已识别配对设备，等待对方确认并发送首帧数据。"
+        case .offline: return "已配对的 Mac 暂时离线。恢复连接后才会显示最新读数。"
+        case .online: return "正在接收已授权 Mac 的实时监控数据。"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .sharingOff: return "pause.circle"
+        case .searching: return "magnifyingglass"
+        case .waitingForData: return "clock"
+        case .offline: return "wifi.slash"
+        case .online: return "checkmark.circle.fill"
+        }
+    }
+}
+
 /// Follows the v3.5 glass and type hierarchy. Network controls appear only
 /// where useful; no pasted secrets, simulated readings or task control.
 struct ClusterMonitorPanel: View {
@@ -48,6 +83,16 @@ struct ClusterMonitorPanel: View {
     @State private var expandedTaskNodeIDs: Set<String> = []
 
     private let accent = Color(red: 0.22, green: 0.65, blue: 0.79)
+
+    // A trusted peer may be discovered before its first valid telemetry frame.
+    // UI state must not confuse pairing, connectivity and sensor freshness.
+    private var connectionState: ClusterPanelConnectionState {
+        if !cluster.enabled { return .sharingOff }
+        if !cluster.onlinePeers.isEmpty { return .online }
+        if !cluster.peers.isEmpty { return .offline }
+        if cluster.nearby.contains(where: \.paired) { return .waitingForData }
+        return .searching
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -71,11 +116,10 @@ struct ClusterMonitorPanel: View {
             .frame(height: 28)
 
             HStack(spacing: 7) {
-                Circle().fill(cluster.enabled ? Color.green : .orange)
-                    .frame(width: 6, height: 6)
-                Text(cluster.enabled
-                     ? "\(cluster.onlinePeers.count + 1) 台在线"
-                     : "等待设备配对")
+                Image(systemName: connectionState.symbol)
+                    .foregroundStyle(connectionState == .online ? .green : .secondary)
+                    .frame(width: 14)
+                Text(connectionState.title)
                     .font(.caption.weight(.medium))
                 Spacer()
                 if cluster.enabled {
@@ -101,9 +145,9 @@ struct ClusterMonitorPanel: View {
                 }
             } else if cluster.onlinePeers.isEmpty {
                 HStack(spacing: 8) {
-                    Image(systemName: "dot.radiowaves.left.and.right")
-                        .foregroundStyle(accent)
-                    Text("未发现 MacBook，请确认另一台 Mac 也打开了集群页面")
+                    Image(systemName: connectionState.symbol)
+                        .foregroundStyle(.secondary)
+                    Text(connectionState.detail)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -170,16 +214,15 @@ struct ClusterMonitorPanel: View {
                 }
             }
             if device.paired,
-               let reading = cluster.peers.first(where: { $0.id == device.id }) {
+               let reading = cluster.peers.first(where: { $0.id == device.id }),
+               reading.isOnline(), cluster.enabled {
                 metricRow(reading)
                 healthRow(reading)
                 taskList(reading)
             } else if device.paired {
-                HStack {
-                    ProgressView().controlSize(.mini)
-                    Text("等待另一台 Mac 确认并发送数据")
-                        .font(.caption2).foregroundStyle(.secondary)
-                }
+                Label(cluster.enabled ? "等待另一台 Mac 发送数据" : "监控共享已关闭",
+                      systemImage: cluster.enabled ? "clock" : "pause.circle")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
         }
         .padding(11)
@@ -229,9 +272,15 @@ struct ClusterMonitorPanel: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }
             Text(node.chip).font(.caption2).foregroundStyle(.secondary)
-            metricRow(node)
-            healthRow(node)
-            taskList(node)
+            if local || (cluster.enabled && node.isOnline()) {
+                metricRow(node)
+                healthRow(node)
+                taskList(node)
+            } else {
+                Label(cluster.enabled ? "设备离线 · 最近监控数据已过期" : "监控共享已关闭",
+                      systemImage: cluster.enabled ? "wifi.slash" : "pause.circle")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)

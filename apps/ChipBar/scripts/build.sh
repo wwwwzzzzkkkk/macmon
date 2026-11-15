@@ -9,6 +9,11 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp -X .build/arm64-apple-macosx/release/ChipBar "$APP/Contents/MacOS/ChipBar"
 ./scripts/icon.sh "$APP/Contents/Resources"
 cp -X Assets/PrivacyInfo.xcprivacy "$APP/Contents/Resources/PrivacyInfo.xcprivacy"
+# Main-app strings live in the .app bundle, not SwiftPM's resource bundle.
+# Preserve the existing Chinese base strings; English is a proper localization.
+if [[ -d Assets/en.lproj ]]; then
+  ditto --norsrc --noextattr Assets/en.lproj "$APP/Contents/Resources/en.lproj"
+fi
 VERSION="$(python3 scripts/version.py show)"
 python3 - "$APP" "$VERSION" <<'PYINFO'
 import plistlib, sys
@@ -17,6 +22,8 @@ app, version = sys.argv[1:]
 metadata = {
     "CFBundleIdentifier": "local.chipbar.monitor",
     "CFBundleName": "ChipBar", "CFBundleDisplayName": "ChipBar",
+    "CFBundleDevelopmentRegion": "zh-Hans",
+    "CFBundleLocalizations": ["zh-Hans", "en"],
     "CFBundleExecutable": "ChipBar", "CFBundlePackageType": "APPL",
     "CFBundleIconFile": "AppIcon.icns",
     "CFBundleShortVersionString": version, "CFBundleVersion": version,

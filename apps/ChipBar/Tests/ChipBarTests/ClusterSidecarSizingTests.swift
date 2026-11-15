@@ -3,6 +3,13 @@ import Testing
 @testable import ChipBar
 
 struct ClusterSidecarSizingTests {
+    @Test func clusterStatusHasDistinctOfflineWaitingAndDisabledStates() {
+        #expect(ClusterPanelConnectionState.sharingOff.symbol == "pause.circle")
+        #expect(ClusterPanelConnectionState.waitingForData.symbol == "clock")
+        #expect(ClusterPanelConnectionState.offline.symbol == "wifi.slash")
+        #expect(ClusterPanelConnectionState.online.symbol == "checkmark.circle.fill")
+    }
+
     @Test func clusterUsesFinalContentBeforeShowingInsteadOfPlaceholder() {
         #expect(SidePanelOpeningPolicy.presentsFinalContentBeforeShowing(.cluster))
         #expect(!SidePanelOpeningPolicy.presentsFinalContentBeforeShowing(.power))
